@@ -9,8 +9,8 @@
 | 层级 | 数量 | 含义 |
 | --- | --- | --- |
 | **一级** | 11（P0–P10） | 阶段，与 RFC-039 的阶段序列一一对应 |
-| **二级** | 74 | 任务组：按阶段拆解的工作组，可独立建队、独立归档 |
-| **三级** | 263 | 可独立提交、可独立验证的工作单元 |
+| **二级** | 75 | 任务组：按阶段拆解的工作组，可独立建队、独立归档 |
+| **三级** | 264 | 可独立提交、可独立验证的工作单元 |
 
 **编号留空（不回收）**：P4 无 `4.7`/`4.8`、P8 无 `8.1`；LALRPOP 路线撤回后 `8.4` / `8.5` / `8.6` 亦留空（2026-11-25）。三者自 WBS 建立起即无对应条目——本文全史对 `**4.7` / `**4.8` / `**8.1` 三个标题零命中（`git log -S'**4.7' -- docs/src/dev/architecture/09-execution-wbs.md` 可复核），全仓亦无引用。`8.1` 对应的正是 `05` 的阶段 1（测试复活与补全）：该阶段已拆入 P1（`1.1`–`1.3`）与 `8.8`，因此 P8 的编号与其阶段号对齐（阶段 0 → `8.0`、阶段 2 → `8.2`，依此类推）。
 
@@ -168,6 +168,7 @@ P10 其余清理与状态修正 06 §S2/S3/S4/S5/S6
 
 - [x] **3.24 模式匹配补全余项（RFC-010b 范围）**（1 个三级任务；issue [#405](https://github.com/ChenXu233/YaoXiang/issues/405)；归属阶段：P3；是否阻塞主线：否）
 - [x] **3.23 清单解析失败 / 缺必填字段的静默退化**（1 个三级任务；issue [#503](https://github.com/ChenXu233/YaoXiang/issues/503)；归属阶段：P3；是否阻塞主线：否）
+- [ ] **3.26 右移语义对齐（有符号 `>>` 算术、`Shr` 逻辑）**（1 个三级任务；归属阶段：P3；是否阻塞主线：否）
 
 > **批次（2026-10-14 裁决）**：3.13 / 3.14 / 3.15 / 3.16 四个小项**相关性大**（方法绑定、决议、推断入口同属一条路径；3.16 是同一套「命名实参」判据的另一载体——stdlib 原生导出），**合并为一支团队处理**——团队范围由「一个二级任务」放宽为「一组相关小项批次」；批次构成、理由与偏差须随该队收口登记。
 
@@ -270,6 +271,8 @@ P10 其余清理与状态修正 06 §S2/S3/S4/S5/S6
 | | 3.24.6 fn[pos] 超界位置字面量编译期拒绝——静默截断与取负 panic 收口（issue [#563](https://github.com/ChenXu233/YaoXiang/issues/563)） | src/ast/mod.rs、src/ast/tests/binding_positions.rs、src/frontend/core/parser/statements/types.rs、src/frontend/core/parser/statements/tests/types.rs | 3.24.5 | — |
 | 3.25 词法错误归因：`\x` 非法形态被「空字符字面量」覆盖（D4；**2026-11-24 登记**，来源 = 8.8 修复轮复审 R3 的 D4（见任务 8.8 的提交信息）；用户裁决「另立 P3 任务修」） | 3.25.1 见下 | 见 3.25.1 行 | — | **终态判据**：见 3.25.1 |
 | | 3.25.1 `'\x1'` 的错误归因：`decode_hex_byte` 已发 `InvalidEscape`，随后 `scan_char` 的「空字符字面量」把它覆盖成 `InvalidToken{message: "Empty character literal"}` ⇒ 同一非法形态在字符串位报 E0012、在字符位报「空字符」 | `src/frontend/core/lexer/literals.rs`（`scan_char` / `decode_hex_byte`） | — | D59 **C 类**（静默给错错误码）：先红后绿——红态 = `'\x1'` 报 `InvalidToken/"Empty character literal"`（实测，见任务 8.8 的提交信息）；绿态 = 仍以 `InvalidEscape`（E0012）报出且位置指向 `\x`；不改变「原先成功」程序（`'\x1'` 本就失败）；不改码表（InvalidEscape 仍映射 E0012） |
+| 3.26 右移语义对齐（有符号 `>>` 算术、`Shr` 逻辑；**2026-11-27 登记**，来源 = RFC-018 批次 4 施工期的语义错配：前端把 `>>` 降到 `Shr`，而字节码运算符注释把 `Shr` 定为逻辑右移、`Sar` 定为算术右移，VM 两者都按算术执行） | 3.26.1 见下 | 见 3.26.1 行 | — | **终态判据**：见 3.26.1 |
+| | 3.26.1 `>>` 降 `Sar`（算术右移），`Shr` 归位逻辑右移（前端不产出，由 VM 单测与 AOT 合成判据覆盖）；VM/AOT/IR/字节码注释与语言参考同步；IR 快照与语料基线同提交再生 | `src/middle/lower/expr/op.rs`、`src/backends/interpreter/executor/executor.rs`、`src/backends/llvm/codegen.rs`、`src/middle/ir/ir.rs`、`src/middle/bytecode/mod.rs`、`tests/integration/native_aot.rs`、`docs/src/reference/language-spec/syntax.md` | — | VM 单测区分 `Shr` 逻辑与 `Sar` 算术；AOT 合成判据 `test_native_shr_instruction_uses_logical_shift` 与 `test_native_sar_instruction_uses_arithmetic_shift`；源码 `-8 >> 1 == -4` 不变；IR 快照 `Shr`→`Sar` 逐行 review；语料差分零漂移 |
 
 **验收**：漏洞判据转绿，且**故意撤掉修复必须重新变红**。**风险**：多文件路径新增 E4018 是破坏性变更。
 

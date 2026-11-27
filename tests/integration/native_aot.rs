@@ -1981,8 +1981,8 @@ mod enabled {
 
     #[test]
     fn test_native_shift_right_matches_vm() {
-        // Arrange：右移覆盖 0/1/63 位移量与负数 lhs。VM 的 >> 是算术右移，
-        // 负数保持符号位；IR 的 Shr 变体按这一现状判定（语义分歧见设计文档）。
+        // Arrange：右移覆盖 0/1/63 位移量与负数 lhs。`>>` 是有符号算术右移：
+        // 前端降到 `Sar`，AOT 发 `ashr`，负数的符号位保持。
         let source = concat!(
             "use std.assert\n",
             "shr: (a: Int, n: Int) -> Int = (a, n) => a >> n\n",
@@ -2081,11 +2081,32 @@ mod enabled {
         // assert_native_matches_vm 已断言 native/VM 的 O0 与 O2 结果一致。
     }
 
-    /// 合成 IR：Sar 变体（lower 今天不产出；右移运算符发射的是 Shr）。判据只要求
-    /// 该变体按 VM 现状的算术右移发射：-8 >> 1 == -4，否则 assert 以 E6005 退出。
-    fn sar_module() -> ModuleIR {
+    /// 合成 IR：单条右移指令 + 与 `expected` 的相等断言，不通过就以 E6005 退出。
+    /// `arithmetic` 选变体：`true` = `Sar`（`>>` 的 lowering 目标，算术右移），
+    /// `false` = `Shr`（逻辑右移，前端今天不产出）。两条变体对同一负数必须给出
+    /// 不同结果，这是本判据的区分点。
+    fn right_shift_probe_module(
+        arithmetic: bool,
+        expected: i128,
+    ) -> ModuleIR {
+        let target = if arithmetic { "sar_probe" } else { "shr_probe" };
+        let shift = if arithmetic {
+            Instruction::Sar {
+                dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(0)),
+                lhs: Operand::Const(ConstValue::Int(-8)),
+                rhs: Operand::Const(ConstValue::Int(1)),
+                span: Span::dummy(),
+            }
+        } else {
+            Instruction::Shr {
+                dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(0)),
+                lhs: Operand::Const(ConstValue::Int(-8)),
+                rhs: Operand::Const(ConstValue::Int(1)),
+                span: Span::dummy(),
+            }
+        };
         let function = FunctionIR {
-            name: "sar_probe".to_string(),
+            name: target.to_string(),
             def: None,
             params: vec![],
             return_type: yaoxiang::frontend::core::sema::MonoType::Void,
@@ -2094,16 +2115,11 @@ mod enabled {
                 blocks: vec![BasicBlock {
                     label: 0,
                     instructions: vec![
-                        Instruction::Sar {
-                            dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(0)),
-                            lhs: Operand::Const(ConstValue::Int(-8)),
-                            rhs: Operand::Const(ConstValue::Int(1)),
-                            span: Span::dummy(),
-                        },
+                        shift,
                         Instruction::Eq {
                             dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(1)),
                             lhs: Operand::Value(yaoxiang::middle::ir::ir::ValueId(0)),
-                            rhs: Operand::Const(ConstValue::Int(-4)),
+                            rhs: Operand::Const(ConstValue::Int(expected)),
                             span: Span::dummy(),
                         },
                         Instruction::Call {
@@ -2143,7 +2159,7 @@ mod enabled {
         module.functions.push(function);
         module.init.push(Instruction::Call {
             dst: None,
-            func: Operand::Const(ConstValue::String("sar_probe".to_string())),
+            func: Operand::Const(ConstValue::String(target.to_string())),
             args: vec![],
             def: None,
             span: Span::dummy(),
@@ -2151,10 +2167,18 @@ mod enabled {
         module
     }
 
+    fn sar_module() -> ModuleIR {
+        right_shift_probe_module(true, -4)
+    }
+
+    fn shr_module() -> ModuleIR {
+        right_shift_probe_module(false, 9_223_372_036_854_775_804)
+    }
+
     #[test]
     fn test_native_sar_instruction_uses_arithmetic_shift() {
-        // Arrange：无生产者的 Sar 变体用合成 IR 夹具覆盖（见 sar_module 注释）。
-        // O0 与 O2 都跑：受检移位的守卫在优化下也不许退化成静默 wrap。
+        // Arrange：合成 IR 固定 Sar 变体；O0 与 O2 都跑，受检移位的守卫在优化下
+        // 也不许退化成静默 wrap。
         let module = sar_module();
 
         // Act & Assert
@@ -2164,6 +2188,25 @@ mod enabled {
             assert!(
                 output.status.success(),
                 "Sar must emit the arithmetic right shift (-8 >> 1 == -4) (O{}): {}",
+                u8::from(optimize),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
+
+    #[test]
+    fn test_native_shr_instruction_uses_logical_shift() {
+        // Arrange：合成 IR 固定 Shr 变体（前端不产出），期望逻辑右移的高位补零
+        // 结果 0x7FFF_FFFF_FFFF_FFFC；若发射成算术右移会得到 -4 而断言失败。
+        let module = shr_module();
+
+        // Act & Assert
+        for optimize in [false, true] {
+            let (_dir, executable) = build_synthetic(&module, "shr_probe", optimize);
+            let output = run_native(&executable);
+            assert!(
+                output.status.success(),
+                "Shr must emit the logical right shift (-8 >>> 1 == 0x7FFF_FFFF_FFFF_FFFC) (O{}): {}",
                 u8::from(optimize),
                 String::from_utf8_lossy(&output.stderr)
             );

@@ -98,9 +98,9 @@ pub enum BinaryOp {
     Xor,
     /// Left shift (<<)
     Shl,
-    /// Arithmetic right shift (>>)
+    /// Arithmetic right shift (>>)：高位补符号位；前端把有符号 `>>` 落到这里。
     Sar,
-    /// Logical right shift (>>>)
+    /// Logical right shift (>>>)：高位补零；前端今天不产出，留给无符号右移运算符。
     Shr,
 }
 

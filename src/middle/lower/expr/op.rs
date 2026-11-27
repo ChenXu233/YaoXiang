@@ -417,7 +417,10 @@ impl AstToIrGenerator {
                         rhs: right_reg.clone(),
                         span: self.cur_span,
                     },
-                    ast::BinOp::Shr => Instruction::Shr {
+                    // 右移运算符是有符号算术右移：Int 只有有符号 64 位一种形态，落
+                    // Sar（高位补符号位）。Shr 是逻辑右移，留给未来的无符号右移运算符，
+                    // 前端不产出——语义对齐见 RFC-018 与语言参考 §2.2。
+                    ast::BinOp::Shr => Instruction::Sar {
                         dst: result_reg.clone(),
                         lhs: left_reg.clone(),
                         rhs: right_reg.clone(),

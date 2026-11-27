@@ -55,7 +55,9 @@ VM 的同类系统上运行它，既能算对结果，也能在出错时指出�
       `test_native_string_equality_matches_vm`、`test_native_string_ordering_matches_vm`、
       `test_native_string_phi_merge_compares_by_content`；4.2 已收口：`Int` 位运算与受检
       移位（越界移位报 E6007 且与 VM 同源码位置，不静默 wrap，判据
-      `test_native_shift_out_of_range_matches_vm_diagnostic`）。容器、闭包、资源、FFI 与并作未开始。
+      `test_native_shift_out_of_range_matches_vm_diagnostic`）；右移语义按有符号定义：
+      `>>` 降 `Sar`（发 `ashr`）、`Shr` 归位逻辑右移（发 `lshr`，前端不产出，判据
+      `test_native_shr_instruction_uses_logical_shift`）。容器、闭包、资源、FFI 与并作未开始。
 
 ### 平台验收
 
@@ -198,12 +200,15 @@ python scripts/dev/testsuite.py plan
   `test_native_string_equality_comparison_is_accepted`、`test_native_string_ordering_comparison_is_accepted`。
 - `Int` 位运算与受检移位（批次 4.2）：`And`/`Or`/`Xor` 接受两侧同为 `Int`，按二进制补码
   逐位处理，不做值范围检查；`Shl`/`Shr`/`Sar` 接受两侧同为 `Int`，位移量先截断成 `u32`
-  （与 VM 的 `b as u32` 同口径），只有 `< 64` 才发射 `shl`/`ashr`，越界进入带位置的运行时
-  失败块（E6007，与 VM 同码同位置），值溢出不是错误（位被移出）。判据
+  （与 VM 的 `b as u32` 同口径），只有 `< 64` 才发射移位指令，越界进入带位置的运行时失败块
+  （E6007，与 VM 同码同位置），值溢出不是错误（位被移出）。三条变体按语义分别映射：
+  `Shl` 发 `shl`、`Sar` 发 `ashr`（有符号 `>>`，前端把 `>>` 降到 `Sar`）、`Shr` 发 `lshr`
+  （逻辑右移，前端今天不产出）。判据
   `test_native_int_bitwise_matches_vm`、`test_native_shift_left_matches_vm`、
   `test_native_shift_right_matches_vm`、`test_native_shift_out_of_range_matches_vm_diagnostic`、
-  `test_native_shift_amount_truncates_like_vm`、
-  `test_native_sar_instruction_uses_arithmetic_shift`（合成 IR），均在 O0 与 O2 各跑一遍；
+  `test_native_shift_amount_truncates_like_vm`、合成 IR 的
+  `test_native_sar_instruction_uses_arithmetic_shift` 与
+  `test_native_shr_instruction_uses_logical_shift`，均在 O0 与 O2 各跑一遍；
   后端单元判据 `test_native_int_bitwise_operands_are_accepted`、
   `test_native_shift_operands_are_accepted`、`test_native_shift_mixed_operand_is_rejected_with_location`。
 - 直线指令；无 `Phi` 的分支和循环（`Jmp`、`JmpIf`、`JmpIfNot` 按 `BasicBlock` 发射），判据为
@@ -244,12 +249,6 @@ python scripts/dev/testsuite.py plan
 - 文件身份：函数按 `function_files`、模块 init 按 `init_file_ids`
   选择真实文件路径，带位置诊断与运行期错误指向真实文件，判据为
   `test_native_multifile_dependency_init_diagnostic_uses_real_file`、`test_native_multifile_dependency_function_diagnostic_uses_real_file`。
-
-**`Shr` 与 `Sar` 的语义现状（批次 4.2 记录，未改 VM 或 IR）**：
-
-- 语言层只有 `>>` 一个右移运算符，前端把它降成 `Instruction::Shr`；`Instruction::Sar` 在 IR 里有变体，但 `lower` 不产出它，`>>` 也不经过它。
-- VM 的 `exec_binary_op` 对 `Shr` 与 `Sar` 都调用 `checked_shr`，即两者都是算术右移；而字节码运算符枚举的注释把 `Shr` 标成逻辑右移（`>>>`）、`Sar` 标成算术右移。
-- 两处不一致。后端按可观察等价处理：`Shr`/`Sar` 都发射算术右移，与 VM 同结果；不擅自改 VM 或 IR。若裁决要求 `>>` 为逻辑右移，需要同时改 VM 与前端/IR 的语义，属跨层变更，不在本批。
 
 **拒绝边界**：
 

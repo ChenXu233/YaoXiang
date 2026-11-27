@@ -969,10 +969,14 @@ impl Interpreter {
                 return self.int_op(fi, dst, "<<", l, r, |a, b| a.checked_shl(b as u32));
             }
             (BinaryOp::Sar, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
+                // 右移运算符（有符号）：算术右移，高位补符号位。
                 return self.int_op(fi, dst, ">>", l, r, |a, b| a.checked_shr(b as u32));
             }
             (BinaryOp::Shr, RuntimeValue::Int(l), RuntimeValue::Int(r)) => {
-                return self.int_op(fi, dst, ">>", l, r, |a, b| a.checked_shr(b as u32));
+                // 逻辑右移（无符号右移形态；前端今天不产出）：高位补零。
+                return self.int_op(fi, dst, ">>>", l, r, |a, b| {
+                    (a as u64).checked_shr(b as u32).map(|v| v as i64)
+                });
             }
             (BinaryOp::Add, RuntimeValue::Float(l), RuntimeValue::Float(r)) => {
                 RuntimeValue::Float(l + r)

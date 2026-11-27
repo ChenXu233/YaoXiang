@@ -795,12 +795,16 @@ impl<'ctx> Emitter<'ctx> {
                     .repr
                     .ok_or_else(|| anyhow!("shift rhs has no LLVM value"))?
                     .into_int_value();
-                let (shifted, exit) = self.emit_checked_shift(
-                    left,
-                    right,
-                    matches!(instruction, Instruction::Shl { .. }),
-                    *span,
-                )?;
+                // 移位种类决定发射哪条 LLVM 指令：左移 shl、逻辑右移 lshr、
+                // 算术右移 ashr。`>>` 由前端落到 `Sar`（算术），`Shr` 是逻辑右移。
+                let arithmetic_right = match instruction {
+                    Instruction::Shl { .. } => None,
+                    Instruction::Shr { .. } => Some(false),
+                    Instruction::Sar { .. } => Some(true),
+                    _ => unreachable!(),
+                };
+                let (shifted, exit) =
+                    self.emit_checked_shift(left, right, arithmetic_right, *span)?;
                 split_exit = Some(exit);
                 self.write(
                     &mut *locals,
@@ -827,10 +831,12 @@ impl<'ctx> Emitter<'ctx> {
         Ok((matches!(instruction, Instruction::Ret { .. }), split_exit))
     }
 
-    /// 受检移位（批次 4.2）：位移量先截断成 `u32`（与 VM 的 `b as u32` 同口径），
-    /// 只有 `< 64` 才发射 `shl`/`ashr`；越界进入带位置的运行时失败块（E6007），
-    /// 不静默 wrap。`Shr` 与 `Sar` 都发射算术右移——VM 的 `>>` 现状即算术，
-    /// 两条变体的语义分歧见设计文档「支持集」注记。
+    /// 受检移位：位移量先截断成 `u32`（与 VM 的 `b as u32` 同口径），只有 `< 64`
+    /// 才发射移位指令；越界进入带位置的运行时失败块（E6007），不静默 wrap。
+    ///
+    /// `arithmetic_right` 决定发射哪条指令：`None` = 左移 `shl`，`Some(false)` =
+    /// 逻辑右移 `lshr`，`Some(true)` = 算术右移 `ashr`。前端把 `>>` 降到 `Sar`，
+    /// 因此有符号右移走 `ashr`；`Shr` 是逻辑右移，留给未来的无符号右移运算符。
     ///
     /// 守卫把当前块切成三段：`shift.ok`（移位）→ `shift.rest`（本 IR 块的余下
     /// 指令与新出口）、`shift.fail`（失败入口 + `unreachable`）。调用方必须把
@@ -840,7 +846,7 @@ impl<'ctx> Emitter<'ctx> {
         &mut self,
         lhs: inkwell::values::IntValue<'ctx>,
         rhs: inkwell::values::IntValue<'ctx>,
-        is_left: bool,
+        arithmetic_right: Option<bool>,
         span: Span,
     ) -> Result<(inkwell::values::IntValue<'ctx>, LlvmBlock<'ctx>)> {
         let function = self
@@ -873,15 +879,15 @@ impl<'ctx> Emitter<'ctx> {
             self.context.i64_type(),
             "shift.amount.i64",
         ))?;
-        let shifted = if is_left {
-            llvm(self.builder.build_left_shift(lhs, amount, "shift.value"))?
-        } else {
-            // `sign_extend = true` 即算术右移：VM 的 >> 现状是算术右移，
-            // Shr 与 Sar 两条变体都按它发射（语义分歧见设计文档支持集注记）。
-            llvm(
-                self.builder
-                    .build_right_shift(lhs, amount, true, "shift.value"),
-            )?
+        let shifted = match arithmetic_right {
+            None => llvm(self.builder.build_left_shift(lhs, amount, "shift.value"))?,
+            // `sign_extend = true` 得 ashr（算术右移），`false` 得 lshr（逻辑右移）。
+            Some(sign_extend) => {
+                llvm(
+                    self.builder
+                        .build_right_shift(lhs, amount, sign_extend, "shift.value"),
+                )?
+            }
         };
         llvm(self.builder.build_unconditional_branch(rest_block))?;
 

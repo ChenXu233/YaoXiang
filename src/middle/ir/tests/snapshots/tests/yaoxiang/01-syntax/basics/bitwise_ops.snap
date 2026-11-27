@@ -77,7 +77,7 @@ module
     Call v21 <- string("std.assert.assert") [v22, v29] (def=d0)
     Load v36 <- int(16)
     Load v37 <- int(1)
-    Shr v34 <- v36, v37
+    Sar v34 <- v36, v37
     Load v35 <- int(3)
     And v32 <- v34, v35
     Load v33 <- int(0)

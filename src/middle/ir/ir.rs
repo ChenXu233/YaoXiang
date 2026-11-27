@@ -172,18 +172,21 @@ pub enum Instruction {
         rhs: Operand,
         span: Span,
     },
+    /// 左移：低位补零；位移量按 32 位无符号解释后必须小于 64。
     Shl {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
         span: Span,
     },
+    /// 逻辑右移：高位补零。前端不产出（留给未来的无符号右移运算符）。
     Shr {
         dst: Operand,
         lhs: Operand,
         rhs: Operand,
         span: Span,
     },
+    /// 算术右移：高位补符号位。`Int` 的 `>>` 落到本变体。
     Sar {
         dst: Operand,
         lhs: Operand,
