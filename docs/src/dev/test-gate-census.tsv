@@ -1870,8 +1870,8 @@ test_clean_prunes_stale_vendor_packages	src/package/commands/tests/clean.rs	asse
 test_clean_nothing_to_do	src/package/commands/tests/clean.rs	unwrapx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_init_manifest_has_correct_metadata	src/package/commands/tests/init.rs	assert_eqx2 unwrapx3	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_init_existing_directory_returns_project_exists_error	src/package/commands/tests/init.rs	matchesx1 assertx2 is_errx1 unwrapx2	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
-test_init_here_fails_when_project_already_exists	src/package/commands/tests/init.rs	matchesx1 assertx2 is_errx1 unwrapx3	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
-test_init_here_preserves_preexisting_files	src/package/commands/tests/init.rs	assert_eqx1 assertx1 unwrapx6	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
+test_init_here_fails_when_project_already_exists	src/package/commands/tests/init.rs	assert_eqx1 matchesx1 assertx2 is_errx1 unwrapx3	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_init_here_preserves_preexisting_files	src/package/commands/tests/init.rs	assert_eqx2 assertx1 unwrapx7	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
 test_install_updates_lock_correctly	src/package/commands/tests/install.rs	assert_eqx1 unwrapx2	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_install_registry_dependency_fails	src/package/commands/tests/install.rs	assertx1 is_errx1 unwrapx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_list_empty	src/package/commands/tests/list.rs	unwrapx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
