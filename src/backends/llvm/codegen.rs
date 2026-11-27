@@ -1011,6 +1011,12 @@ impl<'ctx> Emitter<'ctx> {
                 let Some(slot) = locals.get(slot).copied() else {
                     bail!("local slot {slot} has no entry-block alloca")
                 };
+                // Void 没有 LLVM 形态：Void 槽位的读取按类型物化为 Void，与
+                // `Const(ConstValue::Void)` 同一规则。判据由类型驱动，不看指针是否存在；
+                // 非 Void 槽位缺指针走 `load_slot` 的硬失败（不变量被破坏）。
+                if slot.ty == ScalarType::Void {
+                    return Ok(Value::void());
+                }
                 self.load_slot(slot)
             }
             Operand::Value(id) => values
@@ -1018,11 +1024,25 @@ impl<'ctx> Emitter<'ctx> {
                 .copied()
                 .ok_or_else(|| anyhow!("ValueId({}) has no LLVM definition at read time", id.0)),
             Operand::Global(index) => {
-                let ty = self.analysis.globals[index];
-                let Some(pointer) = self.globals.get(index).copied() else {
-                    // AOT-3.1 known gap（阶段 1 支持集账本）：Global 缺指针时
-                    // 当前静默返回 Void；后续批次改为带位置的显式拒绝。
+                let ty = self
+                    .analysis
+                    .globals
+                    .get(index)
+                    .copied()
+                    .ok_or_else(|| anyhow!("global slot {index} has no established type"))?;
+                // 同上：Void 全局槽位没有 LLVM 形态，读取按类型物化为 Void。
+                if ty == ScalarType::Void {
                     return Ok(Value::void());
+                }
+                let Some(pointer) = self.globals.get(index).copied() else {
+                    // 非 Void 全局槽位缺指针只可能来自未声明的槽位：分析层对
+                    // 「只读且未声明」的槽位报 `global slot N is not declared`，先写入
+                    // 再读取的槽位在发射该写入时已按同一张表失败。这里显式失败，
+                    // 不再静默物化 Void。
+                    bail!(
+                        "global slot {index} of type {ty:?} has no materialized LLVM pointer; \
+                         a non-Void global is only materialized when the module declares it"
+                    )
                 };
                 self.load_slot(Slot {
                     ty,
@@ -1036,20 +1056,23 @@ impl<'ctx> Emitter<'ctx> {
         }
     }
 
+    /// 读取非 Void 槽位。Void 槽位没有 LLVM 形态，由调用方按类型先行返回 Void；
+    /// 因此缺指针意味着「非 Void 槽位没有入口块 alloca」——发射层不变量被破坏，
+    /// 必须响亮失败，不静默物化 Void。
     fn load_slot(
         &self,
         slot: Slot<'ctx>,
     ) -> Result<Value<'ctx>> {
         let Some(pointer) = slot.pointer else {
-            // AOT-3.1 known gap（阶段 1 支持集账本）：无指针槽位当前静默返回
-            // Void；后续批次改为带位置的显式拒绝。
-            return Ok(Value::void());
+            bail!(
+                "slot of type {:?} has no entry-block alloca; only Void lacks an LLVM form",
+                slot.ty
+            )
         };
-        let repr = llvm(self.builder.build_load(
-            llvm_type(self.context, slot.ty).expect("void has no pointer"),
-            pointer,
-            "load",
-        ))?;
+        let Some(llvm_ty) = llvm_type(self.context, slot.ty) else {
+            bail!("slot of type {:?} has no LLVM form", slot.ty)
+        };
+        let repr = llvm(self.builder.build_load(llvm_ty, pointer, "load"))?;
         Ok(Value {
             ty: slot.ty,
             repr: Some(repr),
@@ -1260,7 +1283,10 @@ impl<'ctx> Emitter<'ctx> {
     }
 }
 
-fn llvm_type(
+/// 标量到 LLVM 形态的映射。Void 是唯一没有值表示的标量——发射层「槽位缺指针只可能
+/// 是 Void」的不可达证明依赖这条性质，判据为 tests/codegen.rs 的
+/// test_only_void_scalar_has_no_llvm_form。
+pub(super) fn llvm_type(
     context: &inkwell::context::Context,
     ty: ScalarType,
 ) -> Option<BasicTypeEnum<'_>> {

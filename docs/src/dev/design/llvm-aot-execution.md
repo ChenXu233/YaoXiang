@@ -288,8 +288,16 @@ python scripts/dev/testsuite.py plan
   `source:line:column`；混型比较（`String` 与 `Int` 等）同样带位置拒绝。判据
   `test_native_string_operation_outside_slice_is_rejected`、
   `test_native_string_mixed_comparison_is_rejected_with_location`。
-- 已知静默 Void 两处（**未收口**）：`Operand::Global` 缺指针时读取返回 `Value::void()`，`load_slot`
-  无指针时返回 `Value::void()`。后续批次改为显式拒绝或补齐证据，不得标成已收口。
+- 槽位缺指针（批次 4.3 收口：补齐证据 + 非 `Void` 硬失败）：`Void` 是唯一没有 LLVM 形态的
+  标量（后端单元判据 `test_only_void_scalar_has_no_llvm_form`），分析层只放行 `Void`/`Int`/
+  `Bool`/`String`，另外三种槽位都在入口块拿到 alloca、全局槽位由 `declare_globals` 物化——
+  因此「槽位缺指针」只可能是 `Void`。`Void` 槽位的读取按**类型**物化为 `Void`，与
+  `Const(ConstValue::Void)` 同一规则，不依赖缺指针兜底（集成判据
+  `test_native_void_slot_reads_are_explicit`；已声明 `Int` 全局的读取判据
+  `test_native_declared_int_global_read_is_materialized`）。非 `Void` 槽位缺指针是发射层不变量
+  被破坏：`bail!` 点名槽位与类型、构建失败且不产生产物，不再静默物化 `Void`。未声明的全局
+  槽位在 `verify_ssa` 闸门按槽位越界拒绝并点名槽位（判据
+  `test_native_undeclared_global_read_is_rejected`）——发射层收不到这条读取。
 
 **L4 自有判据的性质（L3 裁决）**：批次 3.5 后该性质由 `src/backends/llvm/analysis.rs` 的
 `check_local_read_definitions`（自建可达块 CFG、前驱表与 must-def 集合不动点）、`Phi`

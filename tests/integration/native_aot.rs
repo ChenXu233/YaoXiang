@@ -50,7 +50,8 @@ mod enabled {
     use yaoxiang::build_native_with_options;
     use yaoxiang::frontend::config::CompileConfig;
     use yaoxiang::middle::ir::ir::{
-        BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
+        BasicBlock, ConstValue, FunctionBody, FunctionIR, GlobalSlot, Instruction, LocalSlot,
+        ModuleIR, Operand,
     };
     use yaoxiang::util::span::{Position, Span};
 
@@ -2211,6 +2212,252 @@ mod enabled {
                 String::from_utf8_lossy(&output.stderr)
             );
         }
+    }
+
+    /// 合成 IR：Void 全局槽位（模块声明）与 Void 局部槽位的读取。Void 没有 LLVM 形态，
+    /// 读取按类型物化为 Void——判据是「不依赖缺指针兜底」的那条显式规则。
+    fn void_slots_module() -> ModuleIR {
+        let mut module = ModuleIR::default();
+        module.globals.push(GlobalSlot {
+            name: "g".to_string(),
+            ty: yaoxiang::frontend::core::sema::MonoType::Void,
+            index: 0,
+        });
+        module.functions.push(FunctionIR {
+            name: "void_probe".to_string(),
+            def: None,
+            params: vec![],
+            return_type: yaoxiang::frontend::core::sema::MonoType::Void,
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions: vec![
+                        Instruction::Store {
+                            dst: Operand::Global(0),
+                            src: Operand::Const(ConstValue::Void),
+                            span: Span::dummy(),
+                        },
+                        Instruction::Load {
+                            dst: Operand::Local(0),
+                            src: Operand::Const(ConstValue::Void),
+                            span: Span::dummy(),
+                        },
+                        // 读 Void 全局槽位（旧实现在这里静默返回 Void，现按类型规则物化）。
+                        Instruction::Move {
+                            dst: Operand::Local(1),
+                            src: Operand::Global(0),
+                            span: Span::dummy(),
+                        },
+                        // 读 Void 局部槽位（旧实现的 load_slot 兜底）。
+                        Instruction::Move {
+                            dst: Operand::Local(2),
+                            src: Operand::Local(0),
+                            span: Span::dummy(),
+                        },
+                        Instruction::Ret {
+                            value: None,
+                            span: Span::dummy(),
+                        },
+                    ],
+                    successors: vec![],
+                }],
+                entry: 0,
+                locals: vec![
+                    LocalSlot::temp(yaoxiang::frontend::core::sema::MonoType::Void),
+                    LocalSlot::temp(yaoxiang::frontend::core::sema::MonoType::Void),
+                    LocalSlot::temp(yaoxiang::frontend::core::sema::MonoType::Void),
+                ],
+                values: vec![],
+                value_slots: vec![],
+            },
+        });
+        module.init.push(Instruction::Call {
+            dst: None,
+            func: Operand::Const(ConstValue::String("void_probe".to_string())),
+            args: vec![],
+            def: None,
+            span: Span::dummy(),
+        });
+        module
+    }
+
+    /// 合成 IR：已声明 Int 全局槽位的读取（非 Void 槽位必须由 declare_globals 物化）。
+    fn int_global_module() -> ModuleIR {
+        let mut module = ModuleIR::default();
+        module.globals.push(GlobalSlot {
+            name: "g".to_string(),
+            ty: yaoxiang::frontend::core::sema::MonoType::Int(64),
+            index: 0,
+        });
+        module.functions.push(FunctionIR {
+            name: "int_global_probe".to_string(),
+            def: None,
+            params: vec![],
+            return_type: yaoxiang::frontend::core::sema::MonoType::Void,
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions: vec![
+                        Instruction::Load {
+                            dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(0)),
+                            src: Operand::Global(0),
+                            span: Span::dummy(),
+                        },
+                        Instruction::Eq {
+                            dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(1)),
+                            lhs: Operand::Value(yaoxiang::middle::ir::ir::ValueId(0)),
+                            rhs: Operand::Const(ConstValue::Int(7)),
+                            span: Span::dummy(),
+                        },
+                        Instruction::Call {
+                            dst: None,
+                            func: Operand::Const(ConstValue::String(
+                                "std.assert.assert".to_string(),
+                            )),
+                            args: vec![Operand::Value(yaoxiang::middle::ir::ir::ValueId(1))],
+                            def: None,
+                            span: Span::dummy(),
+                        },
+                        Instruction::Ret {
+                            value: None,
+                            span: Span::dummy(),
+                        },
+                    ],
+                    successors: vec![],
+                }],
+                entry: 0,
+                locals: vec![],
+                values: vec![
+                    yaoxiang::middle::ir::ir::ValueInfo {
+                        ty: yaoxiang::frontend::core::sema::MonoType::Int(64),
+                        debug_name: None,
+                        defining_block: 0,
+                    },
+                    yaoxiang::middle::ir::ir::ValueInfo {
+                        ty: yaoxiang::frontend::core::sema::MonoType::Bool,
+                        debug_name: None,
+                        defining_block: 0,
+                    },
+                ],
+                value_slots: vec![],
+            },
+        });
+        module.init.push(Instruction::Store {
+            dst: Operand::Global(0),
+            src: Operand::Const(ConstValue::Int(7)),
+            span: Span::dummy(),
+        });
+        module.init.push(Instruction::Call {
+            dst: None,
+            func: Operand::Const(ConstValue::String("int_global_probe".to_string())),
+            args: vec![],
+            def: None,
+            span: Span::dummy(),
+        });
+        module
+    }
+
+    #[test]
+    fn test_native_void_slot_reads_are_explicit() {
+        // Arrange：Void 全局与 Void 局部各读一次；两处都不再有「缺指针 → Void」兜底。
+        let module = void_slots_module();
+
+        // Act & Assert
+        for optimize in [false, true] {
+            let (_dir, executable) = build_synthetic(&module, "void_slots", optimize);
+            let output = run_native(&executable);
+            assert!(
+                output.status.success(),
+                "Void slot reads must build and run (O{}): {}",
+                u8::from(optimize),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
+
+    #[test]
+    fn test_native_declared_int_global_read_is_materialized() {
+        // Arrange：已声明 Int 全局由 declare_globals 物化指针，读取必须拿到值而非 Void。
+        let module = int_global_module();
+
+        // Act & Assert
+        for optimize in [false, true] {
+            let (_dir, executable) = build_synthetic(&module, "int_global", optimize);
+            let output = run_native(&executable);
+            assert!(
+                output.status.success(),
+                "a declared Int global must read back its stored value (O{}): {}",
+                u8::from(optimize),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
+
+    #[test]
+    fn test_native_undeclared_global_read_is_rejected() {
+        // Arrange：读一个模块从未声明的全局槽位——内部的 verify_ssa 闸门先按槽位
+        // 越界点名拒绝，发射层收不到这条读取，也就不可能静默物化 Void。
+        let mut module = ModuleIR::default();
+        module.functions.push(FunctionIR {
+            name: "bad_read".to_string(),
+            def: None,
+            params: vec![],
+            return_type: yaoxiang::frontend::core::sema::MonoType::Void,
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions: vec![
+                        Instruction::Load {
+                            dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(0)),
+                            src: Operand::Global(3),
+                            span: Span::dummy(),
+                        },
+                        Instruction::Ret {
+                            value: None,
+                            span: Span::dummy(),
+                        },
+                    ],
+                    successors: vec![],
+                }],
+                entry: 0,
+                locals: vec![],
+                values: vec![yaoxiang::middle::ir::ir::ValueInfo {
+                    ty: yaoxiang::frontend::core::sema::MonoType::Int(64),
+                    debug_name: None,
+                    defining_block: 0,
+                }],
+                value_slots: vec![],
+            },
+        });
+        module.init.push(Instruction::Call {
+            dst: None,
+            func: Operand::Const(ConstValue::String("bad_read".to_string())),
+            args: vec![],
+            def: None,
+            span: Span::dummy(),
+        });
+        let dir = TempDir::new().expect("undeclared global tempdir");
+        let source = dir.path().join("undeclared_global.yx");
+        let executable = dir.path().join("undeclared_global");
+
+        // Act
+        let error =
+            compile_ir_to_executable(&module, &source.display().to_string(), &executable, false)
+                .expect_err("a read of an undeclared global slot must be rejected");
+
+        // Assert
+        let detail = format!("{error:#}");
+        assert!(
+            detail.contains("global 槽位 3"),
+            "rejection must name the undeclared slot: {detail}"
+        );
+        assert!(
+            !executable.exists(),
+            "rejected build must not write a native artifact"
+        );
     }
 }
 
