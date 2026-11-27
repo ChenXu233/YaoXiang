@@ -90,6 +90,7 @@ cargo fmt                                              # 格式化（必跑）
 cargo clippy --all --all-features --all-targets -- -D warnings
 python scripts/dev/testsuite.py run fast               # 提交前必跑：lib + 集成侧，见下
 python scripts/ci/check-test-channel.py                # 四处口径同源（本页 / AGENTS.md / test-specification / pre-commit）
+python scripts/dev/test-gate-census.py --check         # 普查表与当前树一致（pre-commit 在 .rs / 普查表变动时自动跑）
 ```
 
 `run fast` 的目标集是显式的：`--lib`（src/ 单元测试）加四个集成侧目标

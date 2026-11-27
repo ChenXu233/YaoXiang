@@ -93,6 +93,17 @@ repos:
         exclude: '^docs/(node_modules|public|dist|superpowers)/|^docs/src/\.vitepress/|^docs/src/(en|ja|ru|archive)/|^docs/src/design/rfc/(deprecated|rejected)/'
         stages: [pre-commit]
 
+      - id: test-gate-census
+        name: 测试门禁普查表与当前树一致
+        # 普查表是生成物：改了测试（增删改名、断言变化）就必须同提交再生，
+        # 否则 docs/src/dev/test-gate-census.tsv 与当前树脱节而无人发现。
+        # 本页 .md 是手写摘要、脚本不写也没有门禁读它——新增测试后仍需手工对账合计。
+        entry: python scripts/dev/test-gate-census.py --check
+        language: system
+        files: '^(src/.*\.rs|tests/.*\.rs|benches/.*\.rs|tools/.*\.rs|docs/src/dev/test-gate-census\.tsv)$'
+        pass_filenames: false
+        stages: [pre-commit]
+
       - id: check-commit-msg
         name: check commit message format
         entry: python scripts/hooks/check-commit-msg.py
