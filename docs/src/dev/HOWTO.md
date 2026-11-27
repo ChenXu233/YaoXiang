@@ -105,10 +105,9 @@ python scripts/ci/check-docs-truth.py
 python scripts/ci/check-boundary.py
 python scripts/ci/check-fanout.py
 python scripts/ci/check-docs-refs.py
-python scripts/docs/gen-error-code-docs.py && git diff --quiet
 ```
 
-改动诊断码或其发射点（增、删、行号平移）都必须重跑生成器并确认 `git diff --quiet`；生成物禁止手改，提交信息须分类说明。
+**错误码参考页是构建期产物，不入库**：文档站构建时由 `scripts/docs/gen-error-code-docs.py` 从码表注册表与 `locales/*.json` 重新生成（zh 与 en 两侧），因此本地不再「再生入库」。改诊断码时改的是权威源——`define_codes!` 注册表与文案：新增码必须同时补齐 `locales/zh.json` 与 `locales/en.json`，否则生成页该码显示「locales 无条目」。要预览生成结果跑 `node docs/gen-error-docs.js`。
 
 ## 二、改文档
 

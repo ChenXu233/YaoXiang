@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | **一级** | 11（P0–P10） | 阶段，与 RFC-039 的阶段序列一一对应 |
 | **二级** | 73 | 任务组：按阶段拆解的工作组，可独立建队、独立归档 |
-| **三级** | 262 | 可独立提交、可独立验证的工作单元 |
+| **三级** | 263 | 可独立提交、可独立验证的工作单元 |
 
 **编号留空（不回收）**：P4 无 `4.7`/`4.8`、P8 无 `8.1`；LALRPOP 路线撤回后 `8.4` / `8.5` / `8.6` 亦留空（2026-11-25）。三者自 WBS 建立起即无对应条目——本文全史对 `**4.7` / `**4.8` / `**8.1` 三个标题零命中（`git log -S'**4.7' -- docs/src/dev/architecture/09-execution-wbs.md` 可复核），全仓亦无引用。`8.1` 对应的正是 `05` 的阶段 1（测试复活与补全）：该阶段已拆入 P1（`1.1`–`1.3`）与 `8.8`，因此 P8 的编号与其阶段号对齐（阶段 0 → `8.0`、阶段 2 → `8.2`，依此类推）。
 
@@ -64,7 +64,7 @@ P10 其余清理与状态修正 06 §S2/S3/S4/S5/S6
 来源：[08-maintenance-mechanism.md](08-maintenance-mechanism.md)
 
 - [x] **0.1 规程成文**（3 个三级任务）
-- [ ] **0.2 门禁实现**（3 个三级任务：0.2.1–0.2.3 已完成，report-only 接入 CI；0.2.4 增补，issue [#521](https://github.com/ChenXu233/YaoXiang/issues/521)；本二级不整行勾完成）
+- [ ] **0.2 门禁实现**（6 个三级任务：0.2.1–0.2.3 已完成，report-only 接入 CI；0.2.4 增补，issue [#521](https://github.com/ChenXu233/YaoXiang/issues/521)；0.2.5 准入与退役策略成文；0.2.6 增补，错误码参考页改构建期生成并退役「生成器幂等」门禁；本二级不整行勾完成）
 - [ ] **0.3 表门禁推广**（1 个三级任务）
 - [ ] **0.4 规程承诺与工具行为一致性**（1 个三级任务：0.4.1 已完成，issue [#463](https://github.com/ChenXu233/YaoXiang/issues/463)；0.4.2 增补，本二级不整行勾完成；归属阶段：P0；是否阻塞主线：否）
 - [x] **0.5 测试套件分层**（3 个三级任务；issue [#486](https://github.com/ChenXu233/YaoXiang/issues/486)、[#502](https://github.com/ChenXu233/YaoXiang/issues/502)；归属阶段：P0；是否阻塞主线：否）
@@ -80,6 +80,7 @@ P10 其余清理与状态修正 06 §S2/S3/S4/S5/S6
 | | 0.2.3 `check-boundary.py`（禁令二判据 C） | 0.1.1 | **故意加一处 L2→L3 反向 `use` 必须红**；`pub(crate)` 泄漏计数记初始值 |
 | | 0.2.4 `check-docs-refs.py` 裸文本覆盖（.md 面；issue [#521](https://github.com/ChenXu233/YaoXiang/issues/521)；来源 = #520 批次复审——裸写探针目录不设防） | 0.2.3 | selftest 全过；全量门禁零违规；负向能力 = 首跑实战抓红；issue [#521](https://github.com/ChenXu233/YaoXiang/issues/521) 的 .md 面验收达成（全仓现有 docs 零假阳性）；归属阶段：P0；是否阻塞主线：否 |
 | | 0.2.5 检查准入与退役策略：绿灯只证伪；**唯一校验** = 换一个正确的替代实现它会不会红；**准入三扇门** = 条款 / 病史 / 证明；**退役举证责任倒置** = 三扇门一扇都过不了的删，删除按批次可 revert（git 可取回），不设观察期 | `docs/src/dev/coding-rules.md`（第七部分） | — |
+| | 0.2.6 错误码参考页改**构建期生成**（zh + en 两侧，不入库）+ 退役「入库快照 == 生成器输出」门禁：页面由 `scripts/docs/gen-error-code-docs.py` 从码表注册表与 `locales/*.json` 在文档站构建时再生，站点上的错误码页因此恒与码表一致 | 0.2.5 | `node docs/gen-error-docs.js` 产出 zh/en 各 11 页且与码表一致；文档站构建产物含错误码页；`check-docs-truth.py` / `check-docs-orphan.py` / `check-docs-refs.py` 全绿；退役依据 = coding-rules 7.1（该门禁冻精确行号 = 实现选择）+ 7.3（删除可整体 revert）；归属阶段：P0；是否阻塞主线：否 |
 | 0.3 表门禁推广 | 0.3.1 `tools/code-tables` 扩展覆盖 opcode / 类型表 | 0.1.1 | — |
 | 0.4 规程承诺与工具行为一致性 | 0.4.1 默认排除表只作用于**遍历到的子项**（按 `file_name` 判，不看祖先路径）、不作用于用户显式给出的路径；`--exclude` 与比较基准同源（issue [#463](https://github.com/ChenXu233/YaoXiang/issues/463)） | — | 仓库内 `check target/…/x.yx`（文件与目录两形态）可直接跑；嵌套 `target/` 子目录仍跳过；`--exclude` 真正生效（`check src/std --exclude src/std` ⇒ 零发现） |
 | | 0.4.2 `scratch.py trial` 参数形态与文档一致（归属阶段：P0；是否阻塞主线：否） | — | — |

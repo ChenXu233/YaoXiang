@@ -24,6 +24,15 @@ jobs:
         with:
           fetch-depth: 2
 
+      # 错误码参考页是构建期产物，不在仓库里——但站点侧边栏靠扫描
+      # docs/src/reference/error-code/ 生成（vitepress-sidebar 对缺失目录会直接
+      # 抛异常），所以凡是要加载站点配置的本 workflow 步骤之前，先把页生成出来。
+      # 生成物被 .gitignore 排除，不会被下面的 git add 带进提交。
+      - name: Generate error-code reference pages (zh + en)
+        run: |
+          python3 scripts/docs/gen-error-code-docs.py --lang zh
+          python3 scripts/docs/gen-error-code-docs.py --lang en
+
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:

@@ -25,6 +25,12 @@ check-docs-refs.py —— 「文档引用的路径必须任何人都能解析」
   5. 占位符形态（如 `target/yx-scratch/<batch>/tree`）**不**算违规：那是规则
      陈述，描述「工具把产物放哪」，不是「拿它当证据出处」；同理裸目录名
      `target/` 也不算。
+  6. **构建期生成页**（错误码参考页）**不算违规**：它们由仓库内的
+     `scripts/docs/gen-error-code-docs.py` 从码表注册表与 `locales/*.json`
+     生成，任何人 clone 后都能重建——「不在 git 里」不等于「私有内容」
+     （AGENTS.md 元规则 ① 的例外）。豁免**逐条精确列出**这批路径
+     （GENERATED_DOC_PAGES），不做目录级放宽：真正被 .gitignore 排除的
+     私有目录仍须判红。
 
 用法：
   python scripts/ci/check-docs-refs.py            # 检查
@@ -67,6 +73,51 @@ ALLOWED_PREFIXES = {
     'node_modules/': 'RFC-015 配置示例中的 Node 依赖目录（规格陈述）——不是证据引用',
     'pkg/msi': 'RFC-037 打包布局示例（规格陈述）——不是证据引用',
     'mylib/target/yxpkg/': '打包指南示例的产物路径（规格陈述）——不是证据引用',
+}
+
+# 构建期生成的错误码参考页（**不入库**，见根 .gitignore 的对应规则）。
+# 豁免理由：这些页由仓库内的 `scripts/docs/gen-error-code-docs.py` 从码表
+# 注册表（`src/util/diagnostic/codes/`）与 `locales/*.json` 生成，任何人
+# clone 后跑
+#     python scripts/docs/gen-error-code-docs.py --lang zh|en
+# 就能重建（文档站构建前也先跑这一步，见 docs/build.js）——它们是「不在
+# git 里」，**不是**「只有本机有」，因此不按私有内容判红。
+#
+# 清单**逐条精确到路径**，不做目录级通配：真正被 .gitignore 排除的私有
+# 目录（target/yx-scratch/、docs/plans/、.docs-examples-tmp/ 等）仍须判红。
+# 生成器新增分族页时，此表同步登记（分族页清单的唯一权威是生成器的
+# FAMILIES 常量）。
+GENERATED_DOC_REASON = (
+    '构建期生成的错误码参考页（不入库）——由仓库内的 '
+    'scripts/docs/gen-error-code-docs.py 从码表与 locales/*.json 生成，'
+    '任何人 clone 后跑 `python scripts/docs/gen-error-code-docs.py --lang zh|en` '
+    '即可重建——不是私有内容，只是「不在 git 里」'
+)
+GENERATED_DOC_PAGES = {
+    # 中文侧
+    'docs/src/reference/error-code/index.md',
+    'docs/src/reference/error-code/E0xxx.md',
+    'docs/src/reference/error-code/E1xxx.md',
+    'docs/src/reference/error-code/E2xxx.md',
+    'docs/src/reference/error-code/E4xxx.md',
+    'docs/src/reference/error-code/E5xxx.md',
+    'docs/src/reference/error-code/E6xxx.md',
+    'docs/src/reference/error-code/E7xxx.md',
+    'docs/src/reference/error-code/E8xxx.md',
+    'docs/src/reference/warning-code/warning-codes.md',
+    'docs/src/reference/package/error-codes.md',
+    # 英文镜像（docs/src/en/）
+    'docs/src/en/reference/error-code/index.md',
+    'docs/src/en/reference/error-code/E0xxx.md',
+    'docs/src/en/reference/error-code/E1xxx.md',
+    'docs/src/en/reference/error-code/E2xxx.md',
+    'docs/src/en/reference/error-code/E4xxx.md',
+    'docs/src/en/reference/error-code/E5xxx.md',
+    'docs/src/en/reference/error-code/E6xxx.md',
+    'docs/src/en/reference/error-code/E7xxx.md',
+    'docs/src/en/reference/error-code/E8xxx.md',
+    'docs/src/en/reference/warning-code/warning-codes.md',
+    'docs/src/en/reference/package/error-codes.md',
 }
 
 # 内联代码片段 + markdown 链接目标
@@ -260,6 +311,10 @@ def classify(candidates):
                 break
         if pattern is None:
             continue
+        # 构建期生成的错误码参考页：路径在生成清单内 → 豁免（可重建，不是私有内容）
+        if tok in GENERATED_DOC_PAGES or stripped in GENERATED_DOC_PAGES:
+            exemptions.append((rel, line, col, tok, GENERATED_DOC_REASON))
+            continue
         allowed = next((why for pre, why in ALLOWED_PREFIXES.items() if tok.startswith(pre)), None)
         if allowed is not None:
             exemptions.append((rel, line, col, tok, allowed))
@@ -309,6 +364,12 @@ def selftest():
         ('正例：URL', 'https://github.com/ChenXu233/YaoXiang/issues/475', False),
         ('正例：用户主目录路径', '~/.yaoxiang/settings.toml', False),
         ('反例：跨分批边界仍判红', 'target/yx-scratch/batch-%d/evidence.md' % 149, True),
+        ('正例：构建期生成页（错误码分族页，可重建）', 'docs/src/reference/error-code/E1xxx.md', False),
+        ('正例：构建期生成页（错误码总览页，可重建）', 'docs/src/reference/error-code/index.md', False),
+        ('正例：构建期生成页（英文镜像）', 'docs/src/en/reference/error-code/index.md', False),
+        ('正例：构建期生成页（警告码页）', 'docs/src/reference/warning-code/warning-codes.md', False),
+        ('反例：错误码目录下的非生成文件（不在生成清单内）', 'docs/src/reference/error-code/notes.md', True),
+        ('反例：私有计划目录（真的被 .gitignore 排除）', 'docs/plans/2026-01-plan.md', True),
     ]
     ok = True
     for name, token, should_fail in cases:
