@@ -772,29 +772,19 @@ impl BytecodeFile {
     }
 }
 
-/// 将 type_id (u32) 转换为相应的 MonoType。
+/// 将 .42 类型号转换回 [`MonoType`]（与编码共用 [`SCALAR_TYPE_CODES`] 一张表）。
 ///
-/// 序列化是 lossy 的（复杂类型如 Struct/Enum 只存储一个 id），
-/// 因此复杂类型会 fallback 到 `TypeRef("_")`。
-/// 简单类型（Void/Bool/Int/Float/Char/String/Bytes）可以精确重建。
-fn type_id_to_monotype(id: u32) -> MonoType {
-    match id {
-        0 => MonoType::Void,
-        1 => MonoType::Bool,
-        2..=5 => MonoType::Int(((id - 2) * 8 + 8) as usize),
-        6..=9 => MonoType::Float(((id - 6) * 8 + 8) as usize),
-        10 => MonoType::Char,
-        11 => MonoType::make_string(),
-        12 => MonoType::Generic {
-            name: Nominal::flat(AsRef::<str>::as_ref(&("Bytes")))
-                .expect("type name must be bare and non-empty"),
-            args: vec![],
-        },
-        _ => MonoType::TypeRef(
-            Nominal::flat(AsRef::<str>::as_ref(&("_")))
-                .expect("type name must be bare and non-empty"),
-        ),
+/// **可逆段**（0..=12：Void/Bool/Int 五档/Float 两档/Char/String/Bytes）精确重建；
+/// **折叠类**（20..=61：Struct/Enum/Option/Result/Fn/DepFn/TypeRef/Union/…）仍是单号，
+/// 读回既定 lossy 形态 [`lossy_type_ref`]——这条降级契约与本批前一致，没有收紧也没有放宽。
+/// 未知号同样落 lossy 形态（防御：正常产物不会出现未登记号，版本校验在更外层）。
+pub(crate) fn type_id_to_monotype(id: u32) -> MonoType {
+    // 与编码共用同一张表：能编出来的标量一定能原样读回
+    if let Some(row) = SCALAR_TYPE_CODES.iter().find(|row| row.code == id) {
+        return (row.build)();
     }
+    // 折叠类与未知号：单号无参数，读回既定 lossy 形态（既有的降级契约，不变）
+    lossy_type_ref()
 }
 
 /// 版本不匹配的诊断（RFC-039 D17：升版后旧 `.42` 按既有行为拒绝）。
@@ -862,10 +852,136 @@ fn read_u32<R: Read>(reader: &mut R) -> io::Result<u32> {
     Ok(u32::from_le_bytes(buf))
 }
 
+/// 可逆类型号表的一行：**编码与解码共用同一份口诀**。
+///
+/// 一行为一个「能原样读回」的类型：`matches` 判编码，`build` 造解码结果。
+/// 两向同表是刻意的——分成两张表就会漂移，而漂移只会表现为「版本没变、类型变了」。
+pub(crate) struct ScalarTypeCode {
+    pub(crate) code: u32,
+    pub(crate) name: &'static str,
+    matches: fn(&MonoType) -> bool,
+    build: fn() -> MonoType,
+}
+
+/// .42 类型号表（可逆段）。
+///
+/// 号段约定：
+/// - `0..=12`：基本标量，可逆往返（Char/String/Bytes 保持历史号 10/11/12，缩小改动面）；
+/// - `20..=50`：折叠类（Struct/Enum/Fn/…）**单号、无参数**，读回既定 lossy 形态
+///   [`lossy_type_ref`]；`TypeId::STRUCT = 20` / `TypeId::ENUM = 21` 与运行时身份常量对齐，
+///   `Option`/`Result` 归入 21（运行时 sum type 身份即 21）；
+/// - `60` 以后：无运行时表示的元类型/底类型。
+///
+/// 不在本表、也不是折叠类的类型（未知位宽、编译期 FFI 类型）在写侧**拒绝**。
+pub(crate) const SCALAR_TYPE_CODES: &[ScalarTypeCode] = &[
+    ScalarTypeCode {
+        code: 0,
+        name: "Void",
+        matches: |t| matches!(t, MonoType::Void),
+        build: || MonoType::Void,
+    },
+    ScalarTypeCode {
+        code: 1,
+        name: "Bool",
+        matches: |t| matches!(t, MonoType::Bool),
+        build: || MonoType::Bool,
+    },
+    ScalarTypeCode {
+        code: 2,
+        name: "Int(8)",
+        matches: |t| matches!(t, MonoType::Int(8)),
+        build: || MonoType::Int(8),
+    },
+    ScalarTypeCode {
+        code: 3,
+        name: "Int(16)",
+        matches: |t| matches!(t, MonoType::Int(16)),
+        build: || MonoType::Int(16),
+    },
+    ScalarTypeCode {
+        code: 4,
+        name: "Int(32)",
+        matches: |t| matches!(t, MonoType::Int(32)),
+        build: || MonoType::Int(32),
+    },
+    ScalarTypeCode {
+        code: 5,
+        name: "Int(64)",
+        matches: |t| matches!(t, MonoType::Int(64)),
+        build: || MonoType::Int(64),
+    },
+    ScalarTypeCode {
+        code: 6,
+        name: "Int(128)",
+        matches: |t| matches!(t, MonoType::Int(128)),
+        build: || MonoType::Int(128),
+    },
+    ScalarTypeCode {
+        code: 7,
+        name: "Float(32)",
+        matches: |t| matches!(t, MonoType::Float(32)),
+        build: || MonoType::Float(32),
+    },
+    ScalarTypeCode {
+        code: 8,
+        name: "Float(64)",
+        matches: |t| matches!(t, MonoType::Float(64)),
+        build: || MonoType::Float(64),
+    },
+    ScalarTypeCode {
+        code: 10,
+        name: "Char",
+        matches: |t| matches!(t, MonoType::Char),
+        build: || MonoType::Char,
+    },
+    ScalarTypeCode {
+        code: 11,
+        name: "String",
+        matches: |t| matches!(t, MonoType::Generic { name, .. } if name == "String"),
+        build: MonoType::make_string,
+    },
+    ScalarTypeCode {
+        code: 12,
+        name: "Bytes",
+        matches: |t| matches!(t, MonoType::Generic { name, .. } if name == "Bytes"),
+        build: || MonoType::Generic {
+            name: Nominal::flat("Bytes").expect("内建类型名必须是裸名且非空"),
+            args: Vec::new(),
+        },
+    },
+];
+
+/// 折叠类的既定 lossy 读回形态（单号无参数，解不出原结构）。
+fn lossy_type_ref() -> MonoType {
+    MonoType::TypeRef(Nominal::flat("_").expect("lossy 占位名必须是裸名且非空"))
+}
+
+/// 表里查编码号；命中 `Some`，未登记 `None`（由调用方决定折叠还是拒绝）。
+fn scalar_code_of(ty: &MonoType) -> Option<u32> {
+    SCALAR_TYPE_CODES
+        .iter()
+        .find(|row| (row.matches)(ty))
+        .map(|row| row.code)
+}
+
+/// 未登记位宽：拒绝而不就近折算（Int(24) 折算成 Int(32) 就是静默错配）。
+fn unsupported_width(
+    kind: &str,
+    width: usize,
+) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidInput,
+        format!(
+            ".42 类型表不支持 {kind}({width}) 位宽：可逆号表只登记 Int(8/16/32/64/128) 与 Float(32/64)，\
+             其余一律拒绝而不是就近折算"
+        ),
+    )
+}
+
 /// 把 [`MonoType`] 编成 .42 类型号（`.42` 内所有类型字段的唯一编码口径）。
 ///
-/// 生产者（codegen 的全局表）与容器写侧共用本函数：两份口诀一旦漂移，
-/// 写进去的类型号与读回来的类型就会错位，而错位不会让任何测试红。
+/// 生产者与容器写侧共用本函数；表 [`SCALAR_TYPE_CODES`] 同时供解码使用，
+/// 因此不存在「编码口诀」与「解码口诀」两份而漂移的可能。
 pub(crate) fn mono_type_id(ty: &MonoType) -> io::Result<u32> {
     ty.to_type_id()
 }
@@ -881,28 +997,21 @@ trait MonoTypeExt {
 
 impl MonoTypeExt for MonoType {
     fn to_type_id(&self) -> io::Result<u32> {
-        let id = match self {
-            MonoType::Void => 0,
-            MonoType::Bool => 1,
-            MonoType::Int(n) => 2 + (*n as u32 / 8 - 1),
-            MonoType::Float(n) => 6 + (*n as u32 / 8 - 1),
-            MonoType::Char => 10,
+        // 先查可逆表：命中即原样读回（这一半是「不失真」的契约）
+        if let Some(code) = scalar_code_of(self) {
+            return Ok(code);
+        }
+        let code = match self {
+            // 未登记位宽：拒绝而不就近折算
+            MonoType::Int(width) => return Err(unsupported_width("Int", *width)),
+            MonoType::Float(width) => return Err(unsupported_width("Float", *width)),
+            // ── 折叠类：单号、无参数，读回 lossy_type_ref() ──────────────
+            // 20/21 与运行时常量 `TypeId::STRUCT` / `TypeId::ENUM` 对齐
+            //（`src/backends/common/value.rs`）；Option/Result 归入 21——
+            // 运行时的 sum type 身份就是 21，不是按名折叠的巧合。
             MonoType::Struct(_) => 20,
             MonoType::Enum(_) => 21,
-            MonoType::Fn { .. } => 30,
-            MonoType::TypeRef(_) => 40,
-            MonoType::TypeVar(_) => 50,
-            // 联合类型和交集类型暂时使用 TypeRef 的 ID
-            MonoType::Union(_) => 40,
-            MonoType::Intersection(_) => 40,
-            MonoType::Ref { .. } => 49,       // 借用引用类型
-            MonoType::AssocType { .. } => 47, // 使用新的类型ID
-            MonoType::Literal { .. } => 48,   // 字面量类型
-            MonoType::MetaType { .. } => 0,   // 元类型无运行时表示
-            // #299：容器/复合类型统一走 Generic，映射到原编号保持序列化稳定
             MonoType::Generic { name, .. } => match name.as_str() {
-                "String" => 11,
-                "Bytes" => 12,
                 "Option" | "Result" => 21,
                 "Tuple" => 22,
                 "List" => 23,
@@ -911,10 +1020,22 @@ impl MonoTypeExt for MonoType {
                 "Range" => 26,
                 "Arc" => 45,
                 "Weak" => 46,
-                _ => 47, // 泛型实例化，使用结构体类型ID
+                _ => 47, // 泛型实例化
             },
+            MonoType::Fn { .. } => 30,
+            MonoType::DepFn { .. } => 31,
+            MonoType::TypeRef(_) => 40,
+            MonoType::Union(_) => 41,
+            MonoType::Intersection(_) => 42,
+            MonoType::Literal { .. } => 48,
+            MonoType::Ref { .. } => 49,
+            MonoType::TypeVar(_) => 50,
+            MonoType::AssocType { .. } => 51,
+            MonoType::MetaType { .. } => 60,
+            MonoType::Never => 61,
+            // 精化类型的运行时表示就是基类型：与 base 同号是**设计**（透明别名），
+            // 因此它是「不同 MonoType 同号」的合法例外之一。
             MonoType::Refined { base, .. } => return base.to_type_id(),
-            MonoType::DepFn { .. } => 30, // 依赖函数类型，与普通函数同ID
             MonoType::LibraryRef { mechanism, lib } => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
@@ -939,8 +1060,18 @@ impl MonoTypeExt for MonoType {
                     ),
                 ));
             }
-            MonoType::Never => 0, // Never 无运行时表示
+            // Void/Bool/Char/String/Bytes 已在可逆表里命中：走到这里说明表漏登记。
+            // 响亮失败而不是给个近号——静默给号正是本批要修的那类缺陷。
+            other => {
+                let registered: Vec<&str> = SCALAR_TYPE_CODES.iter().map(|row| row.name).collect();
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "未登记的可逆类型 {other:?}：必须先加进 SCALAR_TYPE_CODES 表（编码/解码共用同一份口诀）；当前可逆段：{registered:?}"
+                    ),
+                ));
+            }
         };
-        Ok(id)
+        Ok(code)
     }
 }

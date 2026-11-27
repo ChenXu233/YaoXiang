@@ -14,9 +14,10 @@
 //! 不让整份文件的测试共享一条病史）。
 
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::middle::bytecode::file::{
-    mono_type_id, BytecodeFile, BytecodeInstruction, CodeSection, DebugSection, FileHeader,
-    FunctionCode,
+    mono_type_id, type_id_to_monotype, BytecodeFile, BytecodeInstruction, CodeSection,
+    DebugSection, FileHeader, FunctionCode,
 };
 use crate::middle::bytecode::opcode;
 use crate::middle::bytecode::GlobalInfo;
@@ -267,9 +268,9 @@ fn test_ffi_compile_time_types_are_rejected_without_panic() {
 /// 表序即槽位号，`type_id` 是 .42 类型号（与形参/返回/类型表同一套编号）。
 #[test]
 fn test_globals_table_round_trips_through_dot42() {
-    // Arrange：两个全局（Int / String），类型号经 `mono_type_id` 取——与生产者同一口径
-    let int_id = mono_type_id(&MonoType::Int(64)).expect("Int 类型号必须可编");
-    let str_id = mono_type_id(&MonoType::make_string()).expect("String 类型号必须可编");
+    // Arrange：两个全局（Int / String），载体是 MonoType（与函数签名同口径）
+    let int_ty = MonoType::Int(64);
+    let str_ty = MonoType::make_string();
     let file = BytecodeFile {
         header: FileHeader::default(),
         type_table: Vec::new(),
@@ -290,13 +291,13 @@ fn test_globals_table_round_trips_through_dot42() {
         globals: vec![
             GlobalInfo {
                 name: "counter".to_string(),
-                type_id: int_id as u16,
+                ty: int_ty.clone(),
                 initializer: None,
                 is_mutable: false,
             },
             GlobalInfo {
                 name: "label".to_string(),
-                type_id: str_id as u16,
+                ty: str_ty.clone(),
                 initializer: None,
                 is_mutable: false,
             },
@@ -310,7 +311,7 @@ fn test_globals_table_round_trips_through_dot42() {
     let mut cursor = io::Cursor::new(bytes);
     let decoded = BytecodeFile::read_from(&mut cursor).expect("read bytecode");
 
-    // Assert：表长、名字、类型号、表序（= 槽位号）逐项一致
+    // Assert：表长、名字、类型（MonoType 恒等）、表序（= 槽位号）逐项一致
     assert_eq!(
         decoded.globals.len(),
         2,
@@ -321,16 +322,16 @@ fn test_globals_table_round_trips_through_dot42() {
         "表序 0 的全局名必须与写入侧一致（表序即槽位号）"
     );
     assert_eq!(
-        decoded.globals[0].type_id, int_id as u16,
-        "counter 的类型号必须原样往返"
+        decoded.globals[0].ty, int_ty,
+        "counter 的类型（MonoType）必须原样往返；不等即类型号编码不可逆"
     );
     assert_eq!(
         decoded.globals[1].name, "label",
         "表序 1 的全局名必须与写入侧一致"
     );
     assert_eq!(
-        decoded.globals[1].type_id, str_id as u16,
-        "label 的类型号必须原样往返"
+        decoded.globals[1].ty, str_ty,
+        "label 的类型（MonoType）必须原样往返"
     );
 }
 
@@ -348,7 +349,7 @@ fn test_global_initializer_is_rejected_without_silent_loss() {
         vtables: Vec::new(),
         globals: vec![GlobalInfo {
             name: "seeded".to_string(),
-            type_id: 5,
+            ty: MonoType::Int(64),
             initializer: Some(crate::middle::ir::ir::ConstValue::Int(7)),
             is_mutable: false,
         }],
@@ -389,7 +390,7 @@ fn test_global_mutability_is_rejected_without_silent_loss() {
         vtables: Vec::new(),
         globals: vec![GlobalInfo {
             name: "counter".to_string(),
-            type_id: 5,
+            ty: MonoType::Int(64),
             initializer: None,
             is_mutable: true,
         }],
@@ -413,6 +414,180 @@ fn test_global_mutability_is_rejected_without_silent_loss() {
         msg.contains("可变性") && msg.contains("counter"),
         "诊断必须点出字段语义与全局名：{msg}"
     );
+}
+
+/// 条款门（.42 类型号）＋病史门（7e.3 收口时暴露的静默错配）：
+/// 可逆类型号必须**无碰撞**且**往返恒等**——同一号两个类型等于一次落盘就把默认整数变成浮点。
+///
+/// 号段约定：`0..=12` 基本标量（Char/String/Bytes 保持历史号 10/11/12）；
+/// `20..=50` 折叠类（Struct/Enum/Fn/… 仍单号，读回既定 lossy 形态 `TypeRef("_")`）；
+/// `60` 以后是无运行时表示的元类型/底类型。
+#[test]
+fn test_reversible_type_codes_round_trip_and_are_distinct() {
+    // Arrange：可逆类型全集（Int 五档 + Float 两档 + 基本标量），附期望号与名字
+    let cases: &[(&str, MonoType, u32)] = &[
+        ("Void", MonoType::Void, 0),
+        ("Bool", MonoType::Bool, 1),
+        ("Int(8)", MonoType::Int(8), 2),
+        ("Int(16)", MonoType::Int(16), 3),
+        ("Int(32)", MonoType::Int(32), 4),
+        ("Int(64)", MonoType::Int(64), 5),
+        ("Int(128)", MonoType::Int(128), 6),
+        ("Float(32)", MonoType::Float(32), 7),
+        ("Float(64)", MonoType::Float(64), 8),
+        ("Char", MonoType::Char, 10),
+        ("String", MonoType::make_string(), 11),
+        (
+            "Bytes",
+            MonoType::Generic {
+                name: Nominal::flat("Bytes").expect("测试类型名必须是裸名且非空"),
+                args: Vec::new(),
+            },
+            12,
+        ),
+    ];
+
+    // Act / Assert 1：逐项给出 id 与类型；编码 → 解码必须恒等
+    for (name, ty, expected_id) in cases {
+        let id = mono_type_id(ty).unwrap_or_else(|e| panic!("{name} 必须可编：{e}"));
+        assert_eq!(
+            id, *expected_id,
+            "{name} 的类型号应为 {expected_id}，实际 {id}"
+        );
+        let back = type_id_to_monotype(id);
+        assert_eq!(
+            &back, ty,
+            "{name} 经类型号 {id} 解码必须恒等，实际 {back:?}"
+        );
+    }
+
+    // Assert 2：两两不同号（同号 = 一个号解不出两个类型）
+    for (i, (name_a, _, id_a)) in cases.iter().enumerate() {
+        for (name_b, _, id_b) in cases.iter().skip(i + 1) {
+            assert_ne!(
+                id_a, id_b,
+                "{name_a} 与 {name_b} 不得共用类型号 {id_a}（碰撞会让解码二选一）"
+            );
+        }
+    }
+}
+
+/// 条款门：未知位宽与编译期 FFI 类型在**写侧**拒绝，不就近折算成别的类型号。
+#[test]
+fn test_unsupported_type_widths_are_rejected_on_write() {
+    // Arrange：语言不产生的位宽（Int 24 / Float 16 / Float 8）
+    let unsupported = [
+        ("Int(24)", MonoType::Int(24)),
+        ("Float(16)", MonoType::Float(16)),
+        ("Float(8)", MonoType::Float(8)),
+    ];
+
+    for (name, ty) in unsupported {
+        // Act
+        let err = mono_type_id(&ty).expect_err("未登记位宽必须拒绝，不得就近折算");
+
+        // Assert：可分类 + 点出位宽
+        assert_eq!(
+            err.kind(),
+            io::ErrorKind::InvalidInput,
+            "{name} 的拒绝应是 InvalidInput，实际 {err:?}"
+        );
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("位宽") && msg.contains(name),
+            "诊断必须点出位宽与类型名（缺 {name}）：{msg}"
+        );
+    }
+}
+
+/// 条款门：折叠类**行为不变**（仍单号、读回既定 lossy 形态 `TypeRef("_")`），
+/// 但彼此之间不得共用号：`TypeId::STRUCT=20` / `TypeId::ENUM=21` 与运行时常量对齐，
+/// `Option/Result` 归入 21（运行时的 sum type 身份就是 21）。
+#[test]
+fn test_folded_type_codes_are_distinct_and_lossy() {
+    // Arrange：每个折叠类一个代表 + 期望号
+    let folds: &[(&str, MonoType, u32)] = &[
+        (
+            "Struct",
+            MonoType::Struct(crate::frontend::core::sema::StructType {
+                name: Nominal::flat("P").expect("测试类型名必须是裸名且非空"),
+                fields: Vec::new(),
+                methods: std::collections::HashMap::new(),
+                interfaces: Vec::new(),
+            }),
+            20,
+        ),
+        (
+            "Enum",
+            MonoType::Enum(crate::frontend::core::sema::EnumType {
+                name: Nominal::flat("E").expect("测试类型名必须是裸名且非空"),
+                variants: Vec::new(),
+            }),
+            21,
+        ),
+        (
+            "Option",
+            MonoType::Generic {
+                name: Nominal::flat("Option").expect("测试类型名必须是裸名且非空"),
+                args: vec![MonoType::Int(64)],
+            },
+            21,
+        ),
+        (
+            "Fn",
+            MonoType::Fn {
+                params: Vec::new(),
+                return_type: Box::new(MonoType::Void),
+            },
+            30,
+        ),
+        (
+            "DepFn",
+            MonoType::DepFn {
+                params: Vec::new(),
+                return_type: Box::new(MonoType::Void),
+            },
+            31,
+        ),
+        (
+            "TypeRef",
+            MonoType::TypeRef(Nominal::flat("P").expect("测试占位名必须是裸名且非空")),
+            40,
+        ),
+        ("Union", MonoType::Union(vec![MonoType::Int(64)]), 41),
+        (
+            "Intersection",
+            MonoType::Intersection(vec![MonoType::Int(64)]),
+            42,
+        ),
+        ("Never", MonoType::Never, 61),
+    ];
+
+    // Act / Assert 1：号与期望一致，且读回一律是既定 lossy 形态
+    for (name, ty, expected_id) in folds {
+        let id = mono_type_id(ty).unwrap_or_else(|e| panic!("{name} 必须可编：{e}"));
+        assert_eq!(
+            id, *expected_id,
+            "{name} 的类型号应为 {expected_id}，实际 {id}"
+        );
+        assert_eq!(
+            type_id_to_monotype(id),
+            MonoType::TypeRef(Nominal::flat("_").expect("测试占位名必须是裸名且非空")),
+            "{name}（号 {id}）读回必须是既定 lossy 形态 TypeRef(\"_\")"
+        );
+    }
+
+    // Assert 2：折叠类之间除「Option/Result 归入 Enum 的 sum 身份」外两两不同号
+    for (i, (name_a, _, id_a)) in folds.iter().enumerate() {
+        for (name_b, _, id_b) in folds.iter().skip(i + 1) {
+            if (*name_a == "Enum" && *name_b == "Option")
+                || (*name_a == "Option" && *name_b == "Enum")
+            {
+                continue;
+            }
+            assert_ne!(id_a, id_b, "{name_a} 与 {name_b} 不得共用类型号 {id_a}");
+        }
+    }
 }
 
 #[test]
