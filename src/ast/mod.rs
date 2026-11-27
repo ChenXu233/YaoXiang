@@ -810,22 +810,22 @@ pub struct Block {
 /// 表示——不得新增 Parameter/Arg 第二结构，也不得用
 /// `param_names: Vec<Option<String>>` 一类平行数组过渡。
 ///
-/// # 名字槽的三种形态（事实描述，不是承诺）
+/// # 名字槽的两种形态（RFC-039 D53 归一后的事实描述）
 ///
 /// 1. **有名形参**：签名/lambda 头里写出了名字（`a: Int`）——`name` 是真实
-///    形参标识符；
-/// 2. **无名形参（anonymous）**：纯类型位 / 类型反解合成——`name` 为空串，
-///    由 [`Param::anonymous`] / [`Param::from_type`] 构造；
-/// 3. **参数位裸标识符**：`(Int64)` / `(a)` 这类没有 `:` 的写法——`name` 是
-///    那个标识符、`ty = None`。它**可能是类型名而不是形参**（`(Int64)`），
-///    parser 不区分（类型名/参数名的歧义正是 6.4 探针注入要解决的问题）。
-///    该形态**不占运行期形参位**（基线口径，见
-///    [`Param::occupies_runtime_param_slot`]）；它究竟算不算参数由
-///    WBS 8.9.1（参数位形态归一，D53）裁决，6.5 只做零行为差分的表示重塑。
+///    形参标识符，进契约（可被命名实参引用）；
+/// 2. **无名形参（anonymous）**：`name` 为空串。两种来源：签名里的**裸类型项**
+///    （`(Int, Int) -> Int`，形参位产生式的第二式）、以及纯类型位 / 类型反解
+///    合成（[`Param::anonymous`] / [`Param::from_type`]）——两者表示相同，
+///    都是「类型约束按位置生效，名字属于实现」。
+///
+/// D53 之前还有第三种形态：**参数位裸标识符**（`(Int64)`）被读成
+/// `name = "Int64", ty = None`——标注零约束、不占运行期形参位。该形态已随
+/// WBS 8.9.1 消灭：裸标识符按**类型**解析（解析不到类型即构造期拒绝），
+/// 故 `ty = None` 现在只可能来自**无标注的值形参**（lambda 头 / HM 推断位）。
 ///
 /// 空串名字不参与任何按名查找（泛型分类入口显式跳过无名形参，见
-/// `classify_generic_params` / `extract_generic_param_names`）。形态 0（无名）
-/// 与形态 3 在 AST 上都可判定；但形态 3 与「无标注的值形参」**同形**，不可区分。
+/// `classify_generic_params` / `extract_generic_param_names`）。
 #[derive(Clone)]
 pub struct Param {
     pub name: String,
@@ -888,16 +888,20 @@ impl Param {
         Self::anonymous(Some(ty), Span::dummy())
     }
 
-    /// `name` 槽是否**非空**——只回答这一个事实，**不**表示「携带真实形参名」：
-    /// 参数位裸标识符（形态 3）也非空，但它是标识符、未必是形参。
+    /// `name` 槽是否**非空**——只回答这一个事实。
+    ///
+    /// D53 归一后它等价于「这是**带名**形参」：裸类型项产出空名字槽
+    /// （[`Param::anonymous`] 的形态），不再有「非空名字 + `ty = None`」的
+    /// 参数位裸标识符形态。
     pub fn is_named(&self) -> bool {
         !self.name.is_empty()
     }
 
-    /// 是否占**运行期形参位**（IR 参数槽）：按基线口径 = **带类型标注**。
-    /// 参数位裸标识符（形态 3，`ty = None`）不占位——此口径由 WBS 8.9.1
-    /// 重新裁定；改它必须同时改 `middle/ir/tests/fn_param_slots.rs` 的
-    /// 锁定测试。
+    /// 是否占**运行期形参位**（IR 参数槽）：判据 = **带类型标注**。
+    ///
+    /// D53（WBS 8.9.1）裁定的落地形态：裸类型项现在**带**类型标注，因此占位；
+    /// `ty = None` 只剩无标注值形参（lambda 头 / HM 推断位），仍不占位。
+    /// 与 `middle/ir/tests/fn_param_slots.rs` 的口径说明同源，改判据须同批改它。
     pub fn occupies_runtime_param_slot(&self) -> bool {
         self.ty.is_some()
     }

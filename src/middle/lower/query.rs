@@ -269,17 +269,35 @@ impl AstToIrGenerator {
             .collect();
         let bindable = self.declaration_runtime_param_slots(Some(ann), call_seq.len());
         // 两条序列等长 ⇒ 恒等映射（没有编译期值参数，或它们不与值参数同层）。只有确实
-        // 存在「不占绑定序列的编译期值参数」时才按下标重映射——否则柯里层/裸标识符形参
+        // 存在「不占绑定序列的编译期值参数」时才按下标重映射——否则柯里层/无标注形参
         // 的既有槽位顺序会被打乱（语料 `01-syntax/basics/statement-termination.yx` 实测
         // 因此 E6005）。
         if bindable.len() == call_seq.len() {
             return (0..bindable.len()).collect();
         }
-        bindable
-            .into_iter()
-            .enumerate()
-            .map(|(i, p)| call_seq.iter().position(|n| *n == p.name).unwrap_or(i))
-            .collect()
+        // 按名对位必须**带游标**：未命名形参（D53 的裸类型项）名字槽是空串，
+        // 多个空串用 `position` 会全落到第一个空名下标上（同签名里两个
+        // `Array(Int, N)` 位会得到同一个槽）。游标让同名/同空名的多个位按
+        // 声明序一位一位往后对。（未命名位不可能是编译期值参数——const 候选
+        // 要求形参有名，见 `classify_compile_time_value_params`。）
+        let mut out = Vec::with_capacity(bindable.len());
+        let mut cursor = 0usize;
+        for (i, p) in bindable.into_iter().enumerate() {
+            match call_seq
+                .iter()
+                .enumerate()
+                .skip(cursor)
+                .find(|(_, n)| **n == p.name)
+                .map(|(idx, _)| idx)
+            {
+                Some(idx) => {
+                    out.push(idx);
+                    cursor = idx + 1;
+                }
+                None => out.push(i),
+            }
+        }
+        out
     }
 
     pub(in crate::middle) fn declaration_runtime_param_slots(

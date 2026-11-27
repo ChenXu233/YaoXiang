@@ -271,6 +271,7 @@ test_format_idempotent	src/formatter/tests/properties.rs	expectx1	条款	文件�
 test_source_map_single_line_comment	src/formatter/tests/source_map.rs	assert_eqx3	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_formatter_emits_dash_arrow_for_match_arms	src/formatter/tests/surface.rs	assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_formatter_emits_paren_destructure	src/formatter/tests/surface.rs	assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_formatter_keeps_bare_type_params	src/formatter/tests/surface.rs	assertx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_formatter_emits_semicolon_for_same_line_statements	src/formatter/tests/surface.rs	assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_fstring_brace_escape_preserved_raw	src/frontend/core/lexer/tests/fstring.rs	helperx1	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
 test_fstring_close_brace_escape_preserved_raw	src/frontend/core/lexer/tests/fstring.rs	helperx1	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
@@ -420,6 +421,13 @@ test_unnamed_single_paren_stays_paren	src/frontend/core/parser/statements/tests/
 test_multi_named_paren_stays_tuple	src/frontend/core/parser/statements/tests/types.rs	assert_eqx1 matchesx1 assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_named_function_type_params_carry_names_and_types	src/frontend/core/parser/statements/tests/types.rs	assert_eqx3 matchesx2 assertx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_type_fn_params_carry_name_and_type_on_same_node	src/frontend/core/parser/statements/tests/types.rs	assert_eqx2 matchesx2 assertx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_bare_type_params_parse_as_unnamed_typed	src/frontend/core/parser/statements/tests/types.rs	assert_eqx1 matchesx2 assertx3	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_mixed_named_and_bare_params_parse	src/frontend/core/parser/statements/tests/types.rs	assert_eqx2 matchesx2 assertx3	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_mut_bare_and_mut_named_params_parse	src/frontend/core/parser/statements/tests/types.rs	assert_eqx1 matchesx2 assertx5	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_curry_groups_carry_unnamed_typed_params	src/frontend/core/parser/statements/tests/types.rs	assert_eqx2 matchesx2 assertx4	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_paren_return_inner_group_carries_unnamed_typed_param	src/frontend/core/parser/statements/tests/types.rs	assert_eqx1 matchesx1 assertx3	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_tuple_paren_return_is_not_treated_as_fn_group	src/frontend/core/parser/statements/tests/types.rs	matchesx1 assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_bare_type_param_accepts_type_expression	src/frontend/core/parser/statements/tests/types.rs	assert_eqx1 matchesx1 assertx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_anon_binding_with_non_fn_annotation_reports_error	src/frontend/core/parser/statements/tests/types.rs	assertx3 expectx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_anon_binding_with_fn_annotation_keeps_extracted_signature	src/frontend/core/parser/statements/tests/types.rs	assert_eqx5 matchesx2 assertx3 expectx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_binding_position_literal_overflow_sentinels_to_i64_max	src/frontend/core/parser/statements/tests/types.rs	assert_eqx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
@@ -930,6 +938,9 @@ test_nested_fn_outer_type_param_reference_allowed	src/frontend/core/sema/tests/n
 test_expression_lambda_param_capture_still_allowed	src/frontend/core/sema/tests/nested_fn_capture.rs	assertx1 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_nested_fn_sibling_reference_rejected_e1001_pre_existing	src/frontend/core/sema/tests/nested_fn_capture.rs	assert_eqx1 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_overload_resolution_unplanned_key_is_never_consumed	src/frontend/core/sema/tests/overload_resolutions.rs	assert_eqx1 assertx1 is_nonex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_bare_param_unknown_type_reports_e1003_at_identifier	src/frontend/core/sema/tests/param_forms.rs	assert_eqx2 assertx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_bare_params_enforce_declared_arity	src/frontend/core/sema/tests/param_forms.rs	assertx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_mixed_named_and_bare_params_accept_positional_call	src/frontend/core/sema/tests/param_forms.rs	assertx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_paren_return_fn_name_rhs_body_yields_fn_value	src/frontend/core/sema/tests/paren_return_decomposition.rs	assertx1 helperx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_paren_return_lambda_block_body_return_fn_value	src/frontend/core/sema/tests/paren_return_decomposition.rs	assertx1 helperx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_paren_return_lambda_tail_expr_stays_green	src/frontend/core/sema/tests/paren_return_decomposition.rs	assertx1 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留

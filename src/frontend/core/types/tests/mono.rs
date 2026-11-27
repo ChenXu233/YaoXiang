@@ -273,8 +273,9 @@ fn test_from_ast_type_tuple() {
 
 #[test]
 fn test_from_ast_type_fn_drops_untyped_param_as_loss() {
-    // Arrange: 一个带类型形参 + 一个**裸标识符形参**（`ty = None`——6.5 / 8.9.1 的
-    // `(Int64)` 形参位：标识符占位、无类型标注）。后者在 AST 里是合法且常见的形态。
+    // Arrange: 一个带类型形参 + 一个**无标注形参**（`ty = None`）。D53 之后
+    // `ty = None` 只来自无标注的值形参（lambda 头 / HM 推断位）——D53 之前还有
+    // 参数位裸标识符（`(Int64)`）这一来源，现已按类型解析并带 `ty`。
     let ast_ty = ast::Type::Fn {
         params: vec![
             ast::Param::from_type(name_ty("Int32")),

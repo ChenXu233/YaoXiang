@@ -354,26 +354,46 @@ pub(crate) fn format_call(
     super::delimited::format_delimited_list("(", ")", &all_args, Some(&func_str), ctx)
 }
 
+/// 渲染**一个形参项**（形参列表与签名参数列表共用的唯一实现）：
+/// `mut`? + 名字（有名才写）+ `: 类型`（有类型才写）。
+///
+/// 未命名形参（RFC-039 D53：`(Int, Int) -> Int` 的裸类型项，名字槽是空串）
+/// 只写类型：空名字槽不是可打印写法，写成 `(: Int)` 会产出无法再解析的源码。
+fn render_param(
+    name: &str,
+    is_mut: bool,
+    ty: Option<&Type>,
+    render_ty: &dyn Fn(&Type) -> String,
+) -> String {
+    let mut s = String::new();
+    if is_mut {
+        s.push_str("mut ");
+    }
+    match ty {
+        Some(ty) if name.is_empty() => s + &render_ty(ty),
+        Some(ty) => {
+            s.push_str(name);
+            s.push_str(": ");
+            s.push_str(&render_ty(ty));
+            s
+        }
+        None => {
+            s.push_str(name);
+            s
+        }
+    }
+}
+
 /// 格式化参数列表
 pub fn format_params(
     params: &[Param],
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
+    let render_ty = |ty: &Type| super::types::format_type(ty, ctx, source_map);
     let items: Vec<String> = params
         .iter()
-        .map(|p| {
-            let mut s = String::new();
-            if p.is_mut {
-                s.push_str("mut ");
-            }
-            s.push_str(&p.name);
-            if let Some(ty) = &p.ty {
-                s.push_str(": ");
-                s.push_str(&super::types::format_type(ty, ctx, source_map));
-            }
-            s
-        })
+        .map(|p| render_param(&p.name, p.is_mut, p.ty.as_ref(), &render_ty))
         .collect();
     super::delimited::format_delimited_list("(", ")", &items, None, ctx)
 }
@@ -387,20 +407,10 @@ pub fn format_decl_params(
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
+    let render_ty = |ty: &Type| format_signature_param_ty(ty, ctx, source_map);
     let items: Vec<String> = params
         .iter()
-        .map(|p| {
-            let mut s = String::new();
-            if p.is_mut {
-                s.push_str("mut ");
-            }
-            s.push_str(&p.name);
-            if let Some(ty) = &p.ty {
-                s.push_str(": ");
-                s.push_str(&format_signature_param_ty(ty, ctx, source_map));
-            }
-            s
-        })
+        .map(|p| render_param(&p.name, p.is_mut, p.ty.as_ref(), &render_ty))
         .collect();
     super::delimited::format_delimited_list("(", ")", &items, None, ctx)
 }
@@ -426,10 +436,11 @@ fn format_signature_param_ty(
 /// 首组切分规则：返回类型会消费签名参数时（裸 Fn 的 curried 嵌套组，或
 /// Paren/NamedParen 包 Fn——RFC-004 括号内是完整类型值，参数名不外拍但
 /// 括号内按名渲染要从剩余参数取），按 `params.len()` 切出首组；否则
-/// （非 curried）首组即全部 `decl_params`——HM 推断标注（如
-/// `(Int, Int) -> Int`）在 `Type::Fn.params` 里不带类型（parser 只收集
-/// `p.ty` 非空者，declarations.rs），按 `params.len()` 切分会把整组名字
-/// 丢进返回侧静默消失，渲染成 `() -> Int`（#423）。
+/// （非 curried）首组即全部 `decl_params`。
+///
+/// 形参项的渲染走 [`render_param`]：D53 之后裸类型项是**未命名带型参数**
+///（名字槽空串、`ty` 有值），必须只渲染类型——空名字槽写成 `: Int` 会产出
+/// 无法再解析的源码。
 pub fn format_fn_signature(
     decl_params: &[Param],
     fn_type: &Type,
@@ -494,16 +505,13 @@ fn format_return_with_names(
         let count = typed.len();
         let (group, rest) = split_params_at(params, count);
         if !group.is_empty() && group.len() == count {
+            let render_ty = |ty: &Type| super::types::format_type(ty, ctx, source_map);
             let named: Vec<String> = typed
                 .iter()
                 .zip(group.iter())
                 .filter_map(|(t, p)| {
                     let ty = t.ty.as_ref()?;
-                    Some(format!(
-                        "{}: {}",
-                        p.name,
-                        super::types::format_type(ty, ctx, source_map)
-                    ))
+                    Some(render_param(&p.name, p.is_mut, Some(ty), &render_ty))
                 })
                 .collect();
             let ret = format_return_with_names(return_type, rest, ctx, source_map);
@@ -532,16 +540,13 @@ fn format_paren_inner_with_names(
             let count = typed.len();
             let (group, rest) = split_params_at(params, count);
             if !group.is_empty() && group.len() == count {
+                let render_ty = |ty: &Type| super::types::format_type(ty, ctx, source_map);
                 let named: Vec<String> = typed
                     .iter()
                     .zip(group.iter())
                     .filter_map(|(t, p)| {
                         let ty = t.ty.as_ref()?;
-                        Some(format!(
-                            "{}: {}",
-                            p.name,
-                            super::types::format_type(ty, ctx, source_map)
-                        ))
+                        Some(render_param(&p.name, p.is_mut, Some(ty), &render_ty))
                     })
                     .collect();
                 let ret = format_return_with_names(return_type, rest, ctx, source_map);

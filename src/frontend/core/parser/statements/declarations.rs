@@ -21,7 +21,9 @@ use crate::util::diagnostic::ErrorCodeDefinition;
 use crate::util::span::Span;
 
 // Import from sibling modules
-use super::types::{parse_fn_type_with_names, parse_type_annotation_required};
+use super::types::{
+    at_fn_param_group, parse_fn_type_with_names, parse_type_annotation_required, ParamTyMode,
+};
 
 /// 该形参标注是否为**类型位**（编译期擦除，不占运行期形参位）：具体元类型
 /// `Type`（`(T: Type)`）与**类型级函数**（`(F: (T: Type) -> Type)`——构造器变量，
@@ -150,16 +152,17 @@ fn parse_assign_after_target(
     parse_plain_initializer(state, target, annotation, is_mut, span)
 }
 
-/// 标注消歧（第 2 段）：`:` 之后是 RFC-010 命名形参签名、普通类型标注，
-/// 还是已移除的旧签名 `(Type, Type) -> Ret`。
+/// 标注消歧（第 2 段）：`:` 之后是函数签名（一组形参 + `->`）还是普通类型标注。
 ///
 /// 返回 `(annotation, is_fn_signature)`：前者是解析出的标注（`:` 缺席时为
-/// `None`），后者标记是否走了命名形参签名——它决定 `=` 右侧按「函数声明」
+/// `None`），后者标记是否走了形参签名——它决定 `=` 右侧按「函数声明」
 /// 还是「普通初始化」解释。
 ///
-/// 三层前瞻一处收口：`(` 内首 token 形态 → 像不像命名形参表 → 配平后
-/// 是否跟 `->`；配平扫描统一走 `ParserState::skip_balanced_parens`。
-/// 旧签名形态在此报「已不再支持」并返回 `None`。
+/// **唯一判据** = 括号配平后是不是 `->`（[`at_fn_param_group`]）。此前的两层
+/// 形态前瞻（「`(` 内首 token 像不像命名形参」与「`(Type, Type) -> Ret` 是已移除
+/// 旧语法」）已随 RFC-039 D53 删除：裸类型项同样是形参（`Param ::= Identifier ':'
+/// TypeExpr | TypeExpr`，SPEC type-system §3.5），`(Int, Int) -> Int` 是**无名参数
+/// 签名**而不是旧语法。配平扫描统一走 `ParserState::skip_balanced_parens`。
 fn resolve_annotation(state: &mut ParserState<'_>) -> Option<(Option<Type>, bool)> {
     let plain = |annotation: Type| (Some(annotation), false);
 
@@ -168,34 +171,11 @@ fn resolve_annotation(state: &mut ParserState<'_>) -> Option<(Option<Type>, bool
     }
     state.bump(); // consume ':'
 
-    // RFC-010: name: (a: Int, b: Int) -> Ret = body (参数名在签名中)
-    // 特征: 冒号后面跟着函数类型 (param: Type, ...) -> Ret
-    if !state.at(&TokenKind::LParen) {
-        return parse_type_annotation_required(state).map(plain);
-    }
-
-    // 第 1 层前瞻：`(` 内首 token 的形态决定「像不像命名形参表」。
-    let looks_like_named_params = match state.peek().map(|t| &t.kind) {
-        Some(TokenKind::RParen) | Some(TokenKind::KwMut) => true,
-        Some(TokenKind::Identifier(_)) => matches!(
-            state.peek_nth(2).map(|t| &t.kind),
-            Some(TokenKind::Colon) | Some(TokenKind::Comma) | Some(TokenKind::RParen)
-        ),
-        _ => false,
-    };
-
-    // 第 2 层前瞻：括号配平后跟 `->`——两条同时成立才是 RFC-010 签名。
-    let saved = state.save_position();
-    let is_rfc010 = if looks_like_named_params {
-        state.skip_balanced_parens();
-        state.at(&TokenKind::Arrow)
-    } else {
-        false
-    };
-    state.restore_position(saved);
-
-    if is_rfc010 {
-        let (fn_params_parsed, return_type) = parse_fn_type_with_names(state)?;
+    // RFC-010 / D53: name: (a: Int, b: Int) -> Ret = body（参数名在签名中）
+    //                 name: (Int, Int) -> Int = (a, b) => ...（无名参数签名）
+    if at_fn_param_group(state) {
+        let (fn_params_parsed, return_type) =
+            parse_fn_type_with_names(state, ParamTyMode::Signature)?;
 
         // 名字与类型同栖（RFC-039 6.8.1）：形参原样进 Type::Fn.params，
         // 不再有第二份 curry 旁路（6.5.2 commit ③ 收敛返回值）。
@@ -204,23 +184,6 @@ fn resolve_annotation(state: &mut ParserState<'_>) -> Option<(Option<Type>, bool
             return_type,
         };
         return Some((Some(type_annotation), true));
-    }
-
-    // 第 3 层前瞻：`(Type, Type) -> Ret` 是已移除的旧签名形态。
-    let saved_check = state.save_position();
-    state.skip_balanced_parens();
-    let is_old_fn_syntax = state.at(&TokenKind::Arrow);
-    state.restore_position(saved_check);
-
-    if is_old_fn_syntax {
-        state.error(parse_msg(
-            state,
-            "Old function syntax '(Type, Type) -> Ret' is no longer supported. \
-                 Use RFC-010 syntax with named parameters: '(param: Type, ...) -> Ret'. \
-                 Example: 'add: (a: Int, b: Int) -> Int = a + b'"
-                .to_string(),
-        ));
-        return None;
     }
 
     parse_type_annotation_required(state).map(plain)
