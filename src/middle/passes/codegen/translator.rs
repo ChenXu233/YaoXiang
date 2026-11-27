@@ -334,6 +334,9 @@ impl Translator {
             // #368：不再是硬编码 0。槽位表长度覆盖具名局部；纯临时寄存器
             // 由 `Frame::set_slot` 按需扩容（顶层语句的临时量是即用即弃的）。
             local_count: locals.len(),
+            // 顶层序列没有闭包体（捕获在各自的闭包函数里），上值槽恒为 0；
+            // 仍走同一个计数器，避免「两处各说一套」。
+            upvalue_count: Self::upvalue_slot_count(init.iter()),
             local_names,
             debug_map,
         })
@@ -379,7 +382,7 @@ impl Translator {
         let phi_plan = Self::plan_phi_edges(&blocks_ref)?;
         let mut edge_entry: HashMap<(usize, usize), usize> = HashMap::new();
 
-        for block in blocks_ref {
+        for block in &blocks_ref {
             if let Some(groups) = phi_plan.groups.get(&block.label) {
                 if let (Some(&first_ir_index), Some(&body_ir_index)) = (
                     phi_plan.first_ir_index.get(&block.label),
@@ -455,9 +458,34 @@ impl Translator {
             return_type: func.return_type.clone(),
             instructions,
             local_count: locals_len,
+            // RFC-039 D17：上值槽数由函数体的上值读写推导后落盘（v5），
+            // 载入侧不再硬编 0。
+            upvalue_count: Self::upvalue_slot_count(
+                blocks_ref
+                    .iter()
+                    .flat_map(|block| block.instructions.iter()),
+            ),
             local_names,
             debug_map,
         })
+    }
+
+    /// 函数体的上值槽数 = 体内经 `LoadUpvalue` / `StoreUpvalue` 触达的最大槽下标 + 1。
+    ///
+    /// 为什么以 IR 而不是字节码为准：上值下标在 IR 里是 `usize`，编码成字节时
+    /// 截成 u8；以 IR 计数才是「函数需要多少上值槽」的语义事实，编码器截断
+    /// 另有自己的 `to_reg` 越界检查。生产端只此一处（`translate_function`
+    /// 与 `translate_init_sequence` 共用），消费端是 `file::FunctionCode.upvalue_count`
+    /// 的落盘/载入与 `BytecodeModule` 解码。
+    fn upvalue_slot_count<'a>(instructions: impl Iterator<Item = &'a Instruction>) -> usize {
+        instructions
+            .filter_map(|instr| match instr {
+                Instruction::LoadUpvalue { upvalue_idx, .. }
+                | Instruction::StoreUpvalue { upvalue_idx, .. } => Some(*upvalue_idx + 1),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(0)
     }
 
     /// 方案 A 的展开计划：汇合块入口的 `Phi` 按**前驱**分组为 Move 串
@@ -679,6 +707,8 @@ impl Translator {
                 return_type: type_func.return_type.clone(),
                 instructions: Vec::new(),
                 local_count: 0,
+                // 构造器没有闭包体，不读上值槽
+                upvalue_count: 0,
                 local_names: HashMap::new(),
                 debug_map: HashMap::new(),
             });
@@ -879,7 +909,15 @@ impl Translator {
             CallDyn {
                 dst, func, args, ..
             } => self.translate_call_dyn(dst, func, args),
-            TailCall { func, args, .. } => self.translate_tail_call(func, args),
+            // RFC-039 D34：`TAIL_CALL` 的 opcode 值随 .42 升版 v5 回收，
+            // 编码分支一并删除。IR `TailCall` 全仓无构造点，走到这里说明新增了
+            // 生产者——响亮失败，不静默降级成另一种调用（那会把「没接通」
+            // 伪装成「接通了但语义不同」）。
+            TailCall { .. } => Err(ErrorCodeDefinition::internal_error(
+                "Instruction::TailCall 没有对应 opcode（RFC-039 D34 已回收 TAIL_CALL）：\
+                 该 IR 变体全仓无生产者；若要接通语义，先补 opcode 与解释器实现",
+            )
+            .build()),
 
             Alloc { dst, .. } => self.translate_alloc(dst),
             Free { .. } => Ok(BytecodeInstruction::new(opcode::NOP, vec![])),
@@ -1445,27 +1483,6 @@ impl Translator {
         }
         operands.push(arg_regs.len() as u8);
         Ok(BytecodeInstruction::new(opcode::CALL_DYN, operands))
-    }
-
-    fn translate_tail_call(
-        &mut self,
-        func: &Operand,
-        args: &[Operand],
-    ) -> Result<BytecodeInstruction, Diagnostic> {
-        let func_id = match func {
-            Operand::Const(ConstValue::Int(i)) => *i as u32,
-            _ => 0,
-        };
-        let base_arg_reg = if let Some(first_arg) = args.first() {
-            self.operand_resolver.to_reg(first_arg)?
-        } else {
-            0
-        };
-        let mut operands = vec![];
-        operands.extend_from_slice(&func_id.to_le_bytes());
-        operands.push(base_arg_reg);
-        operands.push(args.len() as u8);
-        Ok(BytecodeInstruction::new(opcode::TAIL_CALL, operands))
     }
 
     fn translate_alloc(

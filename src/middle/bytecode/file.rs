@@ -14,7 +14,12 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 /// 文件格式采用混合端序：魔数大端序（方便调试），其他数据小端序（性能优化）
 const MAGIC: u32 = 0x59584243;
 /// 版本号（字节码格式的单一版本源；read_from 与 generate_header 均引用此常量）
-pub const VERSION: u32 = 4;
+///
+/// 版本史（每条只记「格式观测量」的变化，不记内部重构）：
+/// - v4 及以前：函数记录无上值槽数 ⇒ 载入侧只能硬编 0，闭包的上值槽数丢失。
+/// - v5：函数记录追加 `upvalue_count`（u32）；前端值 `SWITCH`(0x06) 与
+///   `TAIL_CALL`(0x09) 从词表回收（RFC-039 D17/D32/D34），值交回分配池。
+pub const VERSION: u32 = 5;
 
 const FLAG_DEBUG_INFO: u32 = 0x02;
 
@@ -279,6 +284,13 @@ pub struct FunctionCode {
     pub return_type: MonoType,
     pub instructions: Vec<BytecodeInstruction>,
     pub local_count: usize,
+    /// 上值槽数（闭包环境槽数，RFC-039 D17）。
+    ///
+    /// 语义：本函数体内经 `LoadUpvalue` / `StoreUpvalue` 触达的上值槽数
+    /// （最大槽下标 + 1）。调用侧按它给闭包帧准备上值槽。
+    /// v5 起随函数记录落盘；v4 及以前的产物没有该字段（且载入侧曾硬编 0，
+    /// 属数据丢失缺陷），故读取侧按版本整体拒绝旧文件而不是补 0。
+    pub upvalue_count: usize,
     /// 局部变量名（槽位下标 → 源码名）。
     /// 只含具名变量；编译器临时寄存器不出现在此表。
     pub local_names: HashMap<usize, String>,
@@ -351,7 +363,7 @@ impl BytecodeFile {
         // 类型表 (小端序，性能优化)
         writer.write_all(&(self.type_table.len() as u32).to_le_bytes())?;
         for ty in &self.type_table {
-            writer.write_all(&ty.to_type_id().to_le_bytes())?;
+            writer.write_all(&ty.to_type_id()?.to_le_bytes())?;
         }
 
         // 常量池 (小端序，性能优化)
@@ -388,7 +400,36 @@ impl BytecodeFile {
                     writer.write_all(&(name.len() as u32).to_le_bytes())?;
                     writer.write_all(name.as_bytes())?;
                 }
-                ConstValue::LibraryRef { .. } | ConstValue::ExternRef { .. } => todo!(),
+                // 可达性：`middle/lower/const_eval.rs` 会在编译期把
+                // `Native.c("lib")` / `lib("sym")` 求值成这两个变体；只要其中一个
+                // 以值的形式进 `Instruction::Load`，它就会经 `emitter.add_constant`
+                // 进常量池并到这里。此前这里是 `todo!()`——写 .42 直接 panic，
+                // 用户看到的是「thread panicked」而不是「这个东西不能进 .42」。
+                // 改为响亮诊断：既指出是哪一类常量，也说明它只在编译期存在。
+                ConstValue::LibraryRef { mechanism, lib } => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            ".42 常量池无法表示 LibraryRef(mechanism={mechanism}, lib={lib})：\
+                             它是编译期 FFI 描述值，运行期没有数据表示；\
+                             前端若把它当值落进常量池，应在 codegen 前消解（FfiBinding）"
+                        ),
+                    ));
+                }
+                ConstValue::ExternRef {
+                    mechanism,
+                    lib,
+                    symbol,
+                } => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            ".42 常量池无法表示 ExternRef(mechanism={mechanism}, lib={lib}, \
+                             symbol={symbol})：它是编译期 FFI 绑定描述值，运行期没有数据表示；\
+                             前端若把它当值落进常量池，应在 codegen 前消解（FfiBinding）"
+                        ),
+                    ));
+                }
             }
         }
 
@@ -399,10 +440,13 @@ impl BytecodeFile {
             writer.write_all(func.name.as_bytes())?;
             writer.write_all(&(func.params.len() as u32).to_le_bytes())?;
             for param in &func.params {
-                writer.write_all(&param.to_type_id().to_le_bytes())?;
+                writer.write_all(&param.to_type_id()?.to_le_bytes())?;
             }
-            writer.write_all(&func.return_type.to_type_id().to_le_bytes())?;
+            writer.write_all(&func.return_type.to_type_id()?.to_le_bytes())?;
             writer.write_all(&(func.local_count as u32).to_le_bytes())?;
+            // v5：上值槽数随函数记录落盘（D17）。写在两个计数之间，
+            // 与 read_from 的读取顺序对称。
+            writer.write_all(&(func.upvalue_count as u32).to_le_bytes())?;
             writer.write_all(&(func.instructions.len() as u32).to_le_bytes())?;
             for instr in &func.instructions {
                 writer.write_all(&[instr.opcode])?;
@@ -468,10 +512,7 @@ impl BytecodeFile {
 
         let version = read_u32(reader)?;
         if version != VERSION {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("unsupported bytecode version {version}, expected {VERSION}"),
-            ));
+            return Err(unsupported_version_error(version));
         }
 
         let flags = read_u32(reader)?;
@@ -575,6 +616,8 @@ impl BytecodeFile {
             let return_type = type_id_to_monotype(return_type_id);
 
             let local_count = read_u32(reader)? as usize;
+            // v5：上值槽数（D17）——此前格式不落该字段，载入侧硬编 0
+            let upvalue_count = read_u32(reader)? as usize;
             let instr_count = read_u32(reader)? as usize;
 
             let mut instructions = Vec::with_capacity(instr_count);
@@ -601,6 +644,7 @@ impl BytecodeFile {
                 return_type,
                 instructions,
                 local_count,
+                upvalue_count,
                 // 名字来自调试段（v2）；由上层在读取调试段后回填
                 local_names: HashMap::new(),
                 debug_map: HashMap::new(),
@@ -693,6 +737,32 @@ fn type_id_to_monotype(id: u32) -> MonoType {
     }
 }
 
+/// 版本不匹配的诊断（RFC-039 D17：升版后旧 `.42` 按既有行为拒绝）。
+///
+/// 两类要素都要给全，调用方才能既分类又定位：
+/// - **码**：`io::ErrorKind::Unsupported`——「这个文件本读取器不支持」，
+///   与同函数里魔数错误的 `InvalidData`（「文件本身坏了」）分得开；
+/// - **消息**：文件版本、当前版本、差在哪个方向、以及可执行的动作
+///   （`.42` 是构建产物，重新构建而不是复用旧文件）。
+///
+/// 不新增诊断码：RFC-013 码表归 `src/util/diagnostic/codes/`，扩容是独立裁决面；
+/// 本函数只用 `io::Error` 的既有分类，不另立一套平行码。
+fn unsupported_version_error(version: u32) -> io::Error {
+    let direction = if version < VERSION {
+        "older than"
+    } else {
+        "newer than"
+    };
+    io::Error::new(
+        io::ErrorKind::Unsupported,
+        format!(
+            "unsupported bytecode version {version}: the file is {direction} the current .42 \
+             format version {VERSION}. .42 files are build artifacts, not source — rebuild the \
+             bytecode from source instead of reusing this file"
+        ),
+    )
+}
+
 fn write_string<W: Write>(
     writer: &mut W,
     s: &str,
@@ -732,13 +802,18 @@ fn read_u32<R: Read>(reader: &mut R) -> io::Result<u32> {
     Ok(u32::from_le_bytes(buf))
 }
 
+/// 把 `MonoType` 映射成 .42 的类型号。
+///
+/// 返回 `Result` 而不是裸 `u32`：`LibraryRef` / `ExternRef` 是编译期 FFI 描述类型，
+/// 运行期没有表示，写进类型表只能得到「读回来变成别的东西」的静默错配——
+/// 那是 `todo!()` 时代的 panic 点换了个形态。写侧因此拒绝并给出可定位的诊断。
 trait MonoTypeExt {
-    fn to_type_id(&self) -> u32;
+    fn to_type_id(&self) -> io::Result<u32>;
 }
 
 impl MonoTypeExt for MonoType {
-    fn to_type_id(&self) -> u32 {
-        match self {
+    fn to_type_id(&self) -> io::Result<u32> {
+        let id = match self {
             MonoType::Void => 0,
             MonoType::Bool => 1,
             MonoType::Int(n) => 2 + (*n as u32 / 8 - 1),
@@ -770,10 +845,34 @@ impl MonoTypeExt for MonoType {
                 "Weak" => 46,
                 _ => 47, // 泛型实例化，使用结构体类型ID
             },
-            MonoType::Refined { base, .. } => base.to_type_id(),
+            MonoType::Refined { base, .. } => return base.to_type_id(),
             MonoType::DepFn { .. } => 30, // 依赖函数类型，与普通函数同ID
-            MonoType::LibraryRef { .. } | MonoType::ExternRef { .. } => todo!(),
+            MonoType::LibraryRef { mechanism, lib } => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        ".42 类型表无法表示 LibraryRef(mechanism={mechanism}, lib={lib})：\
+                         它是编译期 FFI 描述类型，运行期没有表示；\
+                         出现在签名/类型表里说明前端把编译期值当成了运行期类型"
+                    ),
+                ));
+            }
+            MonoType::ExternRef {
+                mechanism,
+                lib,
+                symbol,
+            } => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        ".42 类型表无法表示 ExternRef(mechanism={mechanism}, lib={lib}, \
+                         symbol={symbol})：它是编译期 FFI 绑定描述类型，运行期没有表示；\
+                         出现在签名/类型表里说明前端把编译期值当成了运行期类型"
+                    ),
+                ));
+            }
             MonoType::Never => 0, // Never 无运行时表示
-        }
+        };
+        Ok(id)
     }
 }

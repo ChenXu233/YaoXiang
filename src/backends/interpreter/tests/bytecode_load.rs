@@ -145,6 +145,68 @@ fn test_run_bytecode_file_version_mismatch() {
     );
 }
 
+/// `.42` 直跑与源码直跑的函数上值槽数必须一致（RFC-039 D17）。
+///
+/// 条款门：RFC-039 D17「新增字段时把 .42 版本号从 4 升到 5」——`upvalue_count`
+/// 必须随产物落盘。病史门：载入侧曾把它硬编 0（7e.1 收编的数据丢失），
+/// 闭包的上值槽数落盘即丢，产物与运行结果都看不出异常。
+///
+/// 两端都直驱：生产端是 `Compiler::compile_with_source` → `CodegenContext::generate`
+/// （源码直跑同一路径），消费端是 `build_bytecode_with_options` → `BytecodeFile::load`
+/// （.42 直跑同一路径）；不手工构造登记数据。
+#[test]
+fn test_dot42_roundtrip_preserves_source_upvalue_count() {
+    // Arrange：spawn-for 的闭包体用 LoadUpvalue 读外层捕获 n
+    let dir = tempfile::TempDir::new().expect("create temp dir");
+    let source_path = dir.path().join("test.yx");
+    let bytecode_path = dir.path().join("test.42");
+    let source = r#"main: () -> Void = {
+    n = 100
+    items = [1, 2]
+    spawn for item in items {
+        print(item * 1000 + n)
+    }
+}
+main()
+"#;
+    std::fs::write(&source_path, source).expect("write source file");
+
+    // Act 1：源码直跑路径（编译 → 直接翻译，不落盘）
+    let module = crate::frontend::Compiler::new()
+        .compile_with_source("test.yx", source)
+        .expect("compile source");
+    let mut direct_ctx = crate::middle::passes::codegen::CodegenContext::new(module);
+    let direct = direct_ctx.generate().expect("codegen from source");
+    let direct_counts: Vec<usize> = direct
+        .code_section
+        .functions
+        .iter()
+        .map(|function| function.upvalue_count)
+        .collect();
+
+    // Act 2：.42 直跑路径（落盘 → 读回）
+    crate::build_bytecode_with_options(&source_path, &bytecode_path, false)
+        .expect("build bytecode");
+    let loaded = crate::middle::bytecode::file::BytecodeFile::load(&bytecode_path)
+        .expect("load bytecode file");
+    let loaded_counts: Vec<usize> = loaded
+        .code_section
+        .functions
+        .iter()
+        .map(|function| function.upvalue_count)
+        .collect();
+
+    // Assert：逐函数一致；且确有函数读上值（否则该用例对旧行为不可分辨）
+    assert_eq!(
+        loaded_counts, direct_counts,
+        ".42 往返后每函数上值槽数必须与源码直跑一致（旧行为恒为 0）；源码直跑={direct_counts:?}"
+    );
+    assert!(
+        direct_counts.iter().any(|count| *count > 0),
+        "夹具必须真的产生上值读取，否则本用例分辨不出「落盘」与「硬编 0」：{direct_counts:?}"
+    );
+}
+
 /// 验证 .yx 源文件路径走源码编译分支，不进入字节码加载分支。
 #[test]
 fn test_run_yx_file_uses_source_compile_path() {

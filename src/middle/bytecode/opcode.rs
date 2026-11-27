@@ -1,18 +1,22 @@
 //! Bytecode opcode definitions for YaoXiang
 //!
 //! Opcode 是 .42 文件格式的 u8 编码标签。单一词表：
-//! 编码（translator/emitter 写入 u8）与解码（bytecode.rs 按 u8 匹配）共用同一组常量，
+//! 编码（translator/emitter 写入 u8）与解码（mod.rs 的 `From<BytecodeFile>` 按 u8 匹配）
+//! 共用同一组常量，
 //! 不再有枚举 ↔ 字节的双词表漂移。
 
-// Control Flow (0x00-0x1F)
+// Control Flow (0x00-0x0F)
 pub const NOP: u8 = 0x00;
 pub const RETURN: u8 = 0x01;
 pub const RETURN_VALUE: u8 = 0x02;
 pub const JMP: u8 = 0x03;
 pub const JMP_IF: u8 = 0x04;
 pub const JMP_IF_NOT: u8 = 0x05;
-pub const SWITCH: u8 = 0x06;
-pub const TAIL_CALL: u8 = 0x09;
+// 0x06 与 0x09 已回收（RFC-039 D17 随 .42 升版 v5 一并处理；D32/D34 指定对象）：
+//   0x06 = `SWITCH`    —— 无生产者（translator 不产出、无 IR 构造点、无解码分支）
+//   0x09 = `TAIL_CALL` —— IR `Instruction::TailCall` 全仓无构造点，编码分支同步删
+// 「回收」的含义：这两个值不再属于词表，后续新指令可优先复用；旧 .42 里的这两个
+// 字节不再被识别（v5 读取侧整体拒绝 v4 及更早的产物，见 `file::VERSION`）。
 pub const YIELD: u8 = 0x0A;
 pub const LABEL: u8 = 0x0B;
 pub const SPAWN: u8 = 0x0E;
@@ -128,8 +132,6 @@ pub fn opcode_name(code: u8) -> &'static str {
         JMP => "Jmp",
         JMP_IF => "JmpIf",
         JMP_IF_NOT => "JmpIfNot",
-        SWITCH => "Switch",
-        TAIL_CALL => "TailCall",
         YIELD => "Yield",
         LABEL => "Label",
         SPAWN => "Spawn",

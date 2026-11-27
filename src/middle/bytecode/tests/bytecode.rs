@@ -39,6 +39,7 @@ fn build_and_decode_typed(
         return_type,
         instructions: instrs,
         local_count: 0,
+        upvalue_count: 0,
         local_names: HashMap::new(),
         debug_map: std::collections::HashMap::new(),
     };
@@ -470,8 +471,6 @@ const EXPECTED_UNENCODED: &[&str] = &[
     "STRING_EQUAL",
     // 运行时类型查询：有解码 + 执行
     "TYPE_OF",
-    // 多路分支：**无解码器**（唯一一个），已在解码哨兵白名单
-    "SWITCH",
     // 占位 opcode：仅在显示名表出现，非真实指令
     "LABEL",
     // 6.6.11 的**连带后果**（不是「预留路径」，不要照「将来占位」读）：IR 侧的
@@ -797,10 +796,9 @@ fn test_decode_places_fields_in_correct_positions() {
 /// `RC_NEW`(0x89) 即因此让弱引用功能静默失效（见 #D2）。兜底改为 panic 后，
 /// 遗漏会表现为运行到该指令才崩，本测试把它提前到测试期。
 ///
-/// **已知例外**：`SWITCH` 无编码器（`translator.rs` 不产出）、`ir_gen` 也不构造
-/// 对应的 `Instruction::Switch`——`match` 语句编译为 `I64Eq` + `JmpIfNot` 链
-/// （实测 dump 确认）。故它既无编码格式也无解码需求，列入白名单。
-/// 白名单外的任何遗漏都会让本测试失败。
+/// 无例外：RFC-039 D32 回收 `SWITCH`（0x06）后，词表里每个 opcode 都有解码分支。
+/// 历史上 `SWITCH` 既是唯一「有定义、无解码」的 opcode，也是唯一需要白名单的项——
+/// 白名单随它的回收一并删除，判据恢复为完整子集关系。
 #[test]
 fn test_all_opcodes_have_decode_branch() {
     // Arrange: 从源码读取 opcode 定义与 bytecode.rs 的解码分支
@@ -809,19 +807,13 @@ fn test_all_opcodes_have_decode_branch() {
     let defined = defined_opcode_names(opcode_src);
     let decoded = decoder_match_arm_opcodes(decoder_src);
 
-    // 已知死路径：无编码器亦无 IR 产出
-    const WHITELIST: &[&str] = &["SWITCH"];
-
-    // Act: 断言前者是后者的子集（白名单除外）。
-    let missing: Vec<&String> = defined
-        .iter()
-        .filter(|op| !decoded.contains(*op) && !WHITELIST.contains(&op.as_str()))
-        .collect();
+    // Act: 断言前者是后者的子集（无白名单：D32 回收 SWITCH 后不再有例外）。
+    let missing: Vec<&String> = defined.iter().filter(|op| !decoded.contains(*op)).collect();
 
     // Assert
     assert!(
         missing.is_empty(),
-        "以下 opcode 已定义但无解码分支（会落到 panic 兜底，应在 bytecode.rs 补分支或加入白名单）：{missing:?}\n\
+        "以下 opcode 已定义但无解码分支（会落到 panic 兜底，应在 mod.rs 的 From<BytecodeFile> 补分支）：{missing:?}\n\
          已定义 {} 个，有解码分支 {} 个",
         defined.len(),
         decoded.len()

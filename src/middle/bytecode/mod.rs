@@ -188,13 +188,6 @@ pub enum BytecodeInstr {
         target: Label,
     },
 
-    /// Switch/case dispatch
-    Switch {
-        value: Reg,
-        /// (default_target, [(value, target), ...])
-        targets: Vec<(Option<Label>, Label)>,
-    },
-
     // =====================
     // Register Operations
     // =====================
@@ -578,7 +571,6 @@ impl BytecodeInstr {
             BytecodeInstr::Jmp { .. } => opcode::JMP,
             BytecodeInstr::JmpIf { .. } => opcode::JMP_IF,
             BytecodeInstr::JmpIfNot { .. } => opcode::JMP_IF_NOT,
-            BytecodeInstr::Switch { .. } => opcode::SWITCH,
             BytecodeInstr::Mov { .. } => opcode::MOV,
             BytecodeInstr::LoadConst { .. } => opcode::LOAD_CONST,
             BytecodeInstr::LoadLocal { .. } => opcode::LOAD_LOCAL,
@@ -717,7 +709,6 @@ impl BytecodeInstr {
             BytecodeInstr::Jmp { .. } => 4,
             BytecodeInstr::JmpIf { .. } => 4,
             BytecodeInstr::JmpIfNot { .. } => 4,
-            BytecodeInstr::Switch { targets, .. } => 2 + targets.len() * 4,
             BytecodeInstr::Mov { .. } => 4,
             BytecodeInstr::LoadConst { .. } => 4,
             BytecodeInstr::LoadLocal { .. } => 3,
@@ -2183,23 +2174,6 @@ impl From<crate::middle::bytecode::file::BytecodeFile> for BytecodeModule {
                             decoded_instructions.push(BytecodeInstr::Nop);
                         }
                     }
-                    opcode::TAIL_CALL => {
-                        // TailCall: func_id(4) + base_arg_reg(1) + argc(1)
-                        // 注：IR `TailCall` 目前无生成点（死路径），此处补齐
-                        // 格式以免未来接通时静默失效。
-                        let func_id = op_u32(&instr.operands, 0).unwrap_or(0);
-                        let base_arg_reg = instr.operands.get(4).copied().unwrap_or(0);
-                        let argc = instr.operands.get(5).copied().unwrap_or(0);
-                        let mut args = Vec::with_capacity(argc as usize);
-                        for k in 0..argc as usize {
-                            args.push(Reg(base_arg_reg as u16 + k as u16));
-                        }
-                        decoded_instructions.push(BytecodeInstr::CallStatic {
-                            dst: None,
-                            func: func_id,
-                            args,
-                        });
-                    }
                     // Nop 是合法的填充指令（编译器用于对齐/占位），显式识别。
                     // 此前无分支 → 落到静默兜底「未知 opcode 用 Nop」而侥幸正确；
                     // 该兜底改为 panic 后必须显式处理，否则合法字节码也会失败。
@@ -2346,7 +2320,8 @@ impl From<crate::middle::bytecode::file::BytecodeFile> for BytecodeModule {
                 return_type: func.return_type,
                 local_count: func.local_count,
                 local_names,
-                upvalue_count: 0, // Not stored in BytecodeFile
+                // v5 起随函数记录落盘（D17）；此前载入侧硬编 0 是数据丢失缺陷
+                upvalue_count: func.upvalue_count,
                 instructions: decoded_instructions,
                 labels,                         // Populated from opcode::LABEL
                 exception_handlers: Vec::new(), // Not implemented yet
