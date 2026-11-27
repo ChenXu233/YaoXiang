@@ -72,7 +72,7 @@ fn registry_with_user_module() -> ModuleRegistry {
         });
     }
     lib.method_bindings
-        .insert("Point.get_x".to_string(), MonoType::Int(64));
+        .insert(DefPath::method("lib", "Point", "get_x"), MonoType::Int(64));
     registry.register(lib);
     registry
 }

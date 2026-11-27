@@ -8,7 +8,6 @@ use crate::ast::{self, Expr};
 use crate::frontend::core::sema::{MonoType, PolyType};
 use crate::frontend::module::registry::QualifiedNameConcern;
 use crate::frontend::module::resolver::Resolver;
-use crate::frontend::module::ExportKind;
 use crate::middle::ir::ir::{ConstValue, Operand};
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::Span;
@@ -146,7 +145,7 @@ impl AstToIrGenerator {
     ///    被共享判据误报 E1010（实测 `assert.assert(cond = 1 == 1)`）。
     ///
     /// `full_path` 是解析后的限定名（如 `std.list.push`；跨单元方法形如
-    /// `lib.Point.scale_by`，由 [Self::method_dispatch_name] 定位到定义单元）；
+    /// `lib.Point.scale_by`，由 typecheck 的方法身份直出，见 WBS 4.9.10 D-8）；
     /// `leaf` 是短名。
     pub(in crate::middle) fn lookup_param_info(
         &self,
@@ -197,22 +196,21 @@ impl AstToIrGenerator {
         })
     }
 
-    /// **跨单元方法**的声明期形参名（WBS 4.9.9）：`qualified` = 定义单元限定名
-    /// `{module}.{Type}.{method}[#N]`（[Self::method_dispatch_name] 的产出形态）。
+    /// **跨单元方法**的声明期形参名（WBS 4.9.9 / 4.9.10 D-9）。
     ///
-    /// 为什么必须单列这条通路：方法是**类型成员**，不占模块导出位，而方法键的首段
-    /// 是**类型名**不是模块键——[Self::lookup_param_info] 的来源 3（模块导出面
-    /// `resolve_export("{module}.{export}")`）对方法键恒不命中。声明期形参名
-    /// 跨单元只有**一条**载体：`ModuleInfo::method_overloads` 的候选组
-    /// （候选 ↔ 混编 IR 名 ↔ 形参名 三向量同序，由
-    /// `orchestrator::extract_module_info` 从定义单元的
-    /// `TypeEnvironment::method_overload_snapshot` 直取——与 typecheck 的
-    /// 注入面**同一份**，此处不引入第二份名字表）。
+    /// `qualified` 是定义单元的限定名 `{module}.{Type}.{method}[#N]`——IR 函数表里
+    /// 的调用名（[Self::lookup_param_info] 的来源 2）。
     ///
-    /// 定位规则：模块 = 限定名除**末两段**外的全部（类型名与方法名都是标识符，
-    /// 不含 `.`）；键 = 末两段拼成的 `{Type}.{method}`（含重载序 `#N` 的只有
-    /// 混编名，键与候选表都是定义侧裸名）；候选序 = `ir_names` 与末两段**逐字相同**
-    /// 的那一位——决议命中的混编名与登记时的混编名同源，序位因此唯一。
+    /// 定位**不做任何字符串反解**：投影索引取回 DefId → [`SymbolTable::path`] 取回
+    /// 路径 → 模块键 / 归属段 / 裸名三段都从路径上读；候选序由定义侧混编后缀读回
+    /// （`environment::method_key_of_definition`，与生成侧同一 helper）。
+    ///
+    /// 为什么必须单列这条通路：方法是**类型成员**，不占模块导出位，而方法名不是
+    /// 模块导出项——[Self::lookup_param_info] 的来源 3（模块导出面）对方法名恒不
+    /// 命中。声明期形参名跨单元只有**一条**载体：`ModuleInfo::method_overloads` 的
+    /// 候选组（由 `orchestrator::extract_module_info` 从定义单元的
+    /// `TypeEnvironment::method_overload_snapshot` 直取——与 typecheck 的注入面
+    /// **同一份**，此处不引入第二份名字表）。
     ///
     /// 名字表为空 = 声明期拿不到名字（登记期与候选签名对不齐，
     /// 见 `add_method_overload_with_params`）：返回 `None` 让调用点按
@@ -221,21 +219,13 @@ impl AstToIrGenerator {
         &self,
         qualified: &str,
     ) -> Option<crate::frontend::core::sema::environment::ExportParamInfo> {
-        let (scoped_type, method) = qualified.rsplit_once('.')?;
-        let (module_key, type_name) = scoped_type.rsplit_once('.')?;
-        // 定义侧混编名（末两段原样）与候选表键（去掉重载序）——同一次拆分得出，
-        // 两个名字不会各算一份
-        let definition_name = format!("{type_name}.{method}");
-        let candidate_key = format!("{type_name}.{}", method.split('#').next().unwrap_or(method));
-        let group = self
-            .registry
-            .get(module_key)?
-            .method_overloads
-            .get(&candidate_key)?;
-        let ordinal = group
-            .ir_names
-            .iter()
-            .position(|registered| *registered == definition_name)?;
+        // 身份与序位**同一处**读出（`method_key_of_definition` 先剥定义侧混编后缀、
+        // 再查投影索引），调用点不做任何字符串分段。
+        let (key, ordinal) = crate::frontend::core::sema::environment::method_key_of_definition(
+            qualified,
+            &self.registry.symbols(),
+        )?;
+        let group = self.registry.get(&key.module)?.method_overloads.get(&key)?;
         let names = group.param_names.get(ordinal)?.clone();
         if names.is_empty() {
             return None;
@@ -666,11 +656,8 @@ impl AstToIrGenerator {
     /// 构造器表达式**写出**的类型名——**纯语法提取**，不做单元归属判定。
     ///
     /// `T(..)` → `T`；`ns.T(..)` / `ns.sub.T(..)` → 调用点原样的点分写法。
-    /// 「这个名字是不是类型、属于哪个单元」一律交给
-    /// [`Self::imported_type_owner`]（**唯一**归属判定点）——此处只记录用户写出的
-    /// 名字，避免同一判定在两处各做一遍（WBS 4.9.8 修复轮 R2 / issue #465：上一版
-    /// 在这里产出「权威限定名」再被归属判定二次解析，首段经命名空间别名表改写，
-    /// 权威名丢失）。
+    /// 只做**纯语法提取**：这个名字属于哪个单元由 typecheck 侧的导入面
+    /// （`ImportFace::method_key`）判定，lower 不再有第二处归属判定。
     pub(in crate::middle) fn constructor_written_type_name(
         &self,
         expr: &ast::Expr,
@@ -691,88 +678,6 @@ impl AstToIrGenerator {
             }
             _ => None,
         }
-    }
-
-    /// 「这个限定名是**类型导出**」——注册表导出面的唯一判据。
-    fn is_type_export(
-        &self,
-        qualified: &str,
-    ) -> bool {
-        self.registry
-            .resolve_export(qualified)
-            .map(|export| matches!(export.kind, ExportKind::Type))
-            .unwrap_or(false)
-    }
-
-    /// 把「写出的名字」解析成**别的单元**的类型限定名（本单元自有类型 → None）。
-    ///
-    /// **归属判定的唯一来源**（WBS 4.9.8 修复轮 R2）。三条判据按序，命中即返回：
-    /// 1. **权威限定名**（`b.Temp` / `p.q.Temp`）：注册表里就存在该模块与该类型导出
-    ///    ⇒ **原样返回，绝不再解析**。模块键是权威身份，命名空间别名表不得改写它
-    ///    （R2 实测：`use other as p` 会把 `p.q.Temp` 二次解析成 `other.q.Temp`）；
-    /// 2. **本地名**（`TempB`）→ 导入名表 `use_aliases`（`use b.{Temp as TempB}` 的条目）；
-    /// 3. **命名空间前缀写法**（`io.X` / 用户模块别名 `m.T`）→ [`Resolver`] 的命名空间
-    ///    解析（与调用名限定化同一实现，不另起路径解析）。
-    ///
-    /// 解析结果必须是注册表的类型导出；否则不给归属（宁可不限定，不回错单元）。
-    fn imported_type_owner(
-        &self,
-        written: &str,
-    ) -> Option<String> {
-        let written = Self::strip_ref_prefix(written);
-        // 本单元自有类型：裸名就是定义侧名字，限定化留给 `qualify_names`
-        if self.declared_type_names.contains(written) {
-            return None;
-        }
-        // ① 权威限定名：精确命中即用，不再过命名空间/别名解析
-        if self.is_type_export(written) {
-            return Some(written.to_string());
-        }
-        // ② 本地名 → 导入名表（含 `use M.{T as X}` 的内联别名条目）
-        if let Some(qualified) = self.use_aliases.get(written) {
-            if self.is_type_export(qualified) {
-                return Some(qualified.clone());
-            }
-        }
-        // ③ 命名空间前缀写法（std 子模块 / 用户模块别名）
-        let (head, rest) = written.split_once('.')?;
-        let fields: Vec<&str> = rest.split('.').collect();
-        let qualified = self.resolver().resolve_namespace(head, &fields);
-        self.is_type_export(&qualified).then_some(qualified)
-    }
-
-    /// 方法派发名的**唯一判据**：把「定义侧名字」的裸类型前缀按接收者所属单元
-    /// 限定化（`Temp.tag` → `b.Temp.tag`），使跨单元同名类型的方法落回各自单元。
-    ///
-    /// `definition_name` 的形态有三处生产者（RFC-004 绑定 / D20 重载决议 / 裸名
-    /// 推导），前缀一律是 typecheck 与 `type_bindings` 共用的**定义侧裸类型名**；
-    /// 三者都经本函数产出最终调用名，判据只此一份（D3）。
-    /// 接收者类型名与定义名前缀对不上时原样返回（不是这个类型的方法面）。
-    pub(in crate::middle) fn method_dispatch_name(
-        &self,
-        recv: &ast::Expr,
-        definition_name: &str,
-    ) -> String {
-        let owner = match recv {
-            ast::Expr::Var(name, _) => self
-                .binding_written_type(name)
-                .and_then(|written| self.imported_type_owner(written)),
-            _ => self
-                .constructor_written_type_name(recv)
-                .and_then(|written| self.imported_type_owner(&written)),
-        };
-        let Some(owner) = owner else {
-            return definition_name.to_string();
-        };
-        let Some((prefix, rest)) = definition_name.split_once('.') else {
-            return definition_name.to_string();
-        };
-        // 定义侧前缀是裸类型名；只有它就是接收者类型的叶子名时才替换
-        // （重载混编序 `#k` 原样保留——决议选的是**候选序**，单元由接收者定）。
-        if owner.rsplit('.').next() != Some(prefix) {
-            return definition_name.to_string();
-        }
-        format!("{owner}.{rest}")
     }
 
     /// 声明期分类的量词投影（`TypeCheckResult.record_models` 是唯一来源）。

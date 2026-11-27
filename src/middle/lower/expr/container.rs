@@ -50,18 +50,9 @@ impl AstToIrGenerator {
 
         // RFC-011b：实现 Index 接口的用户容器——原生 LoadIndex 替换为
         // `Call "Type.index"`（接收者居首，与 method_bindings 形态一致）
-        if let Some((type_name, method, _negate)) = self.operator_dispatches.get(span).cloned() {
-            let short_name = format!("{}.{}", type_name, method);
-            let func_name =
-                if let Some(qualified) = self.registry.short_to_qualified_map().get(&short_name) {
-                    qualified.clone()
-                } else {
-                    short_name
-                };
-            // WBS 4.9.8 修复轮 R1 / issue #465：算子接口派发与普通方法调用同一判据——
-            // 接收者是导入类型时把裸类型前缀换成它的定义单元限定名（`Temp.index`
-            // → `b.Temp.index`），否则同名类型的算子实现互相落错单元（静默错值）。
-            let dispatch_name = self.method_dispatch_name(expr, &func_name);
+        if let Some(dispatch) = self.operator_dispatches.get(span).cloned() {
+            // 调用名即上游给出的名字（D-8）：限定已在方法身份里，这里不再查表
+            let dispatch_name = dispatch.dispatch_name;
             instructions.push(Instruction::Call {
                 dst: Some(result_reg.clone()),
                 func: Operand::Const(ConstValue::String(dispatch_name)),

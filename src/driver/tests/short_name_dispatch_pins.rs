@@ -5,8 +5,10 @@
 //! 测试（可达性条件变化时变红）」；Try 语义条款见 RFC-011b 阶段 2（`?` 由
 //! Try 接口驱动，四方法 is_failure/success/residual/from_error）。
 //!
-//! 两条臂此前都按**短类型名**拼调用名、不经 [`method_dispatch_name`] 单一判据
-//! （WBS 4.9.8 / #465 收敛的跨单元归因判据），本批已改为同经判据。两条
+//! 两条臂此前都按**短类型名**拼调用名、不经单一判据（WBS 4.9.8 / #465 收敛的
+//! 跨单元归因判据），本批已改为同经判据；WBS 4.9.10 起该判据的载体是 typecheck
+//! 写进 `OperatorDispatch::dispatch_name` 的 IR 最终名（接收者身份 → 方法身份 →
+//! D-8 名字），lower 侧不再按短名查表。两条
 //! **可达性前提**照旧钉住——判据放开时这里先红，收敛动作不得绕过：
 //! ① `print`/`println` 零开销 `to_string` 派发（`src/middle/lower/expr/call.rs`
 //!    「零开销路径：直接调用 to_string 方法」臂）——对用户结构体**不可达**：
@@ -25,8 +27,9 @@
 //!
 //! 与 #465 同族的病理（放开任一前置即成静默错派）：短类型名是裸名义名，不
 //! 携带定义模块；跨单元同名类型按裸名派发会落到**导入面**提供者（#465 红态
-//! 实测静默错值）。本批收敛后两臂已同经 `method_dispatch_name`（接收者写出名
-//! → 定义单元限定名），但可达性前提仍被钉住——前提放开时判据面先红。
+//! 实测静默错值）。本批收敛后两臂已同经**方法身份**判据（接收者身份 → 定义
+//! 单元限定名，WBS 4.9.10 D-8 的 IR 最终名），但可达性前提仍被钉住——前提
+//! 放开时判据面先红。
 //!
 //! 另附三条**未修分支对照**（可达路径现状，防收敛改动本身带漂移）：
 //! ③ 基础类型 `print(x)` 走零开销臂（`type_implements_stringable` 对
@@ -93,14 +96,14 @@ fn test_print_user_struct_with_to_string_keeps_fallback_repr() {
     );
     assert!(
         !callees.iter().any(|n| n.contains("to_string")),
-        "用户结构体的 to_string 不得被零开销臂按短名派发（Point.to_string 是 #465 同族短名形态；type_implements_stringable 放开时本判据变红，届时调用名须同经 method_dispatch_name），实际调用名：{callees:?}"
+        "用户结构体的 to_string 不得被零开销臂按短名派发（Point.to_string 是 #465 同族短名形态；type_implements_stringable 放开时本判据变红，届时调用名须同经方法身份判据 D-8），实际调用名：{callees:?}"
     );
 }
 
 /// 对照 ③：基础类型实参走零开销臂（可达路径现状）——调用名 `int.to_string`。
 /// 这是钉 ① 的未修分支对照：Stringable 判据对基础类型恒真，本测试钉住该路径
-/// 在两臂收敛后**调用名逐字不变**（短名经 method_dispatch_name 后对基础类型
-/// 必须原样返回——归属判据查不到基础类型的主人）。
+/// 在两臂收敛后**调用名逐字不变**（短名经身份判据后对基础类型必须原样
+/// 返回——内建类型无模块归属 ⇒ 投影即裸名，D-1）。
 #[test]
 fn test_print_int_variable_uses_zero_cost_to_string_dispatch() {
     // Arrange：最小 Script 项目，print 一个带类型信息的整型变量
@@ -180,7 +183,7 @@ t = bump(&r)
 
 /// 钉 ②：**别名导入的**用户 Try 类型在导入单元用 `?` 被 typecheck `E1082` 拒绝。
 /// E1082 对别名导入放开（实现登记按别名可达）时本测试变红——届时派发臂会拿到
-/// 别名类型的接收者，调用名必须同经 method_dispatch_name（#465 同族短名病理；
+/// 别名类型的接收者，调用名必须同经方法身份判据（#465 同族短名病理；
 /// 先红已实测：typecheck 判据临时按别名后缀匹配放开 → 编译走到派发臂，判据
 /// 恢复 → 绿）。
 #[test]
@@ -210,8 +213,8 @@ fn test_aliased_imported_user_try_type_rejected_by_e1082() {
 
 /// 对照 ④：**同单元**用户 Try 类型 `?` 的终点名带本单元键（可达路径现状）。
 /// 合并 IR 里 `qualify_names` 把本单元函数与调用统一限定为 `{module_key}.…`
-/// （入口单元键是 main）；两臂收敛后本判据钉住终点不变——method_dispatch_name
-/// 对本单元类型原样返回裸名，限定仍由 qualify_names 单点完成。
+/// （入口单元键是 main）；两臂收敛后本判据钉住终点不变——方法身份自带本单元
+/// 键，名字因此与 `qualify_names` 的终点逐字相同。
 #[test]
 fn test_local_user_try_type_dispatch_keeps_module_qualified_names() {
     // Arrange：单文件 Script 项目，Maybe+Try 本地定义，顶层经 bump 触发 `?`

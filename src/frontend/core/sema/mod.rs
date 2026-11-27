@@ -26,6 +26,9 @@ pub mod semantic_db;
 // 类型环境
 pub mod environment;
 
+// 导入面（WBS 4.9.10 D-5）：类型名 → 提供模块的唯一来源
+pub mod import_face;
+
 // RFC-011b: 运算符接口与实现登记表
 pub mod operator_interfaces;
 

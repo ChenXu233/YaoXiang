@@ -771,7 +771,7 @@ impl<'a> ExpressionInferrer<'a> {
         args: &[crate::ast::Expr],
         named_args: &[(String, crate::ast::Expr)],
         span: crate::util::span::Span,
-        method_binding_key: Option<String>,
+        method_binding_key: Option<DefPath>,
     ) -> ConstArgOutcome {
         use crate::frontend::core::sema::proof::verdict::ProofFailure;
         use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
@@ -825,7 +825,8 @@ impl<'a> ExpressionInferrer<'a> {
                 let Some(method_key) = method_binding_key else {
                     return ConstArgOutcome::NotTarget;
                 };
-                let Some(slots) = self.declared_call_site_params.get(&method_key) else {
+                // 调用点形参名表按**投影**键控（函数名与方法键同一张表）
+                let Some(slots) = self.declared_call_site_params.get(&method_key.project()) else {
                     // 事实不足（方法面的跨模块方法导入——#553 face ④ / #539 轴，
                     // 方法槽位尚无跨界载体；无 q=0 事实的类型体匿名绑定等非 const
                     // 形态——方法自带 q=0 槽被 E1003/E1094 拦在声明面）⇒ 不判，不猜
@@ -837,7 +838,7 @@ impl<'a> ExpressionInferrer<'a> {
                 let Some(method_ty) = self.method_bindings.get(&method_key) else {
                     return ConstArgOutcome::NotTarget;
                 };
-                fn_name = method_key;
+                fn_name = method_key.project();
                 const_names = slots.const_params.clone();
                 body = method_ty.clone();
             }

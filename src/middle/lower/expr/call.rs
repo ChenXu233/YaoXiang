@@ -553,8 +553,9 @@ impl AstToIrGenerator {
                     } else {
                         binding.function.clone()
                     };
-                    // WBS 4.9.8 / #465：接收者是导入类型时，派发名按定义单元限定
-                    let dispatch_name = self.method_dispatch_name(expr, &func_name);
+                    // 调用名就是决议/注册表给出的名字（WBS 4.9.10 D-8）：
+                    // 定义单元限定已在 typecheck 侧落进方法身份，这里不再改写
+                    let dispatch_name = func_name;
 
                     instructions.push(Instruction::Call {
                         dst: Some(result_reg.clone()),
@@ -583,7 +584,8 @@ impl AstToIrGenerator {
                         // 形参名只随注册表的重载候选组走（`{module}.{Type}.{method}`），
                         // 而导出面（`lookup_param_info` 的来源 3）对方法键恒不命中。
                         // 名字来源与派发名是同一个标识，不另算一份。
-                        let dispatch_name = self.method_dispatch_name(expr, &mangled);
+                        // 决议名即 IR 最终函数名（D-8）：限定已在身份里，不再改写
+                        let dispatch_name = mangled.clone();
                         let leaf = Self::call_name_leaf(&mangled).to_string();
                         let names = self
                             .lookup_param_info(&dispatch_name, &leaf)
@@ -753,12 +755,13 @@ impl AstToIrGenerator {
                                 };
                                 match base {
                                     Some(base) => {
-                                        let key = format!("{}.{}", base, field);
+                                        // std 面方法身份查询（D-1）：旧的字符串限定名
+                                        // 映射已由身份表回答同一问题——模块键取自
+                                        // DefPath，不再给字符串加前缀。
                                         self.registry
-                                            .std_method_binding_qualified_map()
-                                            .get(&key)
-                                            .cloned()
-                                            .unwrap_or(key)
+                                            .std_method_path(&base, field)
+                                            .map(|path| path.project())
+                                            .unwrap_or_else(|| format!("{}.{}", base, field))
                                     }
                                     None => self.resolve_field_path(expr, field),
                                 }
@@ -771,8 +774,8 @@ impl AstToIrGenerator {
 
                         let final_args: Vec<Operand> = arg_regs.clone();
 
-                        // WBS 4.9.8 / #465：普通方法调用同样按接收者的定义单元限定
-                        let dispatch_name = self.method_dispatch_name(expr, &func_name);
+                        // 调用名即上游给出的名字（D-8）：不再按接收者二次限定
+                        let dispatch_name = func_name;
                         instructions.push(Instruction::Call {
                             dst: Some(result_reg.clone()),
                             func: Operand::Const(ConstValue::String(dispatch_name)),
@@ -1036,12 +1039,15 @@ impl AstToIrGenerator {
                         if type_implements_stringable(&mono_type) {
                             // 零开销路径：直接调用 to_string 方法
                             // 生成: arg.to_string()
-                            // WBS 3.18.3 / issue #506：调用名同经 method_dispatch_name
-                            // 单一判据——短类型名是裸名义名（#465 同族），接收者类型经
-                            // 导入面引入时按定义单元限定；基础类型 / 本单元类型原样返回。
-                            let short_name =
-                                format!("{}.to_string", get_type_fallback_string(&mono_type));
-                            let func_name = self.method_dispatch_name(arg_expr, &short_name);
+                            // 调用名 = 短类型名 + 方法名（D-8）：std 面由身份表给限定名，
+                            // 基础类型 / 本单元类型保持裸名。
+                            let base = get_type_fallback_string(&mono_type);
+                            let short_name = format!("{}.to_string", base);
+                            let func_name = self
+                                .registry
+                                .std_method_path(&base, "to_string")
+                                .map(|path| path.project())
+                                .unwrap_or(short_name);
                             let mut arg_regs_for_method = Vec::new();
 
                             // 先计算参数值

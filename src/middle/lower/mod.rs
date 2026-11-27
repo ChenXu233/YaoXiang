@@ -211,9 +211,14 @@ pub struct AstToIrGenerator {
     /// generate_expr_ir 入口查表命中 → 值生成后包 CreateVariant。
     pub(super) existential_wraps: HashMap<Span, String>,
 
-    /// RFC-011b: 运算符派发点（span → 接收者类型名, 方法名, 取反）。
+    /// RFC-011b: 运算符派发点（span → typecheck 的派发记录）。
     /// `==`/`!=` 命中显式 Equal 实例化时，原生比较指令替换为方法调用。
-    pub(super) operator_dispatches: HashMap<Span, (String, String, bool)>,
+    ///
+    /// 记录里带 **IR 最终函数名**（D-8 的 `dispatch_name`）——调用名由 typecheck
+    /// 按接收者身份定死，本生成器直接消费，不再按短名二次查表（那等于按名字
+    /// 猜单元：同名类型分属两单元时谁先注册谁赢，静默错值）。
+    pub(super) operator_dispatches:
+        HashMap<Span, crate::frontend::core::sema::operator_interfaces::OperatorDispatch>,
     /// RFC-011b：`?` 表达式的 Try 实现类型名（span 键控）
     pub(super) try_expr_impls: HashMap<Span, String>,
     /// RFC-011a §3：方法级重载决议（**调用点 PlanId** 键控 → 混编 IR 名；
@@ -376,7 +381,7 @@ impl AstToIrGenerator {
             operator_dispatches: type_result
                 .operator_dispatches
                 .iter()
-                .map(|d| (d.span, (d.type_name.clone(), d.method.clone(), d.negate)))
+                .map(|dispatch| (dispatch.span, dispatch.clone()))
                 .collect(),
             try_expr_impls: type_result
                 .try_expr_impls

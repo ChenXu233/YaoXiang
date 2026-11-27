@@ -18,6 +18,7 @@
 use std::collections::HashMap;
 
 use crate::frontend::core::types::PolyType;
+use crate::frontend::module::symbol::DefPath;
 use crate::util::span::Span;
 
 /// `x = value` 的绑定动作（spec §4.3「赋值优先」）。
@@ -173,6 +174,13 @@ pub struct VarInfo {
     /// 块内遮蔽）不得继承钉住身份——`match r { k => f(k - 1)(...) }` 的 `k` 是
     /// 运行期值，按名判会把它当编译期证据（t23 F1'：运行期 q=8、按名证据 41）。
     pub pin_binder: Option<String>,
+    /// 该绑定的**类型身份**（D-6）：写出注解或构造器名经导入面解析出的类型路径。
+    ///
+    /// 为什么必须 per-binding：跨单元**同名类型**（`a.Temp` / `b.Temp`）的接收者
+    /// 在类型层面都是 `Struct{name:"Temp"}`——静态类型名在导入面里是歧义名，
+    /// 只有绑定登记时写出的那个名字能区分它们。挂在 VarInfo 而不是按名旁表：
+    /// 块内遮蔽下按名会取到外层同名绑定的身份（与 `const_value` 同一理由）。
+    pub type_identity: Option<DefPath>,
 }
 
 /// 语义定义事件：绑定期单点采集，由 TypeChecker 排空进 SemanticDB（#433/D55）。
@@ -502,12 +510,48 @@ impl ScopeManager {
             compile_time_only: false,
             const_value: None,
             pin_binder: None,
+            type_identity: None,
         };
         if self.local_scopes.is_empty() {
             self.globals.insert(name, info);
         } else {
             self.local_scopes.last_mut().unwrap().insert(name, info);
         }
+    }
+
+    /// 记下绑定的**类型身份**（D-6）：写出注解/构造器经导入面解析出的类型路径。
+    ///
+    /// 只写已解析的事实：名字在导入面里歧义或未知 ⇒ 不写（无身份 ⇒ 调用点退回
+    /// 静态类型名，与今天一致，不猜）。
+    pub fn set_type_identity(
+        &mut self,
+        name: &str,
+        path: DefPath,
+    ) {
+        for scope in self.local_scopes.iter_mut().rev() {
+            if let Some(entry) = scope.get_mut(name) {
+                entry.type_identity = Some(path);
+                return;
+            }
+        }
+        if let Some(entry) = self.globals.get_mut(name) {
+            entry.type_identity = Some(path);
+        }
+    }
+
+    /// 绑定的类型身份（D-6）：无身份 ⇒ None
+    pub fn type_identity(
+        &self,
+        name: &str,
+    ) -> Option<&DefPath> {
+        for scope in self.local_scopes.iter().rev() {
+            if let Some(entry) = scope.get(name) {
+                return entry.type_identity.as_ref();
+            }
+        }
+        self.globals
+            .get(name)
+            .and_then(|e| e.type_identity.as_ref())
     }
 
     /// 注入「前向引用占位」：名字可见（供函数体引用后置绑定），
@@ -532,6 +576,7 @@ impl ScopeManager {
             compile_time_only: false,
             const_value: None,
             pin_binder: None,
+            type_identity: None,
         };
         if self.local_scopes.is_empty() {
             self.globals.insert(name, info);
@@ -558,6 +603,7 @@ impl ScopeManager {
             compile_time_only: false,
             const_value: None,
             pin_binder: None,
+            type_identity: None,
         };
         if self.local_scopes.is_empty() {
             self.globals.insert(name, info);
@@ -627,6 +673,7 @@ impl ScopeManager {
             compile_time_only,
             const_value: None,
             pin_binder,
+            type_identity: None,
         };
         if let Some(scope) = self.param_scopes.last_mut() {
             scope.insert(name, info);

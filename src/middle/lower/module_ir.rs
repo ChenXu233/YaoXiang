@@ -358,6 +358,13 @@ impl AstToIrGenerator {
     /// 返回「**最终名 → 路径**」：`assign_defs` 据此登记身份，投影与登记同源。
     /// 未改名的函数（带点且限定点不是本文件类型）不进表——它们要么是别处已投影
     /// 的名字（std 等），要么是本单元生成的扁平名（curry 内层），判据见 `assign_defs`。
+    ///
+    /// **方法派生函数不在改写面内**（WBS 4.9.10 D-8）：它们经 `method_def_ir_names`
+    /// 由 typecheck 的方法身份直出，进本函数时名字**已是** `{模块键}.{Type}.{method}`
+    /// ——首段是模块键而不是本文件类型名，故上面这条判据让它原样通过，`assign_defs`
+    /// 按投影索引复用已登记的身份（Registry 期 `intern_method` 已登记同一条路径）。
+    /// 调用名同理已是最终名：`rewrite_call_names` 以**本单元函数表的最终名集合**
+    /// 短路，避免前缀规则把 `main.Temp.tag` 的 `main` 当成同名函数的裸名再限定一次。
     fn qualify_names(
         ir: &mut ModuleIR,
         module_key: &str,
@@ -403,6 +410,11 @@ impl AstToIrGenerator {
             }
         }
 
+        // 本单元函数表的**最终名**集合（定义改名之后取）：调用名命中它即已是
+        // 最终形态，`rewrite_call_names` 据此短路（见那里的注释）。
+        let final_names: std::collections::HashSet<String> =
+            ir.functions.iter().map(|func| func.name.clone()).collect();
+
         // 重写全局槽位名（T5）：与 `allocate_global_slots` 的限定规则同源，
         // 使槽位名与跨文件布局键（`lib.value`）一致，同名全局得以共存。
         for slot in &mut ir.globals {
@@ -416,7 +428,7 @@ impl AstToIrGenerator {
             }
             for block in func.blocks_mut() {
                 for instr in &mut block.instructions {
-                    Self::rewrite_call_names(instr, &rename, aliases);
+                    Self::rewrite_call_names(instr, &rename, aliases, &final_names);
                 }
             }
         }
@@ -426,7 +438,7 @@ impl AstToIrGenerator {
         // 顶层函数的调用名保持裸名，而函数定义已被限定——运行期按裸名查扁平
         // 函数表落空（E6006）。这与泛型无关，是既有的多文件正确性漏洞。
         for instr in &mut ir.init {
-            Self::rewrite_call_names(instr, &rename, aliases);
+            Self::rewrite_call_names(instr, &rename, aliases, &final_names);
         }
 
         paths
@@ -489,9 +501,20 @@ impl AstToIrGenerator {
         instr: &mut Instruction,
         rename: &HashMap<String, String>,
         aliases: &HashMap<String, String>,
+        final_names: &std::collections::HashSet<String>,
     ) {
-        let resolve =
-            |name: &str| -> Option<String> { Self::resolve_call_target(name, rename, aliases) };
+        // 调用名已是本单元函数表里的**最终名** ⇒ 不需要任何改写。
+        //
+        // 这一档不是优化而是正确性：方法函数名由 typecheck 的权威映射直出、
+        // 已带模块键（WBS 4.9.10 D-8：`main.Temp.tag`），而前缀规则会把首段
+        // `main` 当成本单元同名函数的裸名再限定一次（`main.main.Temp.tag`，
+        // 运行期 E6006）。定义名与调用名逐字相同 ⇒ 改写必是恒等。
+        let resolve = |name: &str| -> Option<String> {
+            if final_names.contains(name) {
+                return None;
+            }
+            Self::resolve_call_target(name, rename, aliases)
+        };
         match instr {
             Instruction::Call { func, .. } | Instruction::TailCall { func, .. } => {
                 if let Operand::Const(ConstValue::String(name)) = func {

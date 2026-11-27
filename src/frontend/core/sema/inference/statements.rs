@@ -48,8 +48,8 @@ macro_rules! apply_shared_inferrer_context {
         $inferrer.set_type_defs(&$self.type_defs);
         $inferrer.set_generic_type_defs(&$self.generic_type_defs);
         $inferrer.set_current_fn_param_constraints($self.current_fn_param_constraints.as_ref());
-        $inferrer.set_method_overloads(&$self.method_overloads, &$self.method_overload_ir_names);
-        $inferrer.set_method_overload_param_names(&$self.method_overload_param_names);
+        $inferrer.set_method_overloads(&$self.method_overloads);
+        $inferrer.set_import_face(&$self.import_face);
         $inferrer.set_current_expected($self.current_expected.clone());
         // #523：证明函数基类型表随委托传入——调用点剥精化与注册期同一判据
         // （strip_refined_with_proof_fns 单源）
@@ -132,8 +132,11 @@ pub struct StatementChecker {
     /// 泛型类型定义模板表（从 TypeEnvironment 同步）
     generic_type_defs:
         std::collections::HashMap<String, crate::frontend::core::sema::environment::GenericTypeDef>,
-    /// 方法绑定表: "Type.method" -> MonoType
-    method_bindings: HashMap<String, MonoType>,
+    /// 方法绑定表：方法身份（[DefPath]）→ MonoType
+    method_bindings: HashMap<crate::frontend::module::symbol::DefPath, MonoType>,
+    /// 导入面（D-5）：类型名 → 提供模块。与 env 的同一张表（副本随构造注入），
+    /// 表达式推断器按引用借用它——方法身份的解析只经这一处。
+    import_face: crate::frontend::core::sema::import_face::ImportFace,
     /// 泛型函数的**声明序类型参数名**：函数名 -> ["T", "Acc", ...]。
     ///
     /// 为什么需要单独一张表：`MonoType` 里类型参数只是普通 `TypeRef("T")`，
@@ -160,12 +163,11 @@ pub struct StatementChecker {
         HashMap<String, Vec<crate::frontend::core::sema::environment::InterfaceImplEntry>>,
     /// 当前函数的约束形参（形参 → 接口名）：定义体内运算符延迟派发的依据
     current_fn_param_constraints: Option<std::collections::HashMap<String, String>>,
-    /// RFC-011a §3：重载候选签名（key → [候选 Fn]，与 ir_names 候选序对应）
-    pub method_overloads: std::collections::HashMap<String, Vec<MonoType>>,
-    /// RFC-011a §3：重载候选的 IR 混编名
-    pub method_overload_ir_names: std::collections::HashMap<String, Vec<String>>,
-    /// RFC-011a §3 / #452：重载候选的声明期形参名（与候选序一一对应，含接收者位）
-    pub method_overload_param_names: std::collections::HashMap<String, Vec<Vec<String>>>,
+    /// RFC-011a §3：方法重载候选（方法身份 → 候选组：签名 + 声明期形参名同序）
+    pub method_overloads: std::collections::HashMap<
+        crate::frontend::module::symbol::DefPath,
+        crate::frontend::core::sema::environment::MethodOverloadCandidates,
+    >,
     /// RFC-011a §3：重载决议点（**调用点 PlanId** → 混编 IR 名；RFC-039 D20）
     pub overload_resolutions: Vec<(crate::util::plan_id::PlanId, String)>,
     /// 期望类型（带注解绑定的初始化推断时设置，方法重载按期望返回决议）
@@ -349,13 +351,12 @@ impl StatementChecker {
             result_err_stack: Vec::new(),
             current_fn_param_constraints: None,
             method_overloads: std::collections::HashMap::new(),
-            method_overload_ir_names: std::collections::HashMap::new(),
-            method_overload_param_names: std::collections::HashMap::new(),
             overload_resolutions: Vec::new(),
             current_expected: None,
             expected_return_type: None,
             generic_type_defs: std::collections::HashMap::new(),
             method_bindings: HashMap::new(),
+            import_face: crate::frontend::core::sema::import_face::ImportFace::default(),
             generic_fn_type_params: HashMap::new(),
             type_defs: HashMap::new(),
             instantiation_requests: Vec::new(),
@@ -535,12 +536,31 @@ impl StatementChecker {
         self.generic_type_defs = defs;
     }
 
-    /// 设置方法绑定表
+    /// 设置导入面（D-5）：类型名 → 提供模块
+    pub fn set_import_face(
+        &mut self,
+        face: crate::frontend::core::sema::import_face::ImportFace,
+    ) {
+        self.import_face = face;
+    }
+
+    /// 设置方法绑定表（键是方法身份）
     pub fn set_method_bindings(
         &mut self,
-        bindings: HashMap<String, MonoType>,
+        bindings: HashMap<crate::frontend::module::symbol::DefPath, MonoType>,
     ) {
         self.method_bindings = bindings;
+    }
+
+    /// RFC-011a §3：设置方法重载候选表（键是方法身份，候选与形参名同序同组）
+    pub fn set_method_overloads(
+        &mut self,
+        overloads: std::collections::HashMap<
+            crate::frontend::module::symbol::DefPath,
+            crate::frontend::core::sema::environment::MethodOverloadCandidates,
+        >,
+    ) {
+        self.method_overloads = overloads;
     }
 
     /// RFC-011b: 注入接口实现登记表
@@ -3264,6 +3284,17 @@ impl StatementChecker {
 
         self.scope
             .add_var(name.to_string(), PolyType::mono(ty), is_mut, name_span);
+        // D-6：绑定的**类型身份**（写出注解优先，其次构造器名）经导入面落表。
+        // 跨单元同名类型的接收者靠它区分——静态类型名是定义侧裸名，导入面里可能歧义。
+        let written = type_annotation
+            .and_then(Self::written_type_name)
+            .or_else(|| initializer.and_then(Self::constructor_type_name));
+        if let Some(path) = written
+            .as_deref()
+            .and_then(|written| self.import_face.type_path(written))
+        {
+            self.scope.set_type_identity(name, path);
+        }
         // 6.8.5-2a 值环境：非 mut 绑定 + 初始化式是字面量 ⇒ 值编译期已知。
         //
         // 「不来自外部输入」这一条由「初始化式就是字面量」直接保证（字面量不可能
@@ -3279,6 +3310,33 @@ impl StatementChecker {
             }
         }
         Ok(())
+    }
+
+    /// 写出注解里的**类型名**（注解原文，不做解析）：`p: TempA` → `TempA`。
+    ///
+    /// 只看能无歧义还原出类型名的形态（裸名 / 括号）；泛型应用、元组、函数类型
+    /// 返回 None——它们不是「某个用户类型的裸名」，不构成 D-6 的身份来源。
+    pub(super) fn written_type_name(ty: &crate::ast::Type) -> Option<String> {
+        match ty {
+            crate::ast::Type::Name { name, .. } => Some(name.clone()),
+            crate::ast::Type::Paren(inner) => Self::written_type_name(inner),
+            crate::ast::Type::NamedParen { inner, .. } => Self::written_type_name(inner),
+            _ => None,
+        }
+    }
+
+    /// 构造器表达式写出的**类型名**：`TempA(..)` → `TempA`；`b.Temp(..)` → `b.Temp`。
+    pub(super) fn constructor_type_name(expr: &Expr) -> Option<String> {
+        let Expr::Call { func, .. } = expr else {
+            return None;
+        };
+        match func.as_ref() {
+            Expr::Var(name, _) => Some(name.clone()),
+            Expr::FieldAccess { .. } => {
+                crate::frontend::core::sema::inference::expressions::extract_namespace_path(func)
+            }
+            _ => None,
+        }
     }
 
     /// 检查 for 语句
@@ -3713,14 +3771,26 @@ impl StatementChecker {
                                         &[l.clone(), r.clone()],
                                     ) {
                                         if !entry.native {
+                                            let type_name = entry.impl_type.clone();
+                                            let method = entry
+                                                .methods
+                                                .first()
+                                                .cloned()
+                                                .unwrap_or_else(|| "add".to_string());
+                                            // 调用名与推断器同一实现（身份优先，D-8）
+                                            let dispatch_name =
+                                                super::expressions::operator_dispatch_name(
+                                                    &self.scope,
+                                                    Some(&self.import_face),
+                                                    left,
+                                                    &type_name,
+                                                    &method,
+                                                );
                                             self.operator_dispatches.push(ops::OperatorDispatch {
                                                 span: *span,
-                                                type_name: entry.impl_type.clone(),
-                                                method: entry
-                                                    .methods
-                                                    .first()
-                                                    .cloned()
-                                                    .unwrap_or_else(|| "add".to_string()),
+                                                type_name,
+                                                method,
+                                                dispatch_name,
                                                 negate: false,
                                             });
                                         }
@@ -3745,11 +3815,16 @@ impl StatementChecker {
                                                 if let Some(spec) =
                                                     crate::frontend::core::sema::operator_interfaces::spec(iface)
                                                 {
+                                                    let method = spec.method.to_string();
+                                                    // 约束形参名不是类型身份：名字就是占位 `T.add`
+                                                    let dispatch_name =
+                                                        format!("{pn}.{method}");
                                                     self.operator_dispatches.push(
                                                         crate::frontend::core::sema::operator_interfaces::OperatorDispatch {
                                                             span: *span,
                                                             type_name: pn.clone(),
-                                                            method: spec.method.to_string(),
+                                                            method,
+                                                            dispatch_name,
                                                             negate: false,
                                                         },
                                                     );

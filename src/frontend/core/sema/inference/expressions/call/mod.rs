@@ -726,21 +726,17 @@ impl<'a> ExpressionInferrer<'a> {
         //   - 记录决议（**调用点 PlanId** → 混编 IR 名），ir_gen 据此命名调用
         let selected_overload: Option<(MonoType, Vec<String>)> = match &method_key {
             Some(key) => {
-                let cands = self.method_overloads.as_ref().and_then(|m| m.get(key));
-                let irs = self
-                    .method_overload_ir_names
-                    .as_ref()
-                    .and_then(|m| m.get(key));
-                // #452：候选的声明期形参名（与候选序一一对应；缺表/空表 = 该候选
-                // 名字不可用，按「无约束」放行——宁可不按名匹配也不拿错位名字匹配）
-                let cand_names = self
-                    .method_overload_param_names
-                    .as_ref()
-                    .and_then(|m| m.get(key));
-                match (cands, irs) {
+                // 候选组：候选签名与声明期形参名**同组同序**（D-1 / #452）——
+                // 决议按候选序取名、命名实参按形参名入槽，读的是同一组。
+                let group = self.method_overloads.and_then(|m| m.get(key));
+                let cands = group.map(|g| &g.candidates);
+                // #452：缺表/空表 = 该候选名字不可用，按「无约束」放行——
+                // 宁可不按名匹配也不拿错位名字匹配
+                let cand_names = group.map(|g| &g.param_names);
+                match cands {
                     // #452 / F1：候选**非空**即走决议——单候选也要跑，否则单签名的
                     // 命名实参调用整段跳过逐参类型检查（实测运行时才 E6007）。
-                    (Some(cands), Some(irs)) if !cands.is_empty() && irs.len() == cands.len() => {
+                    Some(cands) if !cands.is_empty() => {
                         let mut matches: Vec<(usize, MonoType)> = Vec::new();
                         for (i, cand) in cands.iter().enumerate() {
                             let Some(MonoType::Fn { params, .. }) = Some(cand) else {
@@ -855,7 +851,11 @@ impl<'a> ExpressionInferrer<'a> {
                         let chosen: Option<(usize, MonoType)> = match matches.len() {
                             1 => match (
                                 matches.first(),
-                                matches.first().and_then(|(i, _)| irs.get(*i)),
+                                matches.first().map(|(i, _)| {
+                                    crate::frontend::core::sema::environment::method_ir_name(
+                                        key, *i,
+                                    )
+                                }),
                             ) {
                                 (Some((i, f)), Some(ir)) => {
                                     // 沙盒里判出的匹配要在求解器里**补做一次**
@@ -907,9 +907,12 @@ impl<'a> ExpressionInferrer<'a> {
                             // 多候选无法区分 = 隐式假设调用者想要哪一个——
                             // 不该隐式的地方不隐式：歧义即报错（E1107）
                             n if n > 1 => {
-                                return Err(ErrorCodeDefinition::ambiguous_method_overload(key, n)
-                                    .at(span)
-                                    .build());
+                                return Err(ErrorCodeDefinition::ambiguous_method_overload(
+                                    &key.project(),
+                                    n,
+                                )
+                                .at(span)
+                                .build());
                             }
                             _ => None, // 0 = 无实参匹配的候选（落旧路径报错）
                         };
@@ -955,11 +958,7 @@ impl<'a> ExpressionInferrer<'a> {
             // 列出全部候选形参名的并集——只列首候选（旧预检读元数组首候选名表）
             // 会把用户往错误的重载上引（#466 复现即被 `(available: n)` 误导）。
             // 名字可用的候选一个都没有（全空表）⇒ 无可信名字来源，不检。
-            if let Some(lists) = self
-                .method_overload_param_names
-                .as_ref()
-                .and_then(|m| m.get(key))
-            {
+            if let Some(lists) = self.overload_param_names(key) {
                 if lists.iter().any(|l| !l.is_empty()) {
                     let mut known: Vec<&str> = Vec::new();
                     for name in lists.iter().flat_map(|l| l.iter().skip(1)) {
@@ -972,7 +971,7 @@ impl<'a> ExpressionInferrer<'a> {
                         .find(|(n, _)| !known.contains(&n.as_str()))
                     {
                         return Err(ErrorCodeDefinition::unknown_argument(
-                            key,
+                            &key.project(),
                             bad,
                             &known.join(", "),
                         )
@@ -998,15 +997,12 @@ impl<'a> ExpressionInferrer<'a> {
             let names: Option<Vec<String>> = match selected_param_names {
                 Some(names) => Some(names),
                 None => {
-                    let lists = self
-                        .method_overload_param_names
-                        .as_ref()
-                        .and_then(|m| m.get(key));
+                    let lists = self.overload_param_names(key);
                     match lists {
                         None => None,
                         Some(lists) => {
                             let total_args = arg_types.len() + named_args.len();
-                            let cands = self.method_overloads.as_ref().and_then(|m| m.get(key));
+                            let cands = self.overload_candidates(key);
                             let (names, sig) = Self::fallback_named_arg_context(
                                 lists, cands, total_args, named_args,
                             );
@@ -1026,8 +1022,13 @@ impl<'a> ExpressionInferrer<'a> {
                     Some(names.len() - 1)
                 };
                 if !names.is_empty() {
-                    param_positions =
-                        Some(Self::bind_named_args(key, &names, args, named_args, span)?);
+                    param_positions = Some(Self::bind_named_args(
+                        &key.project(),
+                        &names,
+                        args,
+                        named_args,
+                        span,
+                    )?);
                 }
             }
         }
@@ -1553,9 +1554,7 @@ impl<'a> ExpressionInferrer<'a> {
         if let Some(method_key) = &method_key {
             // 候选形参表按元数分组（每组首候选作代表；空表不构成证据）
             let arity_groups: Vec<(usize, Vec<String>)> = self
-                .method_overload_param_names
-                .as_ref()
-                .and_then(|m| m.get(method_key))
+                .overload_param_names(method_key)
                 .map(|lists| Self::candidate_arity_groups(lists))
                 .unwrap_or_default();
             let bind_names: Option<&Vec<String>> = arity_groups.first().map(|(_, n)| n);
@@ -1575,7 +1574,9 @@ impl<'a> ExpressionInferrer<'a> {
             if let Some(expected) = expected_arity {
                 if total_args != expected {
                     return Err(ErrorCodeDefinition::argument_count_mismatch(
-                        method_key, expected, total_args,
+                        &method_key.project(),
+                        expected,
+                        total_args,
                     )
                     .at(span)
                     .build());

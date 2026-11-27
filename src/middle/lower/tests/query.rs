@@ -18,6 +18,7 @@ use crate::frontend::core::sema::environment::MethodOverloadCandidates;
 use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::{MonoType, TypeCheckResult};
 use crate::frontend::module::registry::ModuleRegistry;
+use crate::frontend::module::symbol::DefPath;
 use crate::frontend::module::{ModuleInfo, ModuleSource};
 use crate::middle::ir::ir::{ConstValue, Operand};
 use crate::middle::lower::AstToIrGenerator;
@@ -158,19 +159,15 @@ fn test_method_param_info_empty_name_table_returns_none() {
     let mut registry = ModuleRegistry::new();
     registry.register(module_with_group(
         "empty",
-        "Point.scale_by",
         MethodOverloadCandidates {
             candidates: vec![candidate.clone()],
-            ir_names: vec!["Point.scale_by".to_string()],
             param_names: vec![Vec::new()],
         },
     ));
     registry.register(module_with_group(
         "named",
-        "Point.scale_by",
         MethodOverloadCandidates {
             candidates: vec![candidate],
-            ir_names: vec!["Point.scale_by".to_string()],
             param_names: vec![vec!["self".to_string(), "k".to_string()]],
         },
     ));
@@ -201,10 +198,15 @@ fn test_method_param_info_empty_name_table_returns_none() {
 /// 造一个只带一个方法候选组的注册表模块（空名表守卫测试的输入面）。
 fn module_with_group(
     key: &str,
-    group_key: &str,
     group: MethodOverloadCandidates,
 ) -> ModuleInfo {
     let mut module = ModuleInfo::new(key.to_string(), ModuleSource::User);
-    module.method_overloads.insert(group_key.to_string(), group);
+    // 键是方法身份（D-1）：候选表与单绑定表同键，符号表据此 intern 出投影
+    //（`{module}.Point.scale_by`）供 `lookup_param_info` 的投影索引查询命中。
+    let path = DefPath::method(key, "Point", "scale_by");
+    module
+        .method_bindings
+        .insert(path.clone(), group.candidates[0].clone());
+    module.method_overloads.insert(path, group);
     module
 }

@@ -388,28 +388,6 @@ impl AstToIrGenerator {
             self.note_slot_quantity(&param.name, quantity);
         }
     }
-
-    /// 局部变量写出类型名的查找（作用域由符号表本身给出）。
-    fn local_written_type(
-        &self,
-        name: &str,
-    ) -> Option<&str> {
-        for scope in self.symbols.iter().rev() {
-            if let Some(entry) = scope.get(name) {
-                return entry.written_type.as_deref();
-            }
-        }
-        None
-    }
-
-    /// 变量写出的类型名：先查局部作用域，再查本文件顶层绑定位。
-    pub(super) fn binding_written_type(
-        &self,
-        name: &str,
-    ) -> Option<&str> {
-        self.local_written_type(name)
-            .or_else(|| self.global_written_types.get(name).map(String::as_str))
-    }
 }
 
 /// `finalize_code_body` 的四件产物：具名槽表、值表、值 → 槽映射、块图。

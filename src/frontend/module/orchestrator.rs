@@ -1069,6 +1069,10 @@ pub(crate) fn extract_module_info(
     namespace: &crate::frontend::core::sema::probe::TypeLevelNamespace,
 ) -> ModuleInfo {
     let mut checker = TypeChecker::new(module_key);
+    // 单元键与限定开关（WBS 4.9.10 D-4/D-8）：Registry 面产出的是**跨单元**的
+    // 方法身份与 IR 名，与 lower 的多文件形态同源（单元键存在 ⇒ 限定）。
+    checker.env().unit_key = module_key.to_string();
+    checker.env().qualify_methods = true;
     // 编译期谓词 def（#524 甲案）：构建判据与第零遍同源（单源自由函数，
     // `predicate_resolver::collect_predicate_defs`）。H1：必须在 pass1 前补种，
     // 否则 Registry 面把谓词分类成 `Call{Pos,[v]}`（B.4 §四.1）。

@@ -641,6 +641,9 @@ impl TypeChecker {
         >,
     ) {
         self.type_level_namespace = namespace.clone();
+        // 导入面先成形（WBS 4.9.10 D-5）：pass2 的方法登记要按它定身份，
+        // 漏建会让签名收集把本单元类型的方法落进无模块键位（静默错配）。
+        self.env.install_import_face(module);
         // 3.24.3 t3 F4：改绑表先于语句遍历成形（含 pass2 的 use 注册臂）。
         self.collect_import_type_rebinds(module);
         // H1：先补种本单元谓词表，使 pass1 的记录模型分类看到内联命题体
@@ -835,12 +838,12 @@ impl TypeChecker {
         body_checker.set_import_type_rebinds(self.import_type_rebinds.clone());
         // 设置泛型类型定义模板表
         body_checker.set_generic_type_defs(self.env.generic_type_defs.clone());
-        // 设置方法绑定表
+        // 方法身份的解析表（D-5）：表达式推断器的唯一身份入口
+        body_checker.set_import_face(self.env.import_face.clone());
+        // 设置方法绑定表与方法重载候选表（键都是方法身份，D-1/D-2）
         body_checker.set_method_bindings(self.env.method_bindings.clone());
-        body_checker.method_overloads = self.env.method_overloads.clone();
-        body_checker.method_overload_ir_names = self.env.method_overload_ir_names.clone();
-        // #452：形参名表同源注入——漏一处会让决议段静默退回「不按名匹配」
-        body_checker.method_overload_param_names = self.env.method_overload_param_names.clone();
+        // #452：候选组连声明期形参名一起注入——漏一处会让决议段静默退回「不按名匹配」
+        body_checker.set_method_overloads(self.env.method_overloads.clone());
         // RFC-011b: 接口实现登记表（finalize_interface_instantiations 已落表）
         body_checker.set_interface_impl_registry(self.env.interface_impl_registry.clone());
         body_checker.set_sum_types(self.env.sum_types.clone());
@@ -1048,6 +1051,8 @@ impl TypeChecker {
     ) -> TypeCheckResult {
         // 3.24.3 t3 F4：改绑表先于任何遍成形（pass2 的 use 注册臂与 pass3 的
         // 导入绑定都消费它——分离两条 use 的类型导入同样可达）。
+        // 导入面先成形（WBS 4.9.10 D-5）：三遍里的方法键都按它定身份。
+        self.env.install_import_face(module);
         self.collect_import_type_rebinds(module);
 
         // 第零遍：登记编译期谓词定义（#377-3）。
@@ -1539,6 +1544,8 @@ impl TypeChecker {
                 self.dependent_type_env.clone(),
                 trait_table,
             );
+            // 方法身份的解析表（D-5）：与主入口同一张表
+            body_checker.set_import_face(self.env.import_face.clone());
             // 设置 native 函数签名表
             body_checker.set_native_signatures(self.env.native_signatures.clone());
             // #387：native arity 区间表随签名表同源传递
@@ -2085,15 +2092,22 @@ impl TypeChecker {
                         })
                         .unwrap_or_default();
                     if !const_binders.is_empty() && !call_site_names.is_empty() {
-                        self.declared_call_site_params
-                            .entry(format!("{}.{}", tn, name))
-                            .or_insert(CallSiteSlots {
-                                names: call_site_names,
-                                const_params: const_binders
-                                    .iter()
-                                    .map(|b| b.name.clone())
-                                    .collect(),
-                            });
+                        // 键 = 方法身份的**投影**（`DefPath::project` 是唯一拼接实现）
+                        let key = self
+                            .env
+                            .resolve_method_key(tn, &name)
+                            .map(|key| key.project());
+                        if let Some(key) = key {
+                            self.declared_call_site_params
+                                .entry(key)
+                                .or_insert(CallSiteSlots {
+                                    names: call_site_names,
+                                    const_params: const_binders
+                                        .iter()
+                                        .map(|b| b.name.clone())
+                                        .collect(),
+                                });
+                        }
                     }
                     let key = (tn.to_string(), name.clone());
                     if let Some(prev) = self.declared_methods.get(&key) {
@@ -2112,15 +2126,17 @@ impl TypeChecker {
                     // #452 连形参名一并登记——命名实参入决议要靠它（登记期的
                     // 声明序形参名是本阶段唯一可信来源，调用点再无 AST 可查）。
                     if let Some(tn) = type_name.as_deref() {
-                        let okey = format!("{}.{}", tn, name);
                         let param_names: Vec<String> =
                             signature.iter().map(|p| p.name.clone()).collect();
-                        if let Some(ir_name) = self.env.add_method_overload_with_params(
-                            &okey,
+                        // 键由 env 单点解析（D-5）；返回值是该身份在 IR 函数表里的名字（D-8）
+                        let registered = self.env.add_method_overload_with_params(
+                            tn,
+                            &name,
                             fn_ty.clone(),
                             param_names,
-                        ) {
-                            // 7c.3：定义身份（声明语句 PlanId）→ 混编名，唯一权威来源。
+                        );
+                        if let Some(ir_name) = registered {
+                            // 定义身份（声明语句 PlanId）→ IR 最终函数名，唯一权威来源。
                             self.method_def_ir_names.insert(stmt.plan_id, ir_name);
                         }
                     }
@@ -3013,11 +3029,11 @@ impl TypeChecker {
         // 时任一匹配即可；method_bindings 单值表会互相覆盖，不可用。
         let mut methods: Vec<String> = Vec::new();
         for (member, expected) in &members {
-            let overload_key = format!("{}.{}", impl_type, member);
+            // 键由 env 单点解析（D-5）：接口成员是方法身份，不是拼出来的字符串
             let candidates = self
                 .env
-                .get_method_overloads(&overload_key)
-                .cloned()
+                .resolve_method_key(impl_type, member)
+                .and_then(|key| self.env.get_method_overloads(&key).cloned())
                 .unwrap_or_default();
             if candidates.is_empty() {
                 self.add_error(
@@ -3131,11 +3147,13 @@ impl TypeChecker {
             // RFC-011b: 绑定形态同样进重载候选表（接口完整性检查按候选集匹配）。
             // #452：外部绑定的形参名在 typecheck 侧拿不到（被绑函数只留签名、
             // 不留名字），留空 = 调用点不按名匹配（不冒充「名字已核对」）。
-            let okey = format!("{}.{}", type_name, method_name);
             // 外部绑定不生成方法体 IR，没有定义身份可登记——只维护调用侧候选表。
-            let _ = self
-                .env
-                .add_method_overload_with_params(&okey, method_ty, Vec::new());
+            let _ = self.env.add_method_overload_with_params(
+                type_name,
+                method_name,
+                method_ty,
+                Vec::new(),
+            );
         }
     }
 
@@ -3216,8 +3234,12 @@ impl TypeChecker {
         if const_params.is_empty() {
             return;
         }
+        // 键 = 方法身份的投影（与 `add_method_binding` 同一解析入口）
+        let Some(key) = self.env.resolve_method_key(type_name, method_name) else {
+            return;
+        };
         self.declared_call_site_params
-            .entry(format!("{}.{}", type_name, method_name))
+            .entry(key.project())
             .or_insert(CallSiteSlots {
                 names,
                 const_params,

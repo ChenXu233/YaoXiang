@@ -11,7 +11,6 @@ use std::path::{Path, PathBuf};
 use crate::frontend::core::lexer;
 use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::sema::checker::TypeChecker;
-use crate::frontend::core::sema::environment::MethodOverloadCandidates;
 use crate::frontend::core::sema::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::core::sema::SemanticProbe;
 use crate::frontend::core::sema::TypeCheckResult;
@@ -353,25 +352,20 @@ impl Driver {
             };
             let mut checker = TypeChecker::new(&unit_name);
             checker.env().module_registry = registry.clone();
+            // 单元键与限定开关（D-4/D-8）：与 lower 的 `module_key` 同源——多文件
+            // 形态有单元键（`program.units[i].key`），单文件没有。
+            checker.env().unit_key = program.units[i].key.clone();
+            checker.env().qualify_methods = true;
             if let Some(method_bindings) = method_bindings {
                 checker.env().method_bindings = method_bindings.clone();
             }
-            // RFC-029f 改进 4 / WBS 4.9.7（#464）：跨单元方法调用的**重载候选**注入。
-            // 注入面 = 本单元裸类型名面**逐对**（名字 ← 它自己的提供模块）取到的候选组：
-            // 只并入「键的提供模块 == 该类型名前缀在本单元 scope 里的提供模块」的候选组
-            // （名字升序 ⇒ 合并顺序确定）。跨对组合（名字集合 × 模块集合）会把别的模块
-            // 定义的同名类型候选塞进来 ⇒ 调用点 2 候选 ⇒ E1107 误报（修复轮实测：
-            // `use a.{Temp}` + `use b.{Other}`、a 亦定义 Other、b 亦定义 Temp 时
-            // 2×E1107；逐对过滤后 check/run 均退出 0）。判据与理由见本文件的
-            // `visible_method_overloads`；入口单元自己的候选不在此列——它们由本单元
-            // 签名收集现场登记（自有优先）。
-            checker
-                .env()
-                .inject_method_overloads(visible_method_overloads(
-                    ast,
-                    &program.units[i].key,
-                    registry,
-                ));
+            // WBS 4.9.10 D-1：跨单元方法调用的**重载候选**注入面 = 注册表全部模块
+            // 除本单元。键是方法身份，同名类型分属两单元也各有路径 ⇒ 不再需要按
+            // 裸名逐对裁剪作用域（旧 `visible_method_overloads` 的补丁面已删）；
+            // 本单元自己的候选由本单元签名收集现场登记。
+            checker.env().inject_method_overloads(
+                registry.injectable_method_overloads(&program.units[i].key),
+            );
             // RFC-014：vendor 根注入（缺依赖包的 E5001 追加 install 提示）
             if let Some(root) = &vendor_root {
                 checker.set_vendor_root(root.clone());
@@ -640,7 +634,20 @@ impl Driver {
         let resolved_marks = {
             let results: Vec<Option<&TypeCheckResult>> =
                 units.iter().map(|us| us.type_result.as_ref()).collect();
-            resolved_method_marks(&program.units, asts.as_slice(), &results)
+            // 决议名 → 方法身份：投影索引在共享符号表里（Linking 与注册表同一份，
+            // #94 DefId 一致）；无注册表时（退化路径）没有身份可换，标记面为空
+            match state.registry.as_ref() {
+                Some(registry) => {
+                    let symbols = registry.symbols();
+                    resolved_method_marks(&program.units, asts.as_slice(), &results, &symbols)
+                }
+                None => resolved_method_marks(
+                    &program.units,
+                    asts.as_slice(),
+                    &results,
+                    &crate::frontend::module::symbol::SymbolTable::new(),
+                ),
+            }
         };
         let pool = if package_roots.is_empty() {
             // 无声明面（含无 manifest 的 standalone 单文件）：退化为被检文件
@@ -703,6 +710,9 @@ impl Driver {
                 names
             };
             let mut analyzer = DeadCodeAnalyzer::new();
+            // 方法定义身份的前缀（D-4）：与本单元键同一份——标记与分析器两侧
+            // 都按 `{模块键}.{Type}.{method}` 身份比对
+            analyzer.set_unit_key(unit_key.clone());
             // 逐候选方法标记（同名重载各自判定：未被决议命中的兄弟重载仍报 W1005）——
             // 只喂**本单元定义上**的标记；另喂「存在决议条目的名字组」，
             // 让池的名字级豁免对这类组让位（WBS 4.9.7 / #464）
@@ -1700,94 +1710,6 @@ impl Driver {
         }
         state.merged_ir = Some(merged);
     }
-}
-
-/// 一个单元**能按裸类型名命名的方法候选面**（RFC-029f 改进 4 / WBS 4.9.7 / #464）：
-/// 本单元 `use M.{Type}` 带进来的**每个类型名**，只取它**自己的提供模块 M** 下
-/// 「键前缀 = 该名字」的候选组（名字 ← 模块**逐对**配对，不跨对组合）。
-///
-/// 为什么必须逐对过滤（而不是"名字集合 × 模块集合"）：候选键是**裸类型名**
-/// （`{Type}.{method}`）——两个单元各自定义同名类型时键相同。若把「本单元能命名
-/// 到的模块集合」整体合并后再按「键前缀 ∈ 名字集合」过滤，任一被命名到的模块定义
-/// 的同键候选都会混进来：调用点因此出现 2 个签名相同的候选，按「多候选无法区分即
-/// 报错」的规则报 E1107。实测（WBS 4.9.7 修复轮）：main 用 `use a.{Temp}` +
-/// `use b.{Other}`，a 也定义 Other、b 也定义 Temp ⇒ 每个名字只由一个模块带进
-/// 作用域、接收者类型唯一，程序仍然 2×E1107（Temp.to / Other.to 各 2 候选）。
-/// 反过来命名得到的候选一个都不能少（漏并 ⇒ 决议不产生条目 ⇒ 跨单元方法回落池的
-/// 名字级豁免，W1005 漏报）。
-///
-/// 三条收窄规则（都朝**宁漏报**方向，宁可不产生条目也不制造歧义误报）：
-/// ① 只认**花括号项**形态（`use M.{Type}`）：整体导入 `use M` 把类型名挂在模块
-///    命名空间下（另按导出名补一份裸名镜像），两形态混用时裸名归属由导入顺序
-///    静默决定（last-wins）——这种源程序在名字层已经歧义，本函数不为它产条目；
-/// ② 只认**局部名 = 目标名**（无内联别名 `as`）：决议键的前缀是调用方写的裸名，
-///    别名形态下它与定义侧前缀不同名，配不上（不猜、不重命名）；
-/// ③ 同一个裸类型名被**多个模块**带进作用域时整名跳过（同上：源程序已歧义）。
-///
-/// 本单元**自有键位不外并**：同名裸类型在本单元已有定义时，调用点解析到的就是
-/// 本单元那一个（模块身份优先）；自有候选由本单元自己的签名收集现场登记。
-///
-/// 名字面复用既有单点：[DeadCodeAnalyzer::collect_module_names]（use 面）+
-/// 注册表导出查询（[ModuleRegistry::get_exports]）——与 checker 处理
-/// `use M.{Type}` 时查模块导出的**同一张表**，不另造路径解析。
-fn visible_method_overloads(
-    ast: &Module,
-    own_module_key: &str,
-    registry: &ModuleRegistry,
-) -> Vec<(String, MethodOverloadCandidates)> {
-    let names = DeadCodeAnalyzer::collect_module_names(ast);
-    // 裸类型名 → 带它进作用域的模块键（重复 = 名字层歧义 ⇒ 整名跳过）
-    let mut scope: HashMap<String, String> = HashMap::new();
-    let mut conflicted: HashSet<String> = HashSet::new();
-    for (local, target, use_path) in &names.imported {
-        if local != target {
-            continue; // ② 内联别名：调用方写的裸名与定义侧前缀不同名
-        }
-        // use 路径必须命中注册表模块、且该模块确实导出这个名字（未解析导入 /
-        // 子模块名都不构成裸类型名）；查法与 checker 的 use 处理同表
-        let Some(exports) = registry.get_exports(use_path) else {
-            continue;
-        };
-        if !exports.contains_key(target) {
-            continue;
-        }
-        match scope.get(target) {
-            Some(existing) if existing != use_path => {
-                conflicted.insert(target.clone()); // ③ 同名被多模块带进作用域
-            }
-            Some(_) => {}
-            None => {
-                scope.insert(target.clone(), use_path.clone());
-            }
-        }
-    }
-    let own_keys: HashSet<String> = registry
-        .get(own_module_key)
-        .map(|module| module.method_overloads.keys().cloned().collect())
-        .unwrap_or_default();
-    // 名字 ← 提供模块**逐对**取候选：只有「键的提供模块 == 该类型名前缀的提供模块」
-    // 的候选组才进决议表（跨对组合会把别的模块的同名类型候选塞进来 ⇒ 2 候选 ⇒ E1107）。
-    // 名字升序 ⇒ 合并顺序确定（不同前缀的键互不相干）。
-    let mut pairs: Vec<(String, String)> = scope
-        .into_iter()
-        .filter(|(name, _)| !conflicted.contains(name))
-        .collect();
-    pairs.sort();
-    let mut merged: Vec<(String, MethodOverloadCandidates)> = Vec::new();
-    for (name, module) in pairs {
-        for (key, group) in registry.merge_method_overloads(&[module]) {
-            if own_keys.contains(&key) {
-                continue; // 自有定义优先：自有候选由本单元签名收集现场登记
-            }
-            if key
-                .split_once('.')
-                .is_some_and(|(type_name, _)| type_name == name)
-            {
-                merged.push((key, group));
-            }
-        }
-    }
-    merged
 }
 
 // ---------------------------------------------------------------------------

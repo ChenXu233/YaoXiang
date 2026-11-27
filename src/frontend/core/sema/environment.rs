@@ -8,6 +8,7 @@ use crate::frontend::core::types::eval::const_eval::ConstFunction;
 use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::frontend::module::symbol::DefPath;
 
+use super::import_face::ImportFace;
 use super::passes::overload;
 use super::types::ImportInfo;
 use crate::frontend::core::sema::proof::verdict::ProofFailure;
@@ -122,56 +123,92 @@ pub enum BaseKind {
     Unknown,
 }
 
-/// 定义侧方法重载候选的一个键位（RFC-029f 改进 4 / WBS 4.9.7 / issue #464）。
+/// 定义侧方法重载候选的**一个键位**（RFC-029f 改进 4 / WBS 4.9.7 / issue #464）。
 ///
-/// 打包而非三张平行表的理由：候选、混编 IR 名、声明期形参名是**同序**配对
-/// 不变式（调用点按候选序取名，定义侧按声明序混编）。跨单元传递若拆成三条
-/// 独立通路，任一条漏接或错序都会让调用名与定义名不再对应——这里让配对随值
-/// 一起走，注入侧只做**整组同序追加**。
+/// 键是方法身份 [`DefPath`]（WBS 4.9.10 D-1/D-2）：无模块类型投影
+/// `Type.method`，用户类型投影 `{module}.{Type}.{method}`。
+///
+/// 打包而非两张平行表的理由：候选与声明期形参名是**同序**配对不变式
+/// （调用点按候选序取名，定义侧按声明序混编）。跨单元传递若拆成两条独立通路，
+/// 任一条漏接或错序都会让调用名与定义名不再对应——这里让配对随值一起走，
+/// 注入侧只做**整组同序追加**。
+///
+/// 混编 IR 名不再单列一张平行表：`#序` 是**定义侧混编后缀**，由候选组内序
+/// （[`TypeEnvironment::method_ir_name`]）在需要时拼出，消费端用
+/// [`method_ordinal`] 从同一后缀读回序位。
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct MethodOverloadCandidates {
     /// 候选签名（定义侧声明序）
     pub candidates: Vec<MonoType>,
-    /// 与 `candidates` 同序的混编 IR 名（0 = 裸名 `{Type}.{method}`，其后 `#序`）
-    pub ir_names: Vec<String>,
     /// 与 `candidates` 同序的声明期形参名（不可得时为空表 = 不按名匹配）
     pub param_names: Vec<Vec<String>>,
 }
 
-impl MethodOverloadCandidates {
-    /// 同键位追加另一模块的候选组（候选组之间的**唯一**追加点：三向量同序追加）。
-    ///
-    /// 三向量等长是配对不变式（候选 ↔ 混编 IR 名 ↔ 声明期形参名）。不等长 ⇒ 合并
-    /// 结果必然错位，且错位是**静默**的（调用点会拿别人的名字派发）——debug 构建
-    /// （含全部 `cargo test`）在此当场响亮失败，不产出错位表。
-    pub fn merge_from(
-        &mut self,
-        other: &MethodOverloadCandidates,
-    ) {
-        debug_assert_eq!(
-            other.candidates.len(),
-            other.ir_names.len(),
-            "被并入的候选组自身必须等长（候选 {} / 混编名 {}）",
-            other.candidates.len(),
-            other.ir_names.len()
-        );
-        debug_assert_eq!(
-            other.candidates.len(),
-            other.param_names.len(),
-            "被并入的候选组自身必须等长（候选 {} / 形参名 {}）",
-            other.candidates.len(),
-            other.param_names.len()
-        );
-        self.candidates.extend(other.candidates.iter().cloned());
-        self.ir_names.extend(other.ir_names.iter().cloned());
-        self.param_names.extend(other.param_names.iter().cloned());
-        debug_assert_eq!(
-            self.candidates.len(),
-            self.ir_names.len(),
-            "合并后候选组必须保持等长（键位内的配对不得错位）"
-        );
+/// 方法身份的 IR 最终函数名（D-8）——**唯一**的生成实现。
+///
+/// 多文件 = [`DefPath::project`]（`{module}.{Type}.{method}`）；单文件 = 本单元
+/// 绑定无模块归属 ⇒ 投影即裸名。std 等外部模块在两种形态下都带模块键
+/// （注册表注入面一致），故不需要第二个分支。
+/// 0 号候选是裸名，其后追加 `#序`（定义侧混编后缀，读回见 [`method_ordinal`]）。
+pub fn method_ir_name(
+    key: &DefPath,
+    ordinal: usize,
+) -> String {
+    let projected = key.project();
+    if ordinal == 0 {
+        projected
+    } else {
+        format!("{projected}#{ordinal}")
     }
+}
 
+/// 定义侧混编名 → `(投影基名, 候选序位)`：**唯一**解析 `#序` 后缀的地方。
+///
+/// `#序` 是定义侧的**名字混编后缀**（同名重载候选按声明序区分），它是名字的
+/// 修饰，**不是** [`DefPath`] 的一段：投影只用点号连接「模块/归属/裸名」三段，
+/// 语法里没有 `#`。两个生成点各自唯一（[`method_ir_name`] 拼后缀、
+/// [`DefPath::project`] 拼投影），互不冒充。类型名与方法名都是标识符
+/// （不含点、不含 `#`），故末尾 `#` 之后必是十进制序位。
+pub fn split_definition_name(definition_name: &str) -> (&str, usize) {
+    match definition_name.rsplit_once('#') {
+        Some((base, digits))
+            if !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()) =>
+        {
+            match digits.parse::<usize>() {
+                Ok(ordinal) => (base, ordinal),
+                // 溢出等退化形态：整名当作基名（0 号候选），不猜序位
+                Err(_) => (definition_name, 0),
+            }
+        }
+        _ => (definition_name, 0),
+    }
+}
+
+/// 从定义侧混编名读回候选序位（生成点见 [`method_ir_name`]）。
+pub fn method_ordinal(
+    definition_name: &str,
+    key: &DefPath,
+) -> Option<usize> {
+    let (base, ordinal) = split_definition_name(definition_name);
+    (base == key.project()).then_some(ordinal)
+}
+
+/// IR 调用名 → 方法身份（投影索引查回 [`DefPath`]，混编后缀由
+/// [`split_definition_name`] 剥离）。
+///
+/// 跨单元通路上，消费端手里只有 typecheck 产出的 IR 最终函数名（D-8）：
+/// 形参名查表（lower `method_param_info`）与归因标记都要从**投影索引**读回
+/// 身份——只认本项目自己投影过的名字，不反解字符串分段。
+pub fn method_key_of_definition(
+    definition_name: &str,
+    symbols: &crate::frontend::module::symbol::SymbolTable,
+) -> Option<(DefPath, usize)> {
+    let (base, ordinal) = split_definition_name(definition_name);
+    let id = symbols.def_by_projection(base)?;
+    Some((symbols.path(id).clone(), ordinal))
+}
+
+impl MethodOverloadCandidates {
     /// 候选数
     pub fn len(&self) -> usize {
         self.candidates.len()
@@ -192,24 +229,38 @@ pub struct TypeEnvironment {
     /// 导入追踪 - 模块导入信息
     /// 包含源模块ID用于访问控制
     pub imports: Vec<ImportInfo>,
-    /// 方法绑定关系: "Type.method" -> FunctionType
-    /// 用于存储显式绑定（RFC-004 组合形态）
-    pub method_bindings: HashMap<String, MonoType>,
-    /// RFC-011b: 同名方法的重载候选表（"Type.method" -> 全部签名）。
-    /// `method_bindings` 是单值表，同键互相覆盖；接口实例化的完整性检查
+    /// 方法绑定关系：方法身份 → FunctionType（RFC-004 组合形态的显式绑定）。
+    ///
+    /// 键是 [DefPath]（用户类型带模块键、内建类型无模块归属），由
+    /// [Self::resolve_method_key] 唯一解析。此前按 `Type.method` 字符串键控：
+    /// 同名类型分属两个单元时字符串键互相覆盖（WBS 4.9.10 D-1/D-2）。
+    pub method_bindings: HashMap<DefPath, MonoType>,
+    /// RFC-011b: 同名方法的重载候选表（方法身份 → 候选组，定义侧声明序）。
+    ///
+    /// 单值表 `method_bindings` 的同键条目互相覆盖；接口实例化的完整性检查
     /// 需要「任一候选签名匹配」语义（同一类型的同名接口多实例化共存，
     /// 如 Grid 同时实现 Index(Grid, Int, V) 与 Index(Grid, Tuple(Int,Int), V)）。
-    pub method_overloads: HashMap<String, Vec<MonoType>>,
-    /// RFC-011a §3：重载候选的 IR 混编名（与 method_overloads 候选序一一对应）
-    pub method_overload_ir_names: HashMap<String, Vec<String>>,
-    /// RFC-011a §3：重载候选的**声明期形参名**（与 method_overloads 候选序一一对应，
-    /// 每项含接收者位 self；内层空表 = 声明期拿不到名字）。
     ///
-    /// 命名实参（#452）进入调用点决议的唯一名字来源：位置实参占前导槽位、
-    /// 命名实参按名入槽，两者落在同一槽位即冲突（不得静默择一）。名字拿不到
-    /// （形参数与候选签名对不齐、跨模块外部绑定）时**留空**——调用点据此退回
-    /// 「不按名匹配」，不伪装成「名字已核对」。
-    pub method_overload_param_names: HashMap<String, Vec<Vec<String>>>,
+    /// 候选组携带声明期形参名（#452）——命名实参进入调用点决议的唯一名字来源：
+    /// 位置实参占前导槽位、命名实参按名入槽，两者落在同一槽位即冲突（不得静默
+    /// 择一）。名字拿不到（形参数与候选签名对不齐、跨模块外部绑定）时**留空**，
+    /// 调用点据此退回「不按名匹配」，不伪装成「名字已核对」。
+    pub method_overloads: HashMap<DefPath, MethodOverloadCandidates>,
+    /// 本单元的模块键（D-4）：用户声明类型的身份前缀。
+    ///
+    /// 单文件形态为空串（与 lower 的 `module_key` 开关同源）：路径没有模块归属，
+    /// 投影就是扁平名 `Type.method`——与既有 IR 函数表逐字相同。
+    pub unit_key: String,
+    /// 本单元是否按模块键限定方法身份（D-8）：多文件 = true，单文件 = false。
+    ///
+    /// 由 driver 与 lower 从**同一个**形态判定得到（都读单元键是否存在），
+    /// 不在两处各判一次。
+    pub qualify_methods: bool,
+    /// 导入面（D-5）：类型名 → 提供模块，加整体导入的命名空间前缀。
+    ///
+    /// 由 [Self::install_import_face] 在 `check_module` 入口建一次；
+    /// 方法身份的所有构造点都只经 [Self::resolve_method_key] 问它。
+    pub import_face: ImportFace,
     /// RFC-011a: 已通过的接口实现证明（编译期，运行时擦除）
     pub implementation_proofs: Vec<ImplementationProof>,
     /// RFC-011b: 接口实现登记表（接口名 → 实例化条目，带类型实参维度）。
@@ -272,8 +323,12 @@ impl TypeEnvironment {
     }
 
     /// 创建新的类型环境（带模块名）
+    ///
+    /// `unit_key` 默认等于 `module_name`（D-4）；多文件入口由 driver 显式改写成
+    /// 单元键，单文件入口把 `qualify_methods` 保持 false（本单元绑定无模块归属）。
     pub fn new_with_module(module_name: String) -> Self {
         Self {
+            unit_key: module_name.clone(),
             module_name,
             trait_table: crate::frontend::core::types::TraitTable::default(),
             module_registry: crate::frontend::module::registry::ModuleRegistry::with_std(),
@@ -284,10 +339,35 @@ impl TypeEnvironment {
     /// RFC-011b: 登记方法重载候选（同签名去重）
     pub fn add_method_overload(
         &mut self,
-        key: &str,
+        type_name: &str,
+        method_name: &str,
         ty: MonoType,
     ) -> Option<String> {
-        self.add_method_overload_with_params(key, ty, Vec::new())
+        self.add_method_overload_with_params(type_name, method_name, ty, Vec::new())
+    }
+
+    /// 方法身份的**唯一解析入口**（D-1/D-2/D-5/D-7）：委托导入面的同一实现。
+    pub fn resolve_method_key(
+        &self,
+        written_type: &str,
+        method: &str,
+    ) -> Option<DefPath> {
+        self.import_face.method_key(written_type, method)
+    }
+
+    /// 建导入面（D-5）：`check_module` 入口一次。
+    pub fn install_import_face(
+        &mut self,
+        ast: &crate::ast::Module,
+    ) {
+        // 单文件形态（`qualify_methods == false`）没有模块键：本单元类型按
+        // 无模块归属落表，投影即扁平名——与 lower 的同名开关同源。
+        let own_module = if self.qualify_methods {
+            self.unit_key.clone()
+        } else {
+            String::new()
+        };
+        self.import_face = ImportFace::build(ast, &self.module_registry, &own_module);
     }
 
     /// RFC-011a §3 / #452：登记方法重载候选**并携带其声明期形参名**。
@@ -295,158 +375,121 @@ impl TypeEnvironment {
     /// 形参名是命名实参进入调用点决议的唯一依据（位置实参占前导槽位、命名实参
     /// 按名入槽）。名字长度与候选签名对不齐时**留空**——调用点退回「不按名匹配」，
     /// 宁可不匹配也不拿错位的名字去匹配（错位比缺失更危险）。
+    ///
+    /// 返回该方法身份在 IR 函数表里的名字（0 号候选裸名、其后 `#序`），供定义侧
+    /// 登记「声明身份 → 名字」；无身份（D-7）时返回 None 且不落表。
     pub fn add_method_overload_with_params(
         &mut self,
-        key: &str,
+        type_name: &str,
+        method_name: &str,
         ty: MonoType,
         param_names: Vec<String>,
     ) -> Option<String> {
+        let key = self.resolve_method_key(type_name, method_name)?;
         // 形参名必须与候选签名逐一对应；对不齐视为「这个名字的来源不可信」。
         let param_names = match &ty {
             MonoType::Fn { params, .. } if params.len() == param_names.len() => param_names,
             _ => Vec::new(),
         };
         // 同签名去重（RFC-011b 原口径）：已登记过同一签名 ⇒ 不占新声明序
-        if self
-            .method_overloads
-            .get(key)
-            .is_some_and(|list| list.contains(&ty))
-        {
-            return None;
-        }
-        // RFC-011a §3：重载候选的 IR 混编名（注册序，0=裸名）——
-        // 定义名与调用名同源（7c.3：定义侧按声明 PlanId 只读取名，调用点按决议名派发）
-        let ordinal = self.method_overloads.get(key).map_or(0, Vec::len);
-        let ir_name = if ordinal == 0 {
-            key.to_string()
-        } else {
-            format!("{key}#{ordinal}")
+        let ordinal = match self.method_overloads.get(&key) {
+            Some(group) if group.candidates.contains(&ty) => return None,
+            Some(group) => group.candidates.len(),
+            None => 0,
         };
-        // 三张平行表经**唯一写入点**落表（顺序/配对规则只有一份）
+        let ir_name = method_ir_name(&key, ordinal);
+        // 候选表的唯一写入点（顺序/配对规则只有一份）
         self.append_overload_group(
             key,
             MethodOverloadCandidates {
                 candidates: vec![ty],
-                ir_names: vec![ir_name.clone()],
                 param_names: vec![param_names],
             },
         );
-        // 7c.3：把同一处算出的混编名交还调用方登记「定义身份 → 混编名」
-        // （typecheck 产出的唯一权威映射），IR 生成只读消费、不再按定义序二次推导。
+        // 把同一处算出的名字交还调用方登记「声明身份 → 名字」（typecheck 产出的
+        // 唯一权威映射），IR 生成只读消费、不再按定义序二次推导。
         Some(ir_name)
     }
 
-    /// 定义侧候选表的**快照**（键升序）：跨单元方法调用的决议输入
+    /// 定义侧候选表的**快照**：跨单元方法调用的决议输入
     /// （RFC-029f 改进 4 / WBS 4.9.7 / issue #464）。
     ///
-    /// 返回有序 `Vec` 而非 `HashMap`：跨单元合并的确定性从这一层起——
-    /// 模块内按定义序、模块间按模块键序，HashMap 迭代序不外泄。
-    pub fn method_overload_snapshot(&self) -> Vec<(String, MethodOverloadCandidates)> {
-        let mut keys: Vec<&String> = self.method_overloads.keys().collect();
-        keys.sort();
-        keys.into_iter()
-            .map(|key| {
-                let candidates = self.method_overloads.get(key).cloned().unwrap_or_default();
-                let ir_names = self
-                    .method_overload_ir_names
-                    .get(key)
-                    .cloned()
-                    .unwrap_or_default();
-                let param_names = self
-                    .method_overload_param_names
-                    .get(key)
-                    .cloned()
-                    .unwrap_or_default();
-                // 快照是跨单元通路的出口：三表不等长在这里当场响亮失败，不让错位的
-                // 「候选 ↔ 名字」配对流到别的编译单元（配对不变式的最后一道闸）
+    /// 键是方法身份：不同模块的同名类型各占一条路径，合并无覆盖、与 HashMap
+    /// 迭代序无关——确定性来自身份，不来自排序。
+    pub fn method_overload_snapshot(&self) -> Vec<(DefPath, MethodOverloadCandidates)> {
+        self.method_overloads
+            .iter()
+            .map(|(key, group)| {
+                // 快照是跨单元通路的出口：配对不变式在这里再响一次，不让错位的
+                // 「候选 ↔ 形参名」配对流到别的编译单元。
                 debug_assert_eq!(
-                    candidates.len(),
-                    ir_names.len(),
-                    "快照三表必须等长（键 {key}：候选 {} / 混编名 {}）",
-                    candidates.len(),
-                    ir_names.len()
+                    group.candidates.len(),
+                    group.param_names.len(),
+                    "快照候选组必须等长（键 {}：候选 {} / 形参名 {}）",
+                    key.project(),
+                    group.candidates.len(),
+                    group.param_names.len()
                 );
-                debug_assert_eq!(
-                    candidates.len(),
-                    param_names.len(),
-                    "快照三表必须等长（键 {key}：候选 {} / 形参名 {}）",
-                    candidates.len(),
-                    param_names.len()
-                );
-                (
-                    key.clone(),
-                    MethodOverloadCandidates {
-                        candidates,
-                        ir_names,
-                        param_names,
-                    },
-                )
+                (key.clone(), group.clone())
             })
             .collect()
     }
 
-    /// 注入跨模块的方法重载候选（WBS 4.9.7 / #464）：三张平行表**同序**追加。
-    ///
-    /// 与 `add_method_overload_with_params` 同源维护配对不变式——两处若各写
-    /// 一套追加逻辑，正是「候选 ↔ 名字」配对分叉的入口（禁令三）。
+    /// 注入跨模块的方法重载候选（WBS 4.9.7 / #464 / 4.9.10 D-1）：
+    /// 键是方法身份，注入只是把**别的单元**的候选组按各自路径落表——
+    /// 与自有候选不会撞键（同名类型分属两单元也各有路径），无需作用域裁剪。
     pub fn inject_method_overloads(
         &mut self,
-        table: Vec<(String, MethodOverloadCandidates)>,
+        table: Vec<(DefPath, MethodOverloadCandidates)>,
     ) {
         for (key, group) in table {
-            self.append_overload_group(&key, group);
+            self.append_overload_group(key, group);
         }
     }
 
-    /// 把一组候选**同序展开**进三张平行表——三张表**唯一**的写入点。
+    /// 把一组候选**同序展开**进候选表——候选表**唯一**的写入点。
     ///
     /// 声明期登记（[Self::add_method_overload_with_params]）与跨单元注入
     /// （[Self::inject_method_overloads]）都经此处落表：顺序/配对规则只有一份，
-    /// 两处各写一套「push candidate、push ir_name、push param_names」正是配对
-    /// 分叉的入口（禁令三）。落表前校验三向量等长（debug 构建响亮失败）。
+    /// 两处各写一套「push candidate、push param_names」正是配对分叉的入口（禁令三）。
+    /// 落表前校验两向量等长（debug 构建响亮失败）。
     fn append_overload_group(
         &mut self,
-        key: &str,
+        key: DefPath,
         group: MethodOverloadCandidates,
     ) {
         let MethodOverloadCandidates {
             candidates,
-            ir_names,
             param_names,
         } = group;
         debug_assert_eq!(
             candidates.len(),
-            ir_names.len(),
-            "落表三表必须等长（键 {key}：候选 {} / 混编名 {}）",
-            candidates.len(),
-            ir_names.len()
-        );
-        debug_assert_eq!(
-            candidates.len(),
             param_names.len(),
-            "落表三表必须等长（键 {key}：候选 {} / 形参名 {}）",
+            "落表候选组必须等长（键 {}：候选 {} / 形参名 {}）",
+            key.project(),
             candidates.len(),
             param_names.len()
         );
-        self.method_overloads
-            .entry(key.to_string())
-            .or_default()
-            .extend(candidates);
-        self.method_overload_ir_names
-            .entry(key.to_string())
-            .or_default()
-            .extend(ir_names);
-        self.method_overload_param_names
-            .entry(key.to_string())
-            .or_default()
-            .extend(param_names);
+        let entry = self.method_overloads.entry(key).or_default();
+        entry.candidates.extend(candidates);
+        entry.param_names.extend(param_names);
     }
 
-    /// RFC-011b: 查方法重载候选
+    /// RFC-011b: 查方法重载候选（键是方法身份）
     pub fn get_method_overloads(
         &self,
-        key: &str,
+        key: &DefPath,
     ) -> Option<&Vec<MonoType>> {
+        self.method_overloads
+            .get(key)
+            .map(|group| &group.candidates)
+    }
+
+    /// 方法身份 → 候选组（决议点要候选签名 + 声明期形参名**同序**读）
+    pub fn overload_group(
+        &self,
+        key: &DefPath,
+    ) -> Option<&MethodOverloadCandidates> {
         self.method_overloads.get(key)
     }
 
@@ -810,25 +853,29 @@ impl TypeEnvironment {
         }
     }
 
-    /// 添加方法绑定
-    /// 例如: Point.distance = distance 存储为 "Point.distance" -> fn_type
+    /// 添加方法绑定（键由 [Self::resolve_method_key] 定身份）
+    ///
+    /// 例如 `Point.distance = distance` 在 `lib` 单元里落成
+    /// `lib.Point.distance` → fn_type；无身份（D-7 歧义名）时不落表。
     pub fn add_method_binding(
         &mut self,
         type_name: &str,
         method_name: &str,
         fn_type: MonoType,
     ) {
-        let key = format!("{}.{}", type_name, method_name);
+        let Some(key) = self.resolve_method_key(type_name, method_name) else {
+            return;
+        };
         self.method_bindings.insert(key, fn_type);
     }
 
-    /// 获取方法绑定
+    /// 获取方法绑定（键与 [Self::add_method_binding] 同一解析入口）
     pub fn get_method_binding(
         &self,
         type_name: &str,
         method_name: &str,
     ) -> Option<&MonoType> {
-        let key = format!("{}.{}", type_name, method_name);
+        let key = self.resolve_method_key(type_name, method_name)?;
         self.method_bindings.get(&key)
     }
 

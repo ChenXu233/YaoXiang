@@ -289,6 +289,13 @@ pub struct OperatorDispatch {
     pub type_name: String,
     /// 派发方法名（如 "equal"）
     pub method: String,
+    /// **IR 最终函数名**（WBS 4.9.10 D-8）：`{module}.{Type}.{method}` 或单文件裸名。
+    ///
+    /// 由 typecheck 在记录派发点时按接收者**身份**（D-6）定名——IR 生成直接用它，
+    /// 不再在 lower 侧按短名二次查表（那等于按名字猜单元）。与 `type_name`/
+    /// `method` 的分工：后两者是**归因**口径（W1005 名字组、泛型特化展开），
+    /// 本条是**调用名**口径（D-8：必须是 IR 函数表里真实存在的名字）。
+    pub dispatch_name: String,
     /// 结果取反（`!=` 派发到 equal 后需 Not）
     pub negate: bool,
 }

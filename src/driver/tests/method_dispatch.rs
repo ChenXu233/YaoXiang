@@ -150,7 +150,8 @@ fn test_cross_unit_distinct_type_names_keep_their_own_dispatch() {
 ///
 /// 红态（修复前实测）：两单元同名 `Temp` 各实现 `Index` / `Equal`，入口经内联别名引入 b
 /// ⇒ `u[0]` 得 3.0（应 20.0）、`u == t` 得 true（应 false）——两臂拼调用名时用的是
-/// typecheck 过来的**短类型名**，不经 `method_dispatch_name`。
+/// typecheck 过来的**短类型名**（不经接收者身份，WBS 4.9.10 后由
+/// `OperatorDispatch::dispatch_name` 一次定死）。
 #[test]
 fn test_cross_unit_same_named_type_operator_arms_dispatch_use_defining_unit() {
     // Arrange：两单元同名类型各带 Index / Equal 实现，实现可区分（a = v+1/true、b = v*10/false）

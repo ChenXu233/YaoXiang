@@ -29,6 +29,7 @@ mod tests;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+use self::symbol::DefPath;
 use crate::frontend::core::sema::environment::MethodOverloadCandidates;
 use crate::frontend::core::types::mono::MonoType;
 use crate::util::span::Span;
@@ -215,19 +216,22 @@ pub struct ModuleInfo {
     pub source: ModuleSource,
     /// 导出项（name -> Export）
     pub exports: HashMap<String, Export>,
-    /// 方法绑定（"Type.method" -> 函数类型）。
+    /// 方法绑定（方法身份 → 函数类型）。
     /// RFC-029：跨文件方法调用解析——导入一个类型时也带来它的方法签名。
-    pub method_bindings: HashMap<String, MonoType>,
-    /// 方法**重载候选**表（"Type.method" -> 候选组，定义侧声明序）。
+    ///
+    /// 键是 [`crate::frontend::module::symbol::DefPath`]（WBS 4.9.10 D-1/D-2）：
+    /// 用户类型带模块键、内建类型无模块归属；同名类型分属两个单元时各有路径，
+    /// 合并不会互相覆盖。
+    pub method_bindings: HashMap<DefPath, MonoType>,
+    /// 方法**重载候选**表（方法身份 → 候选组，定义侧声明序）。
     /// RFC-029f 改进 4 / WBS 4.9.7（issue #464）：`method_bindings` 是单值表
     /// （同名多定义互相覆盖），跨单元的方法调用决议需要**逐候选的有序表**；
-    /// 本字段是它跨单元通路的载体（模块键 → 候选组的选择性合并见
-    /// [`registry::ModuleRegistry::merge_method_overloads`]）。
+    /// 本字段是它跨单元通路的载体（注入面 = 注册表全部模块除本单元）。
     ///
     /// 由签名收集一趟产出（`orchestrator::extract_module_info`），与
     /// `method_bindings` 同一处导出；std 模块的构造路径不填此表（候选面
     /// 当前只覆盖用户单元，WBS 4.9.7 的登记边界）。
-    pub method_overloads: HashMap<String, MethodOverloadCandidates>,
+    pub method_overloads: HashMap<DefPath, MethodOverloadCandidates>,
     /// **纯 yx 实现**的导出名集（RFC-036 §4）：该模块里由嵌入 YaoXiang 源
     /// （`crate::std::yx_sources` 的 `STD_YX_FILES`）**定义**的导出。
     ///

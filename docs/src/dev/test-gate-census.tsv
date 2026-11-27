@@ -221,7 +221,7 @@ test_release_plan_unconsumed_is_reported_loudly	src/driver/tests/obligations.rs	
 test_release_plan_unconsumed_is_reported_in_check_kind	src/driver/tests/obligations.rs	matchesx1 assertx2 expectx1 helperx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_cross_unit_injection_filters_candidates_by_name_owner	src/driver/tests/overload_injection.rs	assertx2 is_nonex1 expectx1 helperx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_cross_unit_injection_distinct_method_names_stay_green	src/driver/tests/overload_injection.rs	assertx1 expectx1 helperx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
-test_method_overload_triple_stays_aligned_across_registration_and_injection	src/driver/tests/overload_injection.rs	assert_eqx6	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_method_overload_triple_stays_aligned_across_registration_and_injection	src/driver/tests/overload_injection.rs	assert_eqx7	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_program_stage_coverage	src/driver/tests/program.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_program_kind_default_aggregation	src/driver/tests/program.rs	matchesx2 assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_program_with_aggregation_override	src/driver/tests/program.rs	assert_eqx1 matchesx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
@@ -1465,8 +1465,8 @@ test_compare_version_identical_versions_are_equal	src/frontend/module/orchestrat
 test_resolve_in_vendor_prefers_release_over_prerelease	src/frontend/module/orchestrator/tests/vendor_version_resolution.rs	assertx1 expectx4	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_resolve_in_vendor_picks_highest_numeric_version	src/frontend/module/orchestrator/tests/vendor_version_resolution.rs	assertx1 expectx4	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 std_result_merged_surface	src/frontend/module/registry.rs	assertx5 expectx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
-merge_method_overloads_is_deterministic_and_scoped	src/frontend/module/registry.rs	assert_eqx4 assertx1 expectx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
-test_all_method_bindings_merge_is_deterministic_across_hash_seeds	src/frontend/module/registry.rs	assert_eqx1 expectx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
+injectable_method_overloads_keeps_same_name_types_distinct	src/frontend/module/registry.rs	assert_eqx6 assert_nex1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_all_method_bindings_keeps_same_name_types_of_two_modules	src/frontend/module/registry.rs	assert_eqx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 register_interns_exports_and_methods	src/frontend/module/registry.rs	assert_eqx6 assertx1 expectx4	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 register_is_idempotent_for_symbols	src/frontend/module/registry.rs	assert_eqx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 with_std_interns_std_exports	src/frontend/module/registry.rs	assert_eqx1 assertx1 is_somex1 unwrapx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
