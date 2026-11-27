@@ -1076,3 +1076,156 @@ fn test_native_string_mixed_comparison_is_rejected_with_location() {
         "rejection must name both operand types: {detail}"
     );
 }
+
+fn int_value_info(block: usize) -> ValueInfo {
+    ValueInfo {
+        ty: MonoType::Int(64),
+        debug_name: None,
+        defining_block: block,
+    }
+}
+
+#[test]
+fn test_native_int_bitwise_operands_are_accepted() {
+    // Arrange：And/Or/Xor 两侧 Int → Int（批次 4.2；按位语义，不检查值范围）。
+    let function = base_function(
+        MonoType::Int(64),
+        vec![
+            int_value_info(0),
+            int_value_info(0),
+            int_value_info(0),
+            int_value_info(0),
+            int_value_info(0),
+        ],
+        vec![
+            load_value(0, Operand::Const(ConstValue::Int(6))),
+            load_value(1, Operand::Const(ConstValue::Int(2))),
+            Instruction::And {
+                dst: Operand::Value(ValueId(2)),
+                lhs: Operand::Value(ValueId(0)),
+                rhs: Operand::Value(ValueId(1)),
+                span: at(2, 5),
+            },
+            Instruction::Or {
+                dst: Operand::Value(ValueId(3)),
+                lhs: Operand::Value(ValueId(0)),
+                rhs: Operand::Value(ValueId(1)),
+                span: at(3, 5),
+            },
+            Instruction::Xor {
+                dst: Operand::Value(ValueId(4)),
+                lhs: Operand::Value(ValueId(0)),
+                rhs: Operand::Value(ValueId(1)),
+                span: at(4, 5),
+            },
+            ret_value(4),
+        ],
+    );
+    let module = module_with(function);
+
+    // Act
+    let analysis = analyze_module(&module, "int_bitwise.yx")
+        .expect("Int bitwise operands should be inside the support set");
+
+    // Assert
+    assert_eq!(
+        analysis.functions["f"].values[4],
+        MonoType::Int(64),
+        "bitwise result must be an Int value"
+    );
+}
+
+#[test]
+fn test_native_shift_operands_are_accepted() {
+    // Arrange：Shl/Shr/Sar 两侧 Int → Int（批次 4.2；越界只由运行时失败路径报错）。
+    let function = base_function(
+        MonoType::Int(64),
+        vec![
+            int_value_info(0),
+            int_value_info(0),
+            int_value_info(0),
+            int_value_info(0),
+            int_value_info(0),
+        ],
+        vec![
+            load_value(0, Operand::Const(ConstValue::Int(1024))),
+            load_value(1, Operand::Const(ConstValue::Int(2))),
+            Instruction::Shl {
+                dst: Operand::Value(ValueId(2)),
+                lhs: Operand::Value(ValueId(0)),
+                rhs: Operand::Value(ValueId(1)),
+                span: at(2, 5),
+            },
+            Instruction::Shr {
+                dst: Operand::Value(ValueId(3)),
+                lhs: Operand::Value(ValueId(0)),
+                rhs: Operand::Value(ValueId(1)),
+                span: at(3, 5),
+            },
+            Instruction::Sar {
+                dst: Operand::Value(ValueId(4)),
+                lhs: Operand::Value(ValueId(0)),
+                rhs: Operand::Value(ValueId(1)),
+                span: at(4, 5),
+            },
+            ret_value(4),
+        ],
+    );
+    let module = module_with(function);
+
+    // Act
+    let analysis = analyze_module(&module, "int_shift.yx")
+        .expect("Int shift operands should be inside the support set");
+
+    // Assert
+    assert_eq!(
+        analysis.functions["f"].values[4],
+        MonoType::Int(64),
+        "shift result must be an Int value"
+    );
+}
+
+#[test]
+fn test_native_shift_mixed_operand_is_rejected_with_location() {
+    // Arrange：Int 与 Bool 混型的移位必须带位置拒绝。
+    let function = base_function(
+        MonoType::Int(64),
+        vec![
+            int_value_info(0),
+            ValueInfo {
+                ty: MonoType::Bool,
+                debug_name: None,
+                defining_block: 0,
+            },
+            int_value_info(0),
+        ],
+        vec![
+            load_value(0, Operand::Const(ConstValue::Int(1))),
+            load_value(1, Operand::Const(ConstValue::Bool(true))),
+            Instruction::Shl {
+                dst: Operand::Value(ValueId(2)),
+                lhs: Operand::Value(ValueId(0)),
+                rhs: Operand::Value(ValueId(1)),
+                span: at(5, 11),
+            },
+            ret_value(2),
+        ],
+    );
+    let module = module_with(function);
+
+    // Act
+    let error = analyze_module(&module, "shift_mixed.yx")
+        .err()
+        .expect("mixed Int/Bool shift must be rejected");
+
+    // Assert
+    let detail = error.to_string();
+    assert!(
+        detail.contains("shift_mixed.yx:5:11"),
+        "rejection must carry the source location: {detail}"
+    );
+    assert!(
+        detail.contains("Int") && detail.contains("Bool"),
+        "rejection must name both operand types: {detail}"
+    );
+}

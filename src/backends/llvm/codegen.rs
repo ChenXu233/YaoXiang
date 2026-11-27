@@ -65,6 +65,8 @@ struct RuntimeFunctions<'ctx> {
     str_eq: FunctionValue<'ctx>,
     /// `i64(i8*, i64, i8*, i64)`：字节字典序，返回 -1/0/1。
     str_cmp: FunctionValue<'ctx>,
+    /// `void(location)`：位移量越界的失败入口（E6007 + 位置，noreturn）。
+    shift_overflow: FunctionValue<'ctx>,
 }
 
 pub(super) struct Emitter<'ctx> {
@@ -259,6 +261,9 @@ impl<'ctx> Emitter<'ctx> {
                     .append_basic_block(function_value, &format!("bb{}", block.label)),
             );
         }
+        // 每个 IR 块当前的「发射出口」：受检移位的守卫会把块切成 ok/fail/rest
+        // 三段，出口随之变成 rest；后继块的 Phi incoming 必须登记真实出口。
+        let mut block_exit = llvm_blocks.clone();
         let mut label_to_ordinal = HashMap::with_capacity(blocks.len());
         for (ordinal, block) in blocks.iter().enumerate() {
             label_to_ordinal.insert(block.label, ordinal);
@@ -433,13 +438,17 @@ impl<'ctx> Emitter<'ctx> {
                         break;
                     }
                     _ => {
-                        if self.emit_instruction(
+                        let (flow_terminated, split_exit) = self.emit_instruction(
                             &mut locals,
                             &mut values,
                             signature,
                             instruction,
                             analysis,
-                        )? {
+                        )?;
+                        if let Some(exit) = split_exit {
+                            block_exit[ordinal] = exit;
+                        }
+                        if flow_terminated {
                             terminated = true;
                             break;
                         }
@@ -460,8 +469,8 @@ impl<'ctx> Emitter<'ctx> {
             }
             self.emit_phi_incoming(
                 ordinal,
+                block_exit[ordinal],
                 blocks,
-                &llvm_blocks,
                 &label_to_ordinal,
                 &block_phis,
                 &locals,
@@ -472,6 +481,8 @@ impl<'ctx> Emitter<'ctx> {
         Ok(())
     }
 
+    /// 发射一条指令。返回 `(是否终结当前块, 新的发射出口块)`：受检移位会把
+    /// 当前块切成 ok/fail/rest 三段，出口块随之改变（见 `emit_checked_shift`）。
     fn emit_instruction(
         &mut self,
         mut locals: &mut HashMap<usize, Slot<'ctx>>,
@@ -479,7 +490,8 @@ impl<'ctx> Emitter<'ctx> {
         signature: &OwnedSignature,
         instruction: &Instruction,
         analysis: &FunctionAnalysis,
-    ) -> Result<bool> {
+    ) -> Result<(bool, Option<LlvmBlock<'ctx>>)> {
+        let mut split_exit: Option<LlvmBlock<'ctx>> = None;
         match instruction {
             Instruction::Move { dst, src, .. }
             | Instruction::Load { dst, src, .. }
@@ -715,6 +727,92 @@ impl<'ctx> Emitter<'ctx> {
                     )?;
                 }
             }
+            Instruction::And { dst, lhs, rhs, .. }
+            | Instruction::Or { dst, lhs, rhs, .. }
+            | Instruction::Xor { dst, lhs, rhs, .. } => {
+                // 位运算按二进制补码逐位处理，不做值范围检查（与 VM 同一语义）。
+                let left = self
+                    .read(&locals, values, lhs, analysis)?
+                    .repr
+                    .ok_or_else(|| anyhow!("bitwise operand has no LLVM value"))?
+                    .into_int_value();
+                let right = self
+                    .read(&locals, values, rhs, analysis)?
+                    .repr
+                    .ok_or_else(|| anyhow!("bitwise operand has no LLVM value"))?
+                    .into_int_value();
+                let bits = match instruction {
+                    Instruction::And { .. } => {
+                        llvm(self.builder.build_and(left, right, "bitwise.and"))?
+                    }
+                    Instruction::Or { .. } => {
+                        llvm(self.builder.build_or(left, right, "bitwise.or"))?
+                    }
+                    Instruction::Xor { .. } => {
+                        llvm(self.builder.build_xor(left, right, "bitwise.xor"))?
+                    }
+                    _ => unreachable!(),
+                };
+                self.write(
+                    &mut *locals,
+                    values,
+                    dst,
+                    Value {
+                        ty: ScalarType::Int,
+                        repr: Some(bits.into()),
+                    },
+                    analysis,
+                )?;
+            }
+            Instruction::Shl {
+                dst,
+                lhs,
+                rhs,
+                span,
+                ..
+            }
+            | Instruction::Shr {
+                dst,
+                lhs,
+                rhs,
+                span,
+                ..
+            }
+            | Instruction::Sar {
+                dst,
+                lhs,
+                rhs,
+                span,
+                ..
+            } => {
+                let left = self
+                    .read(&locals, values, lhs, analysis)?
+                    .repr
+                    .ok_or_else(|| anyhow!("shift lhs has no LLVM value"))?
+                    .into_int_value();
+                let right = self
+                    .read(&locals, values, rhs, analysis)?
+                    .repr
+                    .ok_or_else(|| anyhow!("shift rhs has no LLVM value"))?
+                    .into_int_value();
+                let (shifted, exit) = self.emit_checked_shift(
+                    left,
+                    right,
+                    matches!(instruction, Instruction::Shl { .. }),
+                    *span,
+                )?;
+                split_exit = Some(exit);
+                self.write(
+                    &mut *locals,
+                    values,
+                    dst,
+                    Value {
+                        ty: ScalarType::Int,
+                        repr: Some(shifted.into()),
+                    },
+                    analysis,
+                )?;
+            }
             Instruction::Drop { .. } => {
                 // AOT-1 的标量与只读字符串常量没有析构义务。
             }
@@ -726,7 +824,77 @@ impl<'ctx> Emitter<'ctx> {
             }
             other => bail!("unsupported instruction reached LLVM emission: {other:?}"),
         }
-        Ok(matches!(instruction, Instruction::Ret { .. }))
+        Ok((matches!(instruction, Instruction::Ret { .. }), split_exit))
+    }
+
+    /// 受检移位（批次 4.2）：位移量先截断成 `u32`（与 VM 的 `b as u32` 同口径），
+    /// 只有 `< 64` 才发射 `shl`/`ashr`；越界进入带位置的运行时失败块（E6007），
+    /// 不静默 wrap。`Shr` 与 `Sar` 都发射算术右移——VM 的 `>>` 现状即算术，
+    /// 两条变体的语义分歧见设计文档「支持集」注记。
+    ///
+    /// 守卫把当前块切成三段：`shift.ok`（移位）→ `shift.rest`（本 IR 块的余下
+    /// 指令与新出口）、`shift.fail`（失败入口 + `unreachable`）。调用方必须把
+    /// 返回的出口块登记到 IR 块的发射出口上，否则后继块的 Phi incoming 会登记错
+    /// 前驱。
+    fn emit_checked_shift(
+        &mut self,
+        lhs: inkwell::values::IntValue<'ctx>,
+        rhs: inkwell::values::IntValue<'ctx>,
+        is_left: bool,
+        span: Span,
+    ) -> Result<(inkwell::values::IntValue<'ctx>, LlvmBlock<'ctx>)> {
+        let function = self
+            .builder
+            .get_insert_block()
+            .and_then(|block| block.get_parent())
+            .ok_or_else(|| anyhow!("shift guard needs an enclosing function"))?;
+        let amount = llvm(self.builder.build_int_truncate(
+            rhs,
+            self.context.i32_type(),
+            "shift.amount",
+        ))?;
+        let in_range = llvm(self.builder.build_int_compare(
+            IntPredicate::ULT,
+            amount,
+            self.context.i32_type().const_int(64, false),
+            "shift.in_range",
+        ))?;
+        let ok_block = self.context.append_basic_block(function, "shift.ok");
+        let fail_block = self.context.append_basic_block(function, "shift.fail");
+        let rest_block = self.context.append_basic_block(function, "shift.rest");
+        llvm(
+            self.builder
+                .build_conditional_branch(in_range, ok_block, fail_block),
+        )?;
+
+        self.builder.position_at_end(ok_block);
+        let amount = llvm(self.builder.build_int_z_extend(
+            amount,
+            self.context.i64_type(),
+            "shift.amount.i64",
+        ))?;
+        let shifted = if is_left {
+            llvm(self.builder.build_left_shift(lhs, amount, "shift.value"))?
+        } else {
+            // `sign_extend = true` 即算术右移：VM 的 >> 现状是算术右移，
+            // Shr 与 Sar 两条变体都按它发射（语义分歧见设计文档支持集注记）。
+            llvm(
+                self.builder
+                    .build_right_shift(lhs, amount, true, "shift.value"),
+            )?
+        };
+        llvm(self.builder.build_unconditional_branch(rest_block))?;
+
+        self.builder.position_at_end(fail_block);
+        let args = self.location_args(span)?;
+        llvm(
+            self.builder
+                .build_call(self.runtime.shift_overflow, &args, ""),
+        )?;
+        llvm(self.builder.build_unreachable())?;
+
+        self.builder.position_at_end(rest_block);
+        Ok((shifted, rest_block))
     }
 
     fn emit_assert(
@@ -949,6 +1117,9 @@ impl<'ctx> Emitter<'ctx> {
 
     /// 在前驱块发射完终结指令后，把这条边登记到后继块的 Phi incoming。
     ///
+    /// `from` 是该 IR 块的**发射出口**：受检移位的守卫把块切成多段后，真实
+    /// 分支指令在出口块而不在块首，Phi incoming 必须登记出口块。
+    ///
     /// `incoming` 的键是 IR 块 label，源值在前驱出口已全部可用。显式未知的
     /// incoming（生产端 `Load Void` 物化）没有具体类型证据；分析层只放行没有
     /// 使用点的合并值（live 合并值带位置拒绝），所以这里按 Phi 的 dst 类型物化
@@ -957,15 +1128,14 @@ impl<'ctx> Emitter<'ctx> {
     fn emit_phi_incoming(
         &mut self,
         from_ordinal: usize,
+        from: LlvmBlock<'ctx>,
         blocks: &[BasicBlock],
-        llvm_blocks: &[LlvmBlock<'ctx>],
         label_to_ordinal: &HashMap<usize, usize>,
         block_phis: &[Vec<PhiSlot<'ctx>>],
         locals: &HashMap<usize, Slot<'ctx>>,
         values: &HashMap<u32, Value<'ctx>>,
         analysis: &FunctionAnalysis,
     ) -> Result<()> {
-        let from = llvm_blocks[from_ordinal];
         let predecessor_label = blocks[from_ordinal].label;
         for successor_label in &blocks[from_ordinal].successors {
             let Some(&to_ordinal) = label_to_ordinal.get(successor_label) else {
@@ -1160,6 +1330,14 @@ fn declare_runtime<'ctx>(
         ),
         None,
     );
+    // 受检移位的失败入口：只带位置参数，运行期 noreturn。
+    let shift_overflow = module.add_function(
+        "__yx_rt_shift_overflow",
+        context
+            .void_type()
+            .fn_type(&[location[0], location[1], location[2], location[3]], false),
+        None,
+    );
     // 字符串比较：两个 `{ptr, len}` 按值展开成四个标量参数，返回 i64。
     let string_compare = [ptr_ty.into(), i64_ty.into(), ptr_ty.into(), i64_ty.into()];
     let str_eq = module.add_function(
@@ -1182,6 +1360,7 @@ fn declare_runtime<'ctx>(
         assert,
         str_eq,
         str_cmp,
+        shift_overflow,
     }
 }
 

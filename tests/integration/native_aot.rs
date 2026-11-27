@@ -176,6 +176,22 @@ mod enabled {
         );
     }
 
+    /// 从诊断文本里取该文件的第一个 `file:line:` 位置行号；没有时返回 None。
+    /// 用于把原生诊断的位置与 VM 诊断逐项比对，而不是在测试里另抄一份行号。
+    fn diagnostic_line(
+        stderr: &[u8],
+        file: &Path,
+    ) -> Option<usize> {
+        let text = String::from_utf8_lossy(stderr);
+        let marker = format!("{}:", file.display());
+        let start = text.find(&marker)? + marker.len();
+        let digits: String = text[start..]
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .collect();
+        digits.parse().ok()
+    }
+
     #[test]
     fn test_native_project_bin_entry_function_is_called() {
         // Arrange：Bin 项目只定义 main，顶层不调用；入口必须由 entry_function 驱动。
@@ -736,12 +752,18 @@ mod enabled {
     fn build_synthetic(
         module: &ModuleIR,
         stem: &str,
+        optimize: bool,
     ) -> (TempDir, PathBuf) {
         let dir = TempDir::new().expect("synthetic native tempdir");
-        let output = dir.path().join(stem);
+        let output = dir.path().join(format!("{stem}_{}", u8::from(optimize)));
         let source = dir.path().join(format!("{stem}.yx"));
-        compile_ir_to_executable(module, &source.display().to_string(), &output, false)
-            .unwrap_or_else(|e| panic!("build synthetic native fixture {stem}: {e:#}"));
+        compile_ir_to_executable(module, &source.display().to_string(), &output, optimize)
+            .unwrap_or_else(|e| {
+                panic!(
+                    "build synthetic native fixture {stem} (O{}): {e:#}",
+                    u8::from(optimize)
+                )
+            });
         (dir, output)
     }
 
@@ -926,7 +948,7 @@ mod enabled {
         let module = value_module();
 
         // Act
-        let (_dir, executable) = build_synthetic(&module, "value_destination");
+        let (_dir, executable) = build_synthetic(&module, "value_destination", false);
         let output = run_native(&executable);
 
         // Assert
@@ -987,7 +1009,7 @@ mod enabled {
         // Act
         for (condition, expected_success) in cases {
             let module = branch_module(condition);
-            let (_dir, executable) = build_synthetic(&module, "branch");
+            let (_dir, executable) = build_synthetic(&module, "branch", false);
             let output = run_native(&executable);
             outcomes.push((condition, expected_success, output));
         }
@@ -1604,18 +1626,20 @@ mod enabled {
     #[test]
     fn test_native_phi_module_builds_and_runs() {
         // Arrange：合成 IR 的单前驱 Phi（批次 3.5 前被 AOT-3.5 边界拒绝）。
+        // O0 与 O2 都跑：优化器会重排汇合边，判据不能只钉在 O0。
         let module = phi_module();
 
-        // Act
-        let (_dir, executable) = build_synthetic(&module, "phi");
-        let output = run_native(&executable);
-
-        // Assert
-        assert!(
-            output.status.success(),
-            "synthetic Phi module should build and run: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+        // Act & Assert
+        for optimize in [false, true] {
+            let (_dir, executable) = build_synthetic(&module, "phi", optimize);
+            let output = run_native(&executable);
+            assert!(
+                output.status.success(),
+                "synthetic Phi module should build and run (O{}): {}",
+                u8::from(optimize),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
     }
 
     /// 合成 IR：菱形 CFG 的 String Phi。两个前驱各载入内容相同的字面量，汇合块用
@@ -1841,18 +1865,20 @@ mod enabled {
     #[test]
     fn test_native_string_phi_merge_compares_by_content() {
         // Arrange：菱形 CFG 的 String Phi；合并值与第三个同内容字面量比较。
+        // O0 与 O2 都跑：该判据不能只在 O0 单点成立。
         let module = string_phi_module();
 
-        // Act
-        let (_dir, executable) = build_synthetic(&module, "string_phi");
-        let output = run_native(&executable);
-
-        // Assert
-        assert!(
-            output.status.success(),
-            "String Phi merged value must compare equal by content: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+        // Act & Assert
+        for optimize in [false, true] {
+            let (_dir, executable) = build_synthetic(&module, "string_phi", optimize);
+            let output = run_native(&executable);
+            assert!(
+                output.status.success(),
+                "String Phi merged value must compare equal by content (O{}): {}",
+                u8::from(optimize),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
     }
 
     #[test]
@@ -1893,6 +1919,255 @@ mod enabled {
             !executable.exists(),
             "rejected build must not write a native artifact"
         );
+    }
+
+    #[test]
+    fn test_native_int_bitwise_matches_vm() {
+        // Arrange：And/Or/Xor 覆盖负数、大数、0 与 -1（二进制补码按位语义）。
+        let source = concat!(
+            "use std.assert\n",
+            "band: (a: Int, b: Int) -> Int = (a, b) => a & b\n",
+            "bor: (a: Int, b: Int) -> Int = (a, b) => a | b\n",
+            "bxor: (a: Int, b: Int) -> Int = (a, b) => a ^ b\n",
+            "main: () -> Void = {\n",
+            "    assert.assert(band(6, 2) == 2, \"and keeps the shared bits\")\n",
+            "    assert.assert(bor(6, 2) == 6, \"or unions the bits\")\n",
+            "    assert.assert(bxor(6, 2) == 4, \"xor keeps the differing bits\")\n",
+            "    assert.assert(band(-1, 255) == 255, \"and with -1 keeps the low byte\")\n",
+            "    assert.assert(bor(0, -1) == -1, \"or with -1 fills every bit\")\n",
+            "    assert.assert(bxor(-1, 255) == -256, \"xor with -1 complements\")\n",
+            "    assert.assert(band(-8, -4) == -8, \"and of two negatives\")\n",
+            "    assert.assert(bor(-8, 7) == -1, \"or of two negatives fills every bit\")\n",
+            "    assert.assert(bxor(0, 0) == 0, \"xor of zeros is zero\")\n",
+            "    assert.assert(band(4611686018427387904, 4611686018427387904) == 4611686018427387904, \"and of a large power of two\")\n",
+            "    assert.assert(bxor(4611686018427387904, 1) == 4611686018427387905, \"xor keeps the large bit\")\n",
+            "}\n",
+            "main()\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "int_bitwise");
+
+        // Assert
+        // assert_native_matches_vm 已断言 native/VM 的 O0 与 O2 结果一致。
+    }
+
+    #[test]
+    fn test_native_shift_left_matches_vm() {
+        // Arrange：左移覆盖 0/1/63 位移量与负数 lhs；值溢出不是错误（位被移出）。
+        let source = concat!(
+            "use std.assert\n",
+            "shl: (a: Int, n: Int) -> Int = (a, n) => a << n\n",
+            "shr: (a: Int, n: Int) -> Int = (a, n) => a >> n\n",
+            "main: () -> Void = {\n",
+            "    assert.assert(shl(1, 0) == 1, \"shift by zero keeps the value\")\n",
+            "    assert.assert(shl(1, 1) == 2, \"shift by one doubles\")\n",
+            "    assert.assert(shl(1, 63) < 0, \"the top bit becomes the sign bit\")\n",
+            "    assert.assert(shr(shl(1, 63), 63) == -1, \"arithmetic shift sees the sign bit\")\n",
+            "    assert.assert(shl(-1, 1) == -2, \"negative lhs shifts its bits\")\n",
+            "    assert.assert(shl(-5, 2) == -20, \"negative lhs by two\")\n",
+            "    assert.assert(shl(12344, 63) == 0, \"an even lhs loses every bit at 63\")\n",
+            "    assert.assert(shl(0, 63) == 0, \"zero stays zero\")\n",
+            "}\n",
+            "main()\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "shift_left");
+
+        // Assert
+        // assert_native_matches_vm 已断言 native/VM 的 O0 与 O2 结果一致。
+    }
+
+    #[test]
+    fn test_native_shift_right_matches_vm() {
+        // Arrange：右移覆盖 0/1/63 位移量与负数 lhs。VM 的 >> 是算术右移，
+        // 负数保持符号位；IR 的 Shr 变体按这一现状判定（语义分歧见设计文档）。
+        let source = concat!(
+            "use std.assert\n",
+            "shr: (a: Int, n: Int) -> Int = (a, n) => a >> n\n",
+            "min_value: () -> Int = () => 0 - 9223372036854775807 - 1\n",
+            "main: () -> Void = {\n",
+            "    assert.assert(shr(1024, 0) == 1024, \"shift by zero keeps the value\")\n",
+            "    assert.assert(shr(1024, 1) == 512, \"positive lhs halves\")\n",
+            "    assert.assert(shr(1024, 63) == 0, \"every set bit leaves at 63\")\n",
+            "    assert.assert(shr(-8, 1) == -4, \"negative lhs keeps the sign bit\")\n",
+            "    assert.assert(shr(-1, 63) == -1, \"negative one stays negative one\")\n",
+            "    assert.assert(shr(min_value(), 63) == -1, \"the sign bit reaches every position\")\n",
+            "}\n",
+            "main()\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "shift_right");
+
+        // Assert
+        // assert_native_matches_vm 已断言 native/VM 的 O0 与 O2 结果一致。
+    }
+
+    #[test]
+    fn test_native_shift_out_of_range_matches_vm_diagnostic() {
+        // Arrange：位移量 64 与 -1 越界；VM 报 E6007 并带移位语句的源码位置，
+        // AOT 必须同码同位置失败，而不是静默 wrap。
+        for (amount, stem) in [("64", "shift_64"), ("-1", "shift_neg1")] {
+            let dir = TempDir::new().expect("shift out of range tempdir");
+            let source_path = dir.path().join(format!("{stem}.yx"));
+            let o0_path = dir.path().join(format!("{stem}_o0"));
+            let o2_path = dir.path().join(format!("{stem}_o2"));
+            let source = concat!(
+                "use std.assert\n",
+                "shl: (a: Int, n: Int) -> Int = (a, n) => a << n\n",
+                "main: () -> Void = {\n",
+                "    assert.assert(shl(1, AMOUNT) == 0)\n",
+                "}\n",
+                "main()\n",
+            )
+            .replace("AMOUNT", amount);
+            std::fs::write(&source_path, source).expect("write shift out of range fixture");
+
+            // Act
+            build_native_with_options(&source_path, &o0_path, false, false)
+                .unwrap_or_else(|e| panic!("build {stem} O0: {e:#}"));
+            build_native_with_options(&source_path, &o2_path, false, true)
+                .unwrap_or_else(|e| panic!("build {stem} O2: {e:#}"));
+            let vm = Command::new(test_yx_bin())
+                .arg("run")
+                .arg(&source_path)
+                .output()
+                .expect("run VM shift out of range fixture");
+
+            // Assert
+            assert_eq!(
+                vm.status.code(),
+                Some(1),
+                "VM {stem} exit: {}",
+                String::from_utf8_lossy(&vm.stderr)
+            );
+            assert_diagnostic(&vm.stderr, "E6007", &source_path, 3);
+            let vm_line = diagnostic_line(&vm.stderr, &source_path)
+                .unwrap_or_else(|| panic!("VM {stem} diagnostic must carry a line"));
+            for (optimize, path) in [("O0", &o0_path), ("O2", &o2_path)] {
+                let native = run_native(path);
+                assert_eq!(
+                    native.status.code(),
+                    Some(1),
+                    "native {optimize} {stem} exit: {}",
+                    String::from_utf8_lossy(&native.stderr)
+                );
+                // 位置必须与 VM 逐项一致：诊断位置来自前端 span，不由后端另定。
+                assert_diagnostic(&native.stderr, "E6007", &source_path, vm_line);
+            }
+        }
+    }
+
+    #[test]
+    fn test_native_shift_amount_truncates_like_vm() {
+        // Arrange：VM 以位移量的 u32 截断值判定范围，因此 2^32 等价于 0、
+        // 2^32+1 等价于 1。AOT 必须按同一口径发射，不能直接拿 i64 与 64 比较。
+        let source = concat!(
+            "use std.assert\n",
+            "shr: (a: Int, n: Int) -> Int = (a, n) => a >> n\n",
+            "main: () -> Void = {\n",
+            "    assert.assert(shr(1024, 4294967296) == 1024, \"amount 2^32 behaves like 0\")\n",
+            "    assert.assert(shr(1024, 4294967297) == 512, \"amount 2^32+1 behaves like 1\")\n",
+            "}\n",
+            "main()\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "shift_amount_truncate");
+
+        // Assert
+        // assert_native_matches_vm 已断言 native/VM 的 O0 与 O2 结果一致。
+    }
+
+    /// 合成 IR：Sar 变体（lower 今天不产出；右移运算符发射的是 Shr）。判据只要求
+    /// 该变体按 VM 现状的算术右移发射：-8 >> 1 == -4，否则 assert 以 E6005 退出。
+    fn sar_module() -> ModuleIR {
+        let function = FunctionIR {
+            name: "sar_probe".to_string(),
+            def: None,
+            params: vec![],
+            return_type: yaoxiang::frontend::core::sema::MonoType::Void,
+            generic_params: None,
+            body: FunctionBody::Code {
+                blocks: vec![BasicBlock {
+                    label: 0,
+                    instructions: vec![
+                        Instruction::Sar {
+                            dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(0)),
+                            lhs: Operand::Const(ConstValue::Int(-8)),
+                            rhs: Operand::Const(ConstValue::Int(1)),
+                            span: Span::dummy(),
+                        },
+                        Instruction::Eq {
+                            dst: Operand::Value(yaoxiang::middle::ir::ir::ValueId(1)),
+                            lhs: Operand::Value(yaoxiang::middle::ir::ir::ValueId(0)),
+                            rhs: Operand::Const(ConstValue::Int(-4)),
+                            span: Span::dummy(),
+                        },
+                        Instruction::Call {
+                            dst: None,
+                            func: Operand::Const(ConstValue::String(
+                                "std.assert.assert".to_string(),
+                            )),
+                            args: vec![Operand::Value(yaoxiang::middle::ir::ir::ValueId(1))],
+                            def: None,
+                            span: Span::dummy(),
+                        },
+                        Instruction::Ret {
+                            value: None,
+                            span: Span::dummy(),
+                        },
+                    ],
+                    successors: vec![],
+                }],
+                entry: 0,
+                locals: vec![],
+                values: vec![
+                    yaoxiang::middle::ir::ir::ValueInfo {
+                        ty: yaoxiang::frontend::core::sema::MonoType::Int(64),
+                        debug_name: None,
+                        defining_block: 0,
+                    },
+                    yaoxiang::middle::ir::ir::ValueInfo {
+                        ty: yaoxiang::frontend::core::sema::MonoType::Bool,
+                        debug_name: None,
+                        defining_block: 0,
+                    },
+                ],
+                value_slots: vec![],
+            },
+        };
+        let mut module = ModuleIR::default();
+        module.functions.push(function);
+        module.init.push(Instruction::Call {
+            dst: None,
+            func: Operand::Const(ConstValue::String("sar_probe".to_string())),
+            args: vec![],
+            def: None,
+            span: Span::dummy(),
+        });
+        module
+    }
+
+    #[test]
+    fn test_native_sar_instruction_uses_arithmetic_shift() {
+        // Arrange：无生产者的 Sar 变体用合成 IR 夹具覆盖（见 sar_module 注释）。
+        // O0 与 O2 都跑：受检移位的守卫在优化下也不许退化成静默 wrap。
+        let module = sar_module();
+
+        // Act & Assert
+        for optimize in [false, true] {
+            let (_dir, executable) = build_synthetic(&module, "sar_probe", optimize);
+            let output = run_native(&executable);
+            assert!(
+                output.status.success(),
+                "Sar must emit the arithmetic right shift (-8 >> 1 == -4) (O{}): {}",
+                u8::from(optimize),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
     }
 }
 

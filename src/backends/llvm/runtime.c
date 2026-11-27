@@ -113,6 +113,18 @@ void __yx_rt_assert(
     }
 }
 
+// ── 受检移位（批次 4.2）────────────────────────────────────────────
+//
+// 位移量的有效范围与 VM 同口径：先截断成 u32（`b as u32`），只有 < 64 才
+// 是有效位移；其余（含负数与 ≥64）走本入口报 E6007，与 VM 的
+// `integer overflow in ...` 同码同类。移位本身不做值溢出检查——位被移出不是
+// 错误（与 VM 的 checked_shl/checked_shr 一致）。
+
+__attribute__((noreturn)) void __yx_rt_shift_overflow(YX_LOCATION_ARGS) {
+    static const char message[] = "integer overflow in shift amount";
+    yx_fail(6007, message, sizeof(message) - 1, YX_LOCATION);
+}
+
 // ── 字符串（批次 4.1）──────────────────────────────────────────────
 //
 // 值形状 { const uint8_t *ptr; uint64_t len }：len 是 UTF-8 字节数，不是码点

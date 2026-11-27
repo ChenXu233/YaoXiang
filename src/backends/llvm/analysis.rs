@@ -697,6 +697,28 @@ fn analyze_stream(
                 }
                 write(dst, ScalarType::Bool, &mut result, globals)?;
             }
+            Instruction::And { dst, lhs, rhs, .. }
+            | Instruction::Or { dst, lhs, rhs, .. }
+            | Instruction::Xor { dst, lhs, rhs, .. } => {
+                // 位运算只接受 Int×Int（批次 4.2）：按位语义、不做值范围检查；
+                // 混型/未知类型带位置拒绝，不静默按 Void 或 Bool 处理。
+                require_type(read(lhs, &result)?, ScalarType::Int, "bitwise lhs")
+                    .map_err(|e| unsupported(e.to_string()))?;
+                require_type(read(rhs, &result)?, ScalarType::Int, "bitwise rhs")
+                    .map_err(|e| unsupported(e.to_string()))?;
+                write(dst, ScalarType::Int, &mut result, globals)?;
+            }
+            Instruction::Shl { dst, lhs, rhs, .. }
+            | Instruction::Shr { dst, lhs, rhs, .. }
+            | Instruction::Sar { dst, lhs, rhs, .. } => {
+                // 移位只接受 Int×Int：位移量的有效范围由发射层的受检路径判定
+                // （越界报 E6007 并带位置），分析层不做常量范围猜测。
+                require_type(read(lhs, &result)?, ScalarType::Int, "shift lhs")
+                    .map_err(|e| unsupported(e.to_string()))?;
+                require_type(read(rhs, &result)?, ScalarType::Int, "shift rhs")
+                    .map_err(|e| unsupported(e.to_string()))?;
+                write(dst, ScalarType::Int, &mut result, globals)?;
+            }
             Instruction::Call {
                 dst,
                 func,

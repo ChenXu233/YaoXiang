@@ -10,7 +10,7 @@ description:
 x86-64 上，把一份真实的 YaoXiang 源程序编译成 ELF 可执行文件。在没有 LLVM 和 YaoXiang
 VM 的同类系统上运行它，既能算对结果，也能在出错时指出源码位置。生成一份 LLVM IR 文本不算完成。
 
-**状态：批次 3 已开工（值证据、无 `Phi` CFG 子集与多文件项目入口），批次 4.1（运行时 ABI 首版与 `String` 判等/顺序）已入库，发布验收未完成。**
+**状态：批次 3 已开工（值证据、无 `Phi` CFG 子集与多文件项目入口），批次 4.1（运行时 ABI 首版与 `String` 判等/顺序）与 4.2（`Int` 位运算与受检移位）已入库，发布验收未完成。**
 [RFC-018](../../rfc/accepted/018-llvm-aot-compiler.md)
 已接受 LLVM 提前编译（AOT）的方向，并在附录 B 登记构建产物契约；[跟踪议题 #134](https://github.com/ChenXu233/YaoXiang/issues/134)
 是这项工作的入口。首批实现不占用 [RFC-039 施工表](../architecture/09-execution-wbs.md)
@@ -53,7 +53,9 @@ VM 的同类系统上运行它，既能算对结果，也能在出错时指出�
 - [ ] **批次 4 链接原生运行时，再接 FFI 与并作**——4.1 已收口：运行时 ABI 首版与
       `String` 判等/顺序（见“运行时 ABI 约定（首版）”）；判据
       `test_native_string_equality_matches_vm`、`test_native_string_ordering_matches_vm`、
-      `test_native_string_phi_merge_compares_by_content`。容器、闭包、资源、FFI 与并作未开始。
+      `test_native_string_phi_merge_compares_by_content`；4.2 已收口：`Int` 位运算与受检
+      移位（越界移位报 E6007 且与 VM 同源码位置，不静默 wrap，判据
+      `test_native_shift_out_of_range_matches_vm_diagnostic`）。容器、闭包、资源、FFI 与并作未开始。
 
 ### 平台验收
 
@@ -180,7 +182,7 @@ python scripts/dev/testsuite.py plan
 
 ### 支持集与拒绝边界（等价账本）
 
-阶段 1 与批次 4.1 的可编译形态按可执行判据登记在同一张账本里；支持集之外必须显式拒绝并带源码位置，禁止静默回退。判据分两处：集成判据在
+阶段 1 与批次 4（4.1、4.2）的可编译形态按可执行判据登记在同一张账本里；支持集之外必须显式拒绝并带源码位置，禁止静默回退。判据分两处：集成判据在
 `tests/integration/native_aot.rs`，后端单元判据在
 `src/backends/llvm/tests/analysis.rs`。本节逐条列边界；等价账本的最小交付边界见节末的八条表。
 
@@ -194,6 +196,16 @@ python scripts/dev/testsuite.py plan
   `test_native_string_compare_through_return_matches_vm`，合成 IR 的合并值判据
   `test_native_string_phi_merge_compares_by_content`；后端单元判据
   `test_native_string_equality_comparison_is_accepted`、`test_native_string_ordering_comparison_is_accepted`。
+- `Int` 位运算与受检移位（批次 4.2）：`And`/`Or`/`Xor` 接受两侧同为 `Int`，按二进制补码
+  逐位处理，不做值范围检查；`Shl`/`Shr`/`Sar` 接受两侧同为 `Int`，位移量先截断成 `u32`
+  （与 VM 的 `b as u32` 同口径），只有 `< 64` 才发射 `shl`/`ashr`，越界进入带位置的运行时
+  失败块（E6007，与 VM 同码同位置），值溢出不是错误（位被移出）。判据
+  `test_native_int_bitwise_matches_vm`、`test_native_shift_left_matches_vm`、
+  `test_native_shift_right_matches_vm`、`test_native_shift_out_of_range_matches_vm_diagnostic`、
+  `test_native_shift_amount_truncates_like_vm`、
+  `test_native_sar_instruction_uses_arithmetic_shift`（合成 IR），均在 O0 与 O2 各跑一遍；
+  后端单元判据 `test_native_int_bitwise_operands_are_accepted`、
+  `test_native_shift_operands_are_accepted`、`test_native_shift_mixed_operand_is_rejected_with_location`。
 - 直线指令；无 `Phi` 的分支和循环（`Jmp`、`JmpIf`、`JmpIfNot` 按 `BasicBlock` 发射），判据为
   `test_native_no_phi_branch_executes_both_edges`、`test_native_no_phi_loop_matches_vm`。
 - `Phi` 汇合：生产端 SSA 的 `Phi`
@@ -232,6 +244,12 @@ python scripts/dev/testsuite.py plan
 - 文件身份：函数按 `function_files`、模块 init 按 `init_file_ids`
   选择真实文件路径，带位置诊断与运行期错误指向真实文件，判据为
   `test_native_multifile_dependency_init_diagnostic_uses_real_file`、`test_native_multifile_dependency_function_diagnostic_uses_real_file`。
+
+**`Shr` 与 `Sar` 的语义现状（批次 4.2 记录，未改 VM 或 IR）**：
+
+- 语言层只有 `>>` 一个右移运算符，前端把它降成 `Instruction::Shr`；`Instruction::Sar` 在 IR 里有变体，但 `lower` 不产出它，`>>` 也不经过它。
+- VM 的 `exec_binary_op` 对 `Shr` 与 `Sar` 都调用 `checked_shr`，即两者都是算术右移；而字节码运算符枚举的注释把 `Shr` 标成逻辑右移（`>>>`）、`Sar` 标成算术右移。
+- 两处不一致。后端按可观察等价处理：`Shr`/`Sar` 都发射算术右移，与 VM 同结果；不擅自改 VM 或 IR。若裁决要求 `>>` 为逻辑右移，需要同时改 VM 与前端/IR 的语义，属跨层变更，不在本批。
 
 **拒绝边界**：
 
@@ -461,7 +479,7 @@ python scripts/dev/testsuite.py plan
 
 - 六个比较算子都落到这两个入口：`Eq`/`Ne` 用 `__yx_rt_str_eq` 的结果与 0 比较，`Lt`/`Le`/`Gt`/`Ge` 用 `__yx_rt_str_cmp` 的结果与 0 比较。
 - 语义是**内容**比较：比较只读 `{ptr, len}` 指向的字节，不看地址。
-- 静态字面量在目标常量池里可能合并到同一地址，因此「内容相等而指针不等」在批次 4.1 没有可观察用例；拥有所有权的字符串切片才会产生两个内容相同、地址不同的值，届时该性质由用例直接观察。
+- 静态字面量落在可合并的 `.rodata.str1.1` 段（`SHF_MERGE | SHF_STRINGS`），由**链接器**把内容相同的字面量合并成同一地址：O0 的对象文件里仍是各自独立的一份（`yx.string.N` 各占不同偏移），O2 的 IR 优化会先折叠掉一部分，两种优化级最终都只剩一个地址。因此「内容相等而指针不等」在批次 4.1 没有可观察用例；拥有所有权的字符串切片才会产生两个内容相同、地址不同的值，届时该性质由用例直接观察。
 - `Int` 与 `Bool` 的比较仍由 LLVM `icmp` 直接发射，不经过运行时。
 - VM 侧 `exec_compare` 的 `String` 分支是 Rust `str` 比较（字节序），本节的入口与之同结果。
 
