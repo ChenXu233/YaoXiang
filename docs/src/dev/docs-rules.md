@@ -132,7 +132,7 @@ description: 'YaoXiang 文档的分类规则（Diátaxis）与维基式语言风
 
 **改文档前必须读三样**：
 
-1. **上游设计**：这次要改的文档，其结论来自哪份 RFC 的哪条决议（[RFC-039](../rfc/accepted/039-compiler-architecture.md) 的决议登记 D1–D59，或该领域的专题 RFC）。写不出来 = 这次改动没有依据。
+1. **上游设计**：这次要改的文档，其结论来自哪份 RFC 的哪条决议（[RFC-039](../rfc/accepted/039-compiler-architecture.md) 的决议登记 D1–D64，或该领域的专题 RFC）。写不出来 = 这次改动没有依据。
 2. **同层相邻文档**：同一张表、同一组术语是否在别处已有定义——两处各写一份是 §0「不得生造」的翻版。
 3. **[commit-convention.md](./commit-convention.md)** 与 [coding-rules.md](./coding-rules.md) 的红线。
 
