@@ -29,8 +29,8 @@ mod tests;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use self::symbol::DefPath;
 use crate::frontend::core::sema::environment::MethodOverloadCandidates;
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::core::types::mono::MonoType;
 use crate::util::span::Span;
 
@@ -54,9 +54,9 @@ pub enum ExportKind {
 pub struct Export {
     /// 短名称（如 "print"）
     pub name: String,
-    /// 完整路径（如 `std.io.print`）—— [`symbol::DefPath::project`] 的**投影**。
+    /// 完整路径（如 `std.io.print`）—— [`crate::frontend::core::types::identity::DefPath::project`] 的**投影**。
     ///
-    /// 权威身份不在这里：它是项目符号表里该绑定的 [`symbol::DefPath`]（模块键 + 可选归属段 +
+    /// 权威身份不在这里：它是项目符号表里该绑定的 [`crate::frontend::core::types::identity::DefPath`]（模块键 + 可选归属段 +
     /// 裸名），本字段只是那份路径的像，供导出面按名查找/展示。构造点一律经
     /// `DefPath::item(..).project()`；native 导出的 FFI 字面量（如 `int.to_string`）不是
     /// 「模块键 + 裸名」形状，那类按无模块扁平路径登记（见
@@ -219,7 +219,7 @@ pub struct ModuleInfo {
     /// 方法绑定（方法身份 → 函数类型）。
     /// RFC-029：跨文件方法调用解析——导入一个类型时也带来它的方法签名。
     ///
-    /// 键是 [`crate::frontend::module::symbol::DefPath`]（WBS 4.9.10 D-1/D-2）：
+    /// 键是 [`crate::frontend::core::types::identity::DefPath`]（WBS 4.9.10 D-1/D-2）：
     /// 用户类型带模块键、内建类型无模块归属；同名类型分属两个单元时各有路径，
     /// 合并不会互相覆盖。
     pub method_bindings: HashMap<DefPath, MonoType>,

@@ -7,7 +7,7 @@
 //! - RFC-004/010/011 支撑
 
 use crate::ast::Module;
-use crate::frontend::module::symbol::DefPath;
+use crate::frontend::core::types::identity::DefPath;
 
 // ============ 子模块声明 ============
 

@@ -101,7 +101,7 @@ pub struct Translator {
     /// 函数名到索引的映射
     function_name_to_idx: Option<HashMap<String, usize>>,
     /// DefId 到函数表索引的映射（Stage 3：按 DefId 分发的主路径）
-    function_def_to_idx: HashMap<crate::frontend::module::symbol::DefId, usize>,
+    function_def_to_idx: HashMap<crate::frontend::core::types::identity::DefId, usize>,
     /// FFI 函数元数据缓存: func_name → mechanism/lib/symbol
     ffi_func_meta: HashMap<String, FfiFuncMeta>,
 
@@ -1203,7 +1203,7 @@ impl Translator {
         dst: &Option<Operand>,
         func: &Operand,
         args: &[Operand],
-        def: Option<crate::frontend::module::symbol::DefId>,
+        def: Option<crate::frontend::core::types::identity::DefId>,
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = if let Some(d) = dst {
             self.operand_resolver.to_reg(d)?
@@ -1699,7 +1699,7 @@ impl Translator {
         &mut self,
         dst: &Operand,
         func_name: &str,
-        def: Option<crate::frontend::module::symbol::DefId>,
+        def: Option<crate::frontend::core::types::identity::DefId>,
         env: &[Operand],
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;

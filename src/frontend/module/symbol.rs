@@ -1,160 +1,16 @@
-//! 符号表与 DefId —— 绑定身份的唯一所有者（RFC-029 #243/#244 后续重构）
+//! 符号表：路径 ↔ 序号/类别/归属的双向映射，限定名的唯一生产者（RFC-029 #243/#244）
 //!
-//! 此前模块限定名 `{module}.{name}` 由多处各自 `format!` 拼接、又被多处各自解析：
-//! orchestrator 的 `make_export` / `qualify_module_ir`、ir_gen 的 `extract_namespace_path`、
-//! 解释器的 `build_vtable` 前缀扫描与 `call_static_by_name` 的 `_constructor` 回退。
-//! 五个解析器共用一套隐式字符串语法，靠约定耦合，任一处改动都在**运行时**炸成
-//! "function not found"，而非编译期报错。
+//! 身份类型（DefPath / DefId / DefKind）在 frontend::core::types::identity（L3-0 下沉）；
+//! 本模块只保留 SymbolTable 及其直接实现。权威存储是 DefPath（paths，下标即 DefId），
+//! 反查表 ids 也以路径为键；names / by_projection 是投影缓存与投影索引——两表都只由
+//! SymbolTable::alloc 这一处写入、都由 DefPath::project 派生，不是第二权威。
 //!
-//! 本模块把「绑定身份」收敛到一处，用**两层代表**共同承载：
-//!
-//! - **路径**（[`DefPath`]）：与本次编译无关的事实——模块键 + 可选归属段 + 裸名。
-//!   限定名是它的**投影**，[`DefPath::project`] 是全仓库唯一的限定名拼接实现；
-//! - **序号**（[`DefId`]）：本次编译按**首次出现序**分配的句柄。IR 规范化
-//!   （`middle::ir::normalize`）按首现序给 DefId 重新编号，故序号只在一次编译内有意义。
-//!
-//! **路径是事实、序号是本次编译的句柄**：路径不同即序号不同（`a.Point` / `b.Point`
-//! 天然共存），同一路径在幂等登记下恒得同一序号。符号表以 [`DefPath`] 为权威键存储，
-//! 投影字符串只是它的像（见 [`SymbolTable`] 的字段说明）。
-//!
-//! 方法通过 [`DefKind::Method`] + parent 链接到所属类型，[`SymbolTable::vtable`]
-//! 在 intern 期增量构建**静态 vtable**——编译期定死，替代运行时前缀扫描。
-//!
-//! # 阶段定位
-//!
-//! 这是「把名字解析从运行时五处收敛为编译期一处」重构的地基（阶段 0）。本模块只提供
-//! 身份基础设施；「名字 → DefId」的语义解析归属 **typecheck**（而非 parser——parser 只管
-//! 抽象语法），由后续阶段把 typecheck 已有的名字解析改为产出 DefId，IR gen 直接消费。
-//!
-//! ponytail: 后端（字节码/解释器）暂时仍按限定名分发——那是有意保留的安全缝隙。把 DefId
-//! 推进到字节码（函数索引、删除运行时 `build_vtable` 扫描）是阶段 3/4，不在本次。
+//! 方法通过 DefKind::Method + parent 链接到所属类型，SymbolTable::vtable 在 intern 期
+//! 增量构建静态 vtable——编译期定死，替代运行时前缀扫描。
 
 use std::collections::HashMap;
 
-/// 顶层绑定的唯一身份（本次编译内的序号）。
-///
-/// 由 [`SymbolTable`] 分配，进程内唯一。身份来自分配序号而非字符串，故同名绑定
-/// 只要 intern 的路径不同即拥有不同 DefId；同一路径重复 intern 复用同一 DefId。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct DefId(pub u32);
-
-/// 绑定类别。
-///
-/// 方法在底层函数表里仍是函数（解释器以 `lib.Point.get_x` 这样的扁平名存储），
-/// [`DefKind::Method`] 仅用于把它与所属类型关联、构建静态 vtable。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DefKind {
-    /// 普通顶层函数
-    Function,
-    /// 类型定义（结构体/记录）
-    Type,
-    /// 绑定到类型的方法（parent 指向所属类型的 DefId）
-    Method,
-    /// 常量
-    Constant,
-}
-
-/// 绑定身份的**路径**：限定名的唯一构造者，符号表的权威存储形式。
-///
-/// 路径由三段组成，拼成限定名时**只有** [`DefPath::project`] 这一个实现：
-///
-/// | 形态 | `module` | `owner` | `name` | 投影 |
-/// | --- | --- | --- | --- | --- |
-/// | 顶层绑定 | `lib` | `None` | `helper` | `lib.helper` |
-/// | 方法 | `lib` | `Some("Point")` | `get_x` | `lib.Point.get_x` |
-/// | 生成期扁平名 | 空串 | `None` | `__T.m_l0` | `__T.m_l0` |
-///
-/// 路径是事实、序号（[`DefId`]）是本次编译的句柄——详见模块文档。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct DefPath {
-    /// 注册表模块键**原样**（`std.io` 这类整串不拆开，也不当成两级模块）。
-    ///
-    /// 空串 = **无模块归属**，两种名字落在这一类：
-    /// 1. 本单元生成期合成的扁平名（curry 内层 `__T.m_l0`）——没有注册表模块键可归属；
-    /// 2. native 导出里**不是**「模块键 + 裸名」形状的 FFI 名（如 `int.to_string` 注册在
-    ///    `std.convert` 下，见 `ModuleRegistry::intern_module`）——挂到某个模块键下会
-    ///    改变其投影。
-    ///
-    /// 这类路径的投影即名字本身，与历史 `intern` 按整串登记逐字相同。
-    pub module: String,
-    /// 归属段：方法所属类型的**裸名**（普通绑定为 `None`）。
-    ///
-    /// 只在**定义侧** `Type.method` 键上有值——类型名是标识符、不含点，
-    /// 故该键的首段可以无歧义地当作归属段（见 [`DefPath::method`]）。
-    pub owner: Option<String>,
-    /// 裸绑定名（不含模块键与归属段；生成期扁平名整串在此）。
-    pub name: String,
-    /// 同名消歧序号（**本轮恒为 0**，[`DefPath::project`] 不输出后缀）。
-    ///
-    /// 预留给方法面接入（L1）与类型身份（L3）：同名重载候选需要各自的身份槽位时，
-    /// 序号记进本字段、由 [`DefPath::project`] 追加后缀——届时拼接规则仍只改一处。
-    pub disambiguator: u32,
-}
-
-impl DefPath {
-    /// 顶层绑定的路径：`{module}.{name}`。
-    ///
-    /// `module` 传空串即「无模块归属的生成期扁平名」，投影为 `name` 本身
-    ///（见 [`DefPath::module`] 的说明）。
-    pub fn item(
-        module: &str,
-        name: &str,
-    ) -> Self {
-        Self {
-            module: module.to_string(),
-            owner: None,
-            name: name.to_string(),
-            disambiguator: 0,
-        }
-    }
-
-    /// 方法的路径：`{module}.{type_bare}.{method}`。
-    ///
-    /// `type_bare` 是方法所属类型的裸名（不含模块键）。方法名限定沿用既有约定
-    /// （`Point.get_x` 得到 `lib.Point.get_x`），与 codegen `CreateStruct.type_name`
-    /// 及解释器函数表的扁平名天然契合。
-    pub fn method(
-        module: &str,
-        type_bare: &str,
-        method: &str,
-    ) -> Self {
-        Self {
-            module: module.to_string(),
-            owner: Some(type_bare.to_string()),
-            name: method.to_string(),
-            disambiguator: 0,
-        }
-    }
-
-    /// **唯一**的限定名投影实现：按 模块键 → 归属段 → 裸名 用点号连接。
-    ///
-    /// 全仓库由「模块键 + 裸名（+ 归属段）」拼出的**绑定身份限定名**都经由此函数：
-    /// `{module}.{bare}` 与 `{module}.{owner}.{bare}` 两种形态只在这里产生（L3 侧
-    /// 按名拼装的存量点已一并迁移）。
-    ///
-    /// 明确排除的两类**不是**这里说的限定名投影：
-    /// 1. **定义侧 `Type.method` 查表键**（`method_bindings`、方法重载候选等表的
-    ///    键）：由各自表的所有者拼接，不参与 DefId 登记，也不得当作路径使用；
-    /// 2. 在**已投影名字**上追加尾段/混编后缀的派生名（方法派发名、单态化混编名）：
-    ///    它们消费的是投影产物，不重新构造「模块键 + 裸名」。
-    ///
-    /// `disambiguator` 本轮恒为 0 且**不参与投影**——L1/L3 需要同名多身份时在这里
-    /// 追加后缀，调用点无需改动。
-    pub fn project(&self) -> String {
-        let mut out = String::with_capacity(self.module.len() + self.name.len() + 8);
-        if !self.module.is_empty() {
-            out.push_str(&self.module);
-            out.push('.');
-        }
-        if let Some(owner) = &self.owner {
-            out.push_str(owner);
-            out.push('.');
-        }
-        out.push_str(&self.name);
-        out
-    }
-}
-
+use crate::frontend::core::types::identity::{DefId, DefKind, DefPath};
 /// 符号表：路径 ↔ 序号/类别/归属的双向映射，限定名的唯一生产者。
 ///
 /// 权威存储是 [`DefPath`]（`paths`，下标即 DefId），反查表 `ids` 也以路径为键；

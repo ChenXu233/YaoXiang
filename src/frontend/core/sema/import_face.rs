@@ -20,8 +20,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::ast::{Module, StmtKind};
 use crate::frontend::core::sema::passes::dead_code::DeadCodeAnalyzer;
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::frontend::module::symbol::DefPath;
 use crate::frontend::module::ExportKind;
 
 /// 一个类型名在导入面上的来源。

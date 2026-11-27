@@ -79,7 +79,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::frontend::module::symbol::DefId;
+use crate::frontend::core::types::identity::DefId;
 use crate::middle::ir::ir::{ConstValue, Instruction, ModuleIR, Operand};
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 

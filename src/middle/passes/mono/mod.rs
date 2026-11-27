@@ -14,7 +14,7 @@ pub mod instance;
 
 use crate::ast::Quantity;
 use crate::frontend::core::sema::MonoType;
-use crate::frontend::module::symbol::DefPath;
+use crate::frontend::core::types::identity::DefPath;
 use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };

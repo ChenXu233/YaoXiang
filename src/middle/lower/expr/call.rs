@@ -6,7 +6,7 @@
 
 use crate::ast::Expr;
 use crate::frontend::core::sema::MonoType;
-use crate::frontend::module::symbol::DefPath;
+use crate::frontend::core::types::identity::DefPath;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::middle::lower::AstToIrGenerator;
 use crate::middle::lower::BindingInfo;

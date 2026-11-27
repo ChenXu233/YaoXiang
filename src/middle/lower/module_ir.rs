@@ -7,7 +7,7 @@
 use super::AstToIrGenerator;
 use super::BindingInfo;
 use crate::ast;
-use crate::frontend::module::symbol::{DefKind, DefPath};
+use crate::frontend::core::types::identity::{DefKind, DefPath};
 use crate::frontend::module::ExportKind;
 use crate::middle::ir::ir::{ConstValue, Instruction, ModuleIR, Operand};
 use crate::util::diagnostic::Diagnostic;
@@ -271,7 +271,7 @@ impl AstToIrGenerator {
     /// 两处若各写一套映射，正是 t12 要消除的口径分叉。
     fn resolve_static_targets(
         instr: &mut Instruction,
-        resolve: &impl Fn(&str) -> Option<crate::frontend::module::symbol::DefId>,
+        resolve: &impl Fn(&str) -> Option<crate::frontend::core::types::identity::DefId>,
     ) {
         match instr {
             Instruction::Call { func, def, .. } | Instruction::TailCall { func, def, .. } => {

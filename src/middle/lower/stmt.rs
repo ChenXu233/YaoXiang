@@ -7,7 +7,7 @@ use super::scope::NestedBodyGuard;
 use super::AstToIrGenerator;
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
-use crate::frontend::module::symbol::DefPath;
+use crate::frontend::core::types::identity::DefPath;
 use crate::middle::ir::ir::{
     ConstValue, FunctionBody, FunctionIR, Instruction, Operand, TypeDeclBody, TypeDeclField,
 };

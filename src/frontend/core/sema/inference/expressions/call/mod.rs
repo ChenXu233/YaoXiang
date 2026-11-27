@@ -13,8 +13,8 @@ mod method;
 
 use crate::frontend::core::sema::judgement::decide;
 use crate::frontend::core::sema::passes::overload;
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::core::types::MonoType;
-use crate::frontend::module::symbol::DefPath;
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use std::collections::{HashMap, HashSet};
 

@@ -5,8 +5,8 @@
 use std::collections::HashMap;
 
 use crate::frontend::core::types::eval::const_eval::ConstFunction;
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
-use crate::frontend::module::symbol::DefPath;
 
 use super::import_face::ImportFace;
 use super::passes::overload;

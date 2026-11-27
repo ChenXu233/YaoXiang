@@ -7,8 +7,8 @@ use crate::ast::{BinOp, Literal, UnOp};
 use crate::frontend::core::sema::environment::MethodOverloadCandidates;
 use crate::frontend::core::sema::import_face::ImportFace;
 use crate::frontend::core::sema::judgement::decide;
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
-use crate::frontend::module::symbol::DefPath;
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use std::collections::{HashMap, HashSet};
 

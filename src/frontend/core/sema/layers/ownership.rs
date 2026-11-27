@@ -13,7 +13,7 @@
 use super::super::proof::context::ProofContext;
 use super::super::proof::verdict::{ProofFailure, ProofResult, ProofResultExt};
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
-use crate::frontend::module::symbol::DefPath;
+use crate::frontend::core::types::identity::DefPath;
 use crate::util::consumption::ConsumptionLedger;
 use crate::util::plan_id::PlanId;
 use crate::util::span::Span;

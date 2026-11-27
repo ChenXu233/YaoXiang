@@ -17,8 +17,8 @@
 
 use std::collections::HashMap;
 
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::core::types::PolyType;
-use crate::frontend::module::symbol::DefPath;
 use crate::util::span::Span;
 
 /// `x = value` 的绑定动作（spec §4.3「赋值优先」）。

@@ -43,7 +43,8 @@ use super::ref_pool::assert_warnings;
 use crate::driver::helpers::resolved_method_marks;
 use crate::frontend::core::sema::types::{MethodResolution, OverloadResolutions};
 use crate::frontend::core::sema::TypeCheckResult;
-use crate::frontend::module::symbol::{DefPath, SymbolTable};
+use crate::frontend::core::types::identity::DefPath;
+use crate::frontend::module::symbol::SymbolTable;
 use crate::util::plan_id::PlanId;
 
 /// 带 `[run].main` 声明面的多文件夹具——`yaoxiang check main.yx` 的直驱等价形态：

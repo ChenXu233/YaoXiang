@@ -3,8 +3,8 @@
 //! 方法体逐字搬自原 `middle/ir/ir_gen.rs`（WBS 7.0.3），语义未改。
 
 use crate::ast::Expr;
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::module::registry::QualifiedNameConcern;
-use crate::frontend::module::symbol::DefPath;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::middle::lower::AstToIrGenerator;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};

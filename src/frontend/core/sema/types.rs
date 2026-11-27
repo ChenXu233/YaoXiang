@@ -99,7 +99,7 @@ pub struct TypeCheckResult {
 ///   消费端因此既不用反解名字、也不再有第二份名字表（WBS 4.9.10 删 `method_param_info`）。
 ///   空表 = 声明期名字不可用（候选与形参名对不齐）——消费端不得把空表冒充「名字已核对」。
 ///
-/// [`DefPath`]: crate::frontend::module::symbol::DefPath
+/// [`DefPath`]: crate::frontend::core::types::identity::DefPath
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MethodResolution {
     /// IR 最终函数名（D-8）

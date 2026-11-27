@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 use crate::ast::Quantity;
 use crate::frontend::core::sema::MonoType;
-use crate::frontend::module::symbol::DefId;
+use crate::frontend::core::types::identity::DefId;
 use crate::util::span::Span;
 
 /// SSA 值标识：函数内稠密编号，单调递增、永不回滚（04-ssa.md §值标识方式）。

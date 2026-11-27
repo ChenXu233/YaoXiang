@@ -43,8 +43,8 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
     use crate::frontend::core::sema::checker::TypeChecker;
     use crate::frontend::core::sema::SemanticProbe;
     use crate::frontend::core::tokenize;
+    use crate::frontend::core::types::identity::DefPath;
     use crate::frontend::core::types::mono::MonoType;
-    use crate::frontend::module::symbol::DefPath;
     use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 
     let source = embedded_std_source(use_path)?;

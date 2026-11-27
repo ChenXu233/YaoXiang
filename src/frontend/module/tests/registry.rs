@@ -16,8 +16,8 @@
 //! 纯 yx（Result 类型 + Try 方法）的**混合面**，而嵌入模块本身也带
 //! ModuleSource::Std——任何按模块来源的回答都会在这里判错一半。
 
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::module::registry::{ModuleRegistry, QualifiedNameConcern};
-use crate::frontend::module::symbol::DefPath;
 
 /// 混合面：同一个 std.result 里，yx 定义的导出答「是」、native 导出答「否」。
 #[test]

@@ -9,7 +9,7 @@ use super::AstToIrGenerator;
 use super::PendingInit;
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
-use crate::frontend::module::symbol::DefPath;
+use crate::frontend::core::types::identity::DefPath;
 use crate::middle::ir::ir::{ConstValue, FunctionBody, FunctionIR, Instruction, Operand};
 use crate::middle::lower::expr::collect_free_vars_expr;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};

@@ -3,8 +3,8 @@
 //! 自 `inference/expressions.rs` 纯搬移（WBS 7.0.4）：方法体与文档注释零改动，
 //! 仅补跨模块可见性（`pub(super)`）与相对路径（`super::` 改指 crate 路径）。
 
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::core::types::MonoType;
-use crate::frontend::module::symbol::DefPath;
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use crate::util::diagnostic::ErrorCodeDefinition;
 use std::collections::{HashMap, HashSet};

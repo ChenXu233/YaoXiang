@@ -133,7 +133,7 @@ pub struct StatementChecker {
     generic_type_defs:
         std::collections::HashMap<String, crate::frontend::core::sema::environment::GenericTypeDef>,
     /// 方法绑定表：方法身份（[DefPath]）→ MonoType
-    method_bindings: HashMap<crate::frontend::module::symbol::DefPath, MonoType>,
+    method_bindings: HashMap<crate::frontend::core::types::identity::DefPath, MonoType>,
     /// 导入面（D-5）：类型名 → 提供模块。与 env 的同一张表（副本随构造注入），
     /// 表达式推断器按引用借用它——方法身份的解析只经这一处。
     import_face: crate::frontend::core::sema::import_face::ImportFace,
@@ -165,7 +165,7 @@ pub struct StatementChecker {
     current_fn_param_constraints: Option<std::collections::HashMap<String, String>>,
     /// RFC-011a §3：方法重载候选（方法身份 → 候选组：签名 + 声明期形参名同序）
     pub method_overloads: std::collections::HashMap<
-        crate::frontend::module::symbol::DefPath,
+        crate::frontend::core::types::identity::DefPath,
         crate::frontend::core::sema::environment::MethodOverloadCandidates,
     >,
     /// RFC-011a §3：重载决议点（**调用点 PlanId** → 混编 IR 名；RFC-039 D20）
@@ -550,7 +550,7 @@ impl StatementChecker {
     /// 设置方法绑定表（键是方法身份）
     pub fn set_method_bindings(
         &mut self,
-        bindings: HashMap<crate::frontend::module::symbol::DefPath, MonoType>,
+        bindings: HashMap<crate::frontend::core::types::identity::DefPath, MonoType>,
     ) {
         self.method_bindings = bindings;
     }
@@ -559,7 +559,7 @@ impl StatementChecker {
     pub fn set_method_overloads(
         &mut self,
         overloads: std::collections::HashMap<
-            crate::frontend::module::symbol::DefPath,
+            crate::frontend::core::types::identity::DefPath,
             crate::frontend::core::sema::environment::MethodOverloadCandidates,
         >,
     ) {

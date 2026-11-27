@@ -47,7 +47,7 @@ use crate::backends::common::{Handle, Heap, HeapValue, RuntimeValue};
 use crate::backends::interpreter::ffi::FfiRegistry;
 use crate::backends::ExecutorError;
 pub use crate::frontend::core::types::eval::dependent_types::{Effect, EffectSpec};
-use crate::frontend::module::symbol::DefPath;
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 
 /// Type alias for native function call signature

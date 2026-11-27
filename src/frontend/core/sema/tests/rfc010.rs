@@ -14,7 +14,7 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::probe::TypeLevelNamespace;
-use crate::frontend::module::symbol::DefPath;
+use crate::frontend::core::types::identity::DefPath;
 
 /// RFC-010：类型 base 的 `Point.get_x = get_x` 源码（方法登记走类型空间）。
 const TYPE_BASE_SRC: &str = r#"

@@ -19,7 +19,8 @@
 use std::collections::HashMap;
 
 use super::registry::ModuleRegistry;
-use super::symbol::{DefId, DefPath, SymbolTable};
+use super::symbol::SymbolTable;
+use crate::frontend::core::types::identity::{DefId, DefPath};
 use std::cell::Ref;
 
 /// 名字解析器：在给定文件上下文（模块键 + 用户命名空间）下把名字解析为限定名 / DefId。
@@ -160,7 +161,7 @@ impl<'a> Resolver<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::frontend::module::symbol::DefKind;
+    use crate::frontend::core::types::identity::DefKind;
 
     fn ctx() -> (
         std::cell::RefCell<SymbolTable>,

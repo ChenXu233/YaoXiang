@@ -20,7 +20,7 @@ use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::Span;
 
 use crate::ast::{Block, Expr, Module, Stmt, StmtKind};
-use crate::frontend::module::symbol::DefPath;
+use crate::frontend::core::types::identity::DefPath;
 
 /// 死代码分析器
 pub struct DeadCodeAnalyzer {

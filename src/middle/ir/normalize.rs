@@ -483,7 +483,7 @@ fn fmt_opt_dst(
 }
 
 fn fmt_def(
-    def: &Option<crate::frontend::module::symbol::DefId>,
+    def: &Option<crate::frontend::core::types::identity::DefId>,
     m: &mut ModCtx,
 ) -> String {
     match def {

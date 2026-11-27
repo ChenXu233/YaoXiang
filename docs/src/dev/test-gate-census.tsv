@@ -1337,6 +1337,10 @@ test_bin_op_is_logical	src/frontend/core/types/tests/const_data.rs	assertx3	条�
 test_bin_op_is_bitwise	src/frontend/core/types/tests/const_data.rs	assertx6	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_const_expr_neg_int_literal_displays_by_value	src/frontend/core/types/tests/const_data.rs	assert_eqx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_type_constraint_error_creation	src/frontend/core/types/tests/error.rs	assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_type_path_guard_dotted_name	src/frontend/core/types/tests/identity.rs	assertx3 is_nonex3	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
+test_type_path_guard_owner_and_disambiguator	src/frontend/core/types/tests/identity.rs	assertx2 is_nonex2	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
+test_nominal_debug_matches_string_debug	src/frontend/core/types/tests/identity.rs	assert_eqx7 expectx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_type_path_hash_matches_string_hash	src/frontend/core/types/tests/identity.rs	assert_eqx2 expectx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_borrow_value_forms_match_aligns_only_generic_positions	src/frontend/core/types/tests/mono.rs	assertx4	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_container_element_slot_replaces_length_literal_with_base_type	src/frontend/core/types/tests/mono.rs	assert_eqx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_container_length_slot_reads_only_literal_arguments	src/frontend/core/types/tests/mono.rs	matchesx2 assertx4 is_nonex2	病史	函数体/注释点名 issue/回归/缺陷/事故	留

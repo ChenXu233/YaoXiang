@@ -7,9 +7,10 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use super::symbol::{DefKind, DefPath, SymbolTable};
+use super::symbol::SymbolTable;
 use super::{Export, ExportKind, ModuleError, ModuleInfo, ModuleSource};
 use crate::frontend::core::sema::environment::MethodOverloadCandidates;
+use crate::frontend::core::types::identity::{DefKind, DefPath};
 use crate::frontend::core::types::mono::MonoType;
 
 /// 「限定名指向什么」的关注面——issue #494（WBS 3.6.6）三臂收敛后的查询参数。

@@ -11,7 +11,8 @@
 //! 3. 为什么这里是最便宜的观察点：投影是纯函数，单测直接钉四种形态与两条幂等律，
 //!    不需要编译任何语料。
 
-use crate::frontend::module::symbol::{DefId, DefKind, DefPath, SymbolTable};
+use crate::frontend::core::types::identity::{DefId, DefKind, DefPath};
+use crate::frontend::module::symbol::SymbolTable;
 
 /// 顶层绑定的路径投影成 `{module}.{bare}`（`lib.helper`）。
 #[test]
