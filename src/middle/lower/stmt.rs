@@ -503,7 +503,6 @@ impl AstToIrGenerator {
             // 注册参数到符号表
             self.register_local(&param.name, runtime_indices.get(i).copied().unwrap_or(i));
         }
-        self.note_param_written_types(params, &declared);
         // 量词事实（q=0 槽位）随声明一起落到形参槽位，供擦除前识别。
         self.note_param_quantities(params, &declared);
 
@@ -678,10 +677,8 @@ impl AstToIrGenerator {
 
             frame.register_local(&param.name, slot);
         }
-        // 写出类型名与形参类型同一来源（作者标注 → 声明同类位）。
-        let declared = frame.declaration_runtime_param_slots(type_annotation, params.len());
-        frame.note_param_written_types(params, &declared);
         // 量词事实（q=0 槽位）随声明一起落到形参槽位，供擦除前识别。
+        let declared = frame.declaration_runtime_param_slots(type_annotation, params.len());
         frame.note_param_quantities(params, &declared);
 
         // 检查函数体是否为 FFI ExternRef 绑定
@@ -1029,13 +1026,6 @@ impl AstToIrGenerator {
                 }
                 // 普通变量
                 let initializer = value.as_ref().map(|v| v.as_ref());
-                // WBS 4.9.8 / issue #465：记下**写出**的类型名（注解原文优先，
-                // 否则取构造器名），供方法调用派发归因到定义单元。
-                let written_type = type_annotation
-                    .as_ref()
-                    .and_then(Self::written_type_name_of)
-                    .map(str::to_string)
-                    .or_else(|| initializer.and_then(|e| self.constructor_written_type_name(e)));
                 if let Some(type_ann) = type_annotation {
                     let mono: MonoType = type_ann.clone().into();
                     let type_name = mono.type_name();
@@ -1081,9 +1071,7 @@ impl AstToIrGenerator {
                     self.register_local(&name, idx);
                     idx
                 };
-                if let Some(written) = written_type {
-                    self.note_local_written_type(&name, &written);
-                }
+
                 if let Some(expr) = initializer {
                     // #299 §2：字面量上下文落点——Array 注解直接作用于 List 字面量时，
                     // 生成定长数组构造而非 List。禁止隐式 List→Array 转换：仅字面量种子直接落 Array。

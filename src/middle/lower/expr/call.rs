@@ -436,18 +436,18 @@ impl AstToIrGenerator {
                 if let Some(binding) = binding_info {
                     // RFC-011a §3：方法级重载决议命中时，binding.function
                     //（后定义覆盖的单值）替换为决议出的混编名
-                    let binding = if let Some(mangled) = self.overload_resolutions.get(call_plan_id)
-                    {
-                        // RFC-039 D20：按**调用点身份**消费重载决议（命中即记账）。
-                        // #452：命名实参调用同样消费——决议已把命名实参计入匹配，
-                        // 这里的名字必须真的被用到（消费侧不得再带形态门）。
-                        BindingInfo {
-                            function: mangled.to_string(),
-                            positions: binding.positions.clone(),
-                        }
-                    } else {
-                        binding
-                    };
+                    let binding =
+                        if let Some(resolution) = self.overload_resolutions.get(call_plan_id) {
+                            // RFC-039 D20：按**调用点身份**消费重载决议（命中即记账）。
+                            // #452：命名实参调用同样消费——决议已把命名实参计入匹配，
+                            // 这里的名字必须真的被用到（消费侧不得再带形态门）。
+                            BindingInfo {
+                                function: resolution.target.clone(),
+                                positions: binding.positions.clone(),
+                            }
+                        } else {
+                            binding
+                        };
                     // 绑定方法调用：按 RFC-004 进行参数重排
                     // obj.method(arg1, arg2) + binding positions [0]
                     // → original_function(obj, arg1, arg2)
@@ -568,29 +568,19 @@ impl AstToIrGenerator {
                     // 常规方法调用（无绑定）：obj.method(args) → method(obj, args)
                     // RFC-011a §3：方法级重载决议命中时直接调用混编名
                     //（typecheck 按 实参兼容 + 期望返回 决议，键 = 调用点 PlanId）
-                    if let Some(mangled) = self
-                        .overload_resolutions
-                        .get(call_plan_id)
-                        .map(str::to_string)
-                    {
+                    if let Some(resolution) = self.overload_resolutions.get(call_plan_id).cloned() {
                         // #452：命名实参调用同样消费决议（消费侧不得再带
                         // named_args.is_empty() 门——那会让决议出的名字被丢弃，
                         // 实参也按位置错配）。实参按**形参声明序**重建：位置实参占
-                        // 前导槽位、命名实参按名入槽；名字不可得则响亮报错，
-                        // 不静默丢弃命名实参。
-                        // WBS 4.9.8 / #465：决议给的是**定义侧裸名**（`Temp.tag`）；
-                        // 接收者是导入类型时把类型前缀换成它的定义单元限定名。
-                        // WBS 4.9.9：形参名表按**这个限定名**查——跨单元方法的声明期
-                        // 形参名只随注册表的重载候选组走（`{module}.{Type}.{method}`），
-                        // 而导出面（`lookup_param_info` 的来源 3）对方法键恒不命中。
-                        // 名字来源与派发名是同一个标识，不另算一份。
-                        // 决议名即 IR 最终函数名（D-8）：限定已在身份里，不再改写
-                        let dispatch_name = mangled.clone();
-                        let leaf = Self::call_name_leaf(&mangled).to_string();
-                        let names = self
-                            .lookup_param_info(&dispatch_name, &leaf)
-                            .map(|info| info.names)
-                            .unwrap_or_default();
+                        // 前导槽位、命名实参按名入槽。
+                        //
+                        // WBS 4.9.10 D-3：**两件都在载荷里**——被调名（D-8 的 IR 最终
+                        // 函数名）与胜出候选的声明期形参名。名字由 typecheck 按方法身份
+                        // 直查候选组取得，本生成器因此既不改写被调名、也不查任何名字表
+                        //（旧的 `method_param_info` / `lookup_param_info` 方法面分支已删）。
+                        let dispatch_name = resolution.target.clone();
+                        let leaf = Self::call_name_leaf(&dispatch_name).to_string();
+                        let names = resolution.param_names.clone();
                         // F3：诊断用决议出的真实方法名（叶子段），不再硬编 <method>
                         // #456：绑定**判定**走共享判据（接收者占槽 0，实参从 1 起）；
                         // 本处只按槽位序搬运实参。

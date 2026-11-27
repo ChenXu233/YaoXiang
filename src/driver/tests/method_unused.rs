@@ -41,7 +41,7 @@ use super::check_rootless_mono::{check_codes, make_rootless_project, run_check};
 use super::driver::{make_script_project, run_merged_slot_values, run_multi};
 use super::ref_pool::assert_warnings;
 use crate::driver::helpers::resolved_method_marks;
-use crate::frontend::core::sema::types::OverloadResolutions;
+use crate::frontend::core::sema::types::{MethodResolution, OverloadResolutions};
 use crate::frontend::core::sema::TypeCheckResult;
 use crate::frontend::module::symbol::{DefPath, SymbolTable};
 use crate::util::plan_id::PlanId;
@@ -264,7 +264,7 @@ fn test_resolved_method_marks_read_leaves_consumption_ledger_untouched() {
     let call = PlanId::from_ordinal(7);
     let mut result = TypeCheckResult::default();
     result.overload_resolutions =
-        OverloadResolutions::from_entries([(call, "Temp.to".to_string())]);
+        OverloadResolutions::from_entries([(call, MethodResolution::target_only("Temp.to"))]);
     let mut symbols = SymbolTable::new();
     symbols.intern_method(DefPath::method("", "Temp", "to"));
 

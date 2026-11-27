@@ -162,13 +162,17 @@ pub fn method_ir_name(
     }
 }
 
-/// 定义侧混编名 → `(投影基名, 候选序位)`：**唯一**解析 `#序` 后缀的地方。
+/// 定义侧混编名 → `(投影基名, 候选序位)`：**唯一为身份解析 `#序` 后缀的地方**。
 ///
 /// `#序` 是定义侧的**名字混编后缀**（同名重载候选按声明序区分），它是名字的
 /// 修饰，**不是** [`DefPath`] 的一段：投影只用点号连接「模块/归属/裸名」三段，
 /// 语法里没有 `#`。两个生成点各自唯一（[`method_ir_name`] 拼后缀、
 /// [`DefPath::project`] 拼投影），互不冒充。类型名与方法名都是标识符
 /// （不含点、不含 `#`），故末尾 `#` 之后必是十进制序位。
+///
+/// 唯一的例外是**诊断**用的叶子段：`lower::query::call_name_leaf` 为「形参名表 /
+/// 报错文面」取名字末段（`Temp.pick#1` → `pick`），它也去掉 `#序`，但只看名字
+/// 表面、不产出任何身份——凡需要 [`DefPath`] 的地方都只经本函数。
 pub fn split_definition_name(definition_name: &str) -> (&str, usize) {
     match definition_name.rsplit_once('#') {
         Some((base, digits))
@@ -196,9 +200,10 @@ pub fn method_ordinal(
 /// IR 调用名 → 方法身份（投影索引查回 [`DefPath`]，混编后缀由
 /// [`split_definition_name`] 剥离）。
 ///
-/// 跨单元通路上，消费端手里只有 typecheck 产出的 IR 最终函数名（D-8）：
-/// 形参名查表（lower `method_param_info`）与归因标记都要从**投影索引**读回
-/// 身份——只认本项目自己投影过的名字，不反解字符串分段。
+/// 消费端手里只有 typecheck 产出的 IR 最终函数名（D-8）时（driver 的逐候选
+/// 归因标记），身份要从**投影索引**读回——只认本项目自己投影过的名字，
+/// 不反解字符串分段。方法调用的形参名不在此列：它随决议载荷
+/// （`MethodResolution::param_names`）直达 IR 生成（D-3）。
 pub fn method_key_of_definition(
     definition_name: &str,
     symbols: &crate::frontend::module::symbol::SymbolTable,

@@ -11,7 +11,7 @@
 
 use std::collections::HashSet;
 
-use crate::frontend::core::sema::types::OverloadResolutions;
+use crate::frontend::core::sema::types::{MethodResolution, OverloadResolutions};
 use crate::util::plan_id::PlanId;
 
 /// `iter()` 纯读：不改变消费台账（`unconsumed()` 前后一致）。
@@ -19,13 +19,22 @@ use crate::util::plan_id::PlanId;
 fn test_resolution_iter_is_read_only() {
     // Arrange：两条决议条目，任何一条都还没被 `get` 消费
     let table = OverloadResolutions::from_entries([
-        (PlanId::from_ordinal(1), "Temp.to".to_string()),
-        (PlanId::from_ordinal(2), "Temp.to#1".to_string()),
+        (
+            PlanId::from_ordinal(1),
+            MethodResolution::target_only("Temp.to"),
+        ),
+        (
+            PlanId::from_ordinal(2),
+            MethodResolution::target_only("Temp.to#1"),
+        ),
     ]);
     let before: HashSet<PlanId> = table.unconsumed().into_iter().collect();
 
     // Act：纯读枚举全部条目
-    let names: Vec<&str> = table.iter().map(|(_, name)| name).collect();
+    let names: Vec<&str> = table
+        .iter()
+        .map(|(_, resolution)| resolution.target.as_str())
+        .collect();
 
     // Assert：读到了名字，且消费台账逐条不变（未消费集合原样）
     assert_eq!(

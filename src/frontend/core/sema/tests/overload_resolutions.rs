@@ -35,7 +35,7 @@
 //! 4.5.2 把消费门落成响亮（W1090）；#452 把决议与消费两端一起补齐，
 //! 冲突/缺参/未知名/重复命名一律编译期报错（不得静默择一）。
 
-use crate::frontend::core::sema::types::OverloadResolutions;
+use crate::frontend::core::sema::types::{MethodResolution, OverloadResolutions};
 use crate::util::plan_id::PlanId;
 
 /// 未分配身份（合成调用）**不可被消费**：`get` 拒绝、条目留在差集里——
@@ -44,7 +44,10 @@ use crate::util::plan_id::PlanId;
 fn test_overload_resolution_unplanned_key_is_never_consumed() {
     // Arrange：解析器之外的合成调用节点（UNPLANNED）上登记一条决议
     let mut table = OverloadResolutions::default();
-    table.resolve(PlanId::UNPLANNED, "Temp.synth".to_string());
+    table.resolve(
+        PlanId::UNPLANNED,
+        MethodResolution::target_only("Temp.synth"),
+    );
 
     // Act
     let consumed = table.get(PlanId::UNPLANNED);

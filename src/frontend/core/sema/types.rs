@@ -88,6 +88,37 @@ pub struct TypeCheckResult {
     pub method_def_ir_names: HashMap<PlanId, String>,
 }
 
+/// 一次方法调用重载决议的**载荷**（WBS 4.9.10 D-3）。
+///
+/// 两个字段是消费端的两件不同的事，且都由 typecheck 唯一产出：
+/// - `target`：**IR 函数表里真实存在的函数名**（D-8：多文件 `{模块键}.{Type}.{method}`
+///   （同名重载按声明序加 `#序`），单文件裸名）——IR 生成直接用它当被调名，
+///   不再按短名二次查表；
+/// - `param_names`：**胜出候选**的声明期形参名（接收者居首，与候选签名同序）。
+///   命名实参的按名入槽以它为准：产出点按方法身份（[`DefPath`]）直查候选组取得，
+///   消费端因此既不用反解名字、也不再有第二份名字表（WBS 4.9.10 删 `method_param_info`）。
+///   空表 = 声明期名字不可用（候选与形参名对不齐）——消费端不得把空表冒充「名字已核对」。
+///
+/// [`DefPath`]: crate::frontend::module::symbol::DefPath
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MethodResolution {
+    /// IR 最终函数名（D-8）
+    pub target: String,
+    /// 胜出候选的声明期形参名（空表 = 不可用）
+    pub param_names: Vec<String>,
+}
+
+impl MethodResolution {
+    /// 只有目标名、声明期形参名不可得——仅测试夹具与「无候选名来源」用；
+    /// 生产路径一律给出两者（见 `infer_call_expr` 的产出点）。
+    pub fn target_only(target: impl Into<String>) -> Self {
+        Self {
+            target: target.into(),
+            param_names: Vec::new(),
+        }
+    }
+}
+
 /// 方法级重载决议表（RFC-011a §3 / RFC-039 D20 / WBS 4.5.2）。
 ///
 /// 键 = **调用表达式节点的 [`PlanId`]**：产出点（`inference/expressions/call/mod.rs` 的
@@ -102,8 +133,8 @@ pub struct TypeCheckResult {
 /// 未混编名。
 #[derive(Debug, Clone, Default)]
 pub struct OverloadResolutions {
-    /// 产出：调用点身份 → 决议出的混编 IR 名
-    entries: HashMap<PlanId, String>,
+    /// 产出：调用点身份 → 决议载荷（最终函数名 + 声明期形参名）
+    entries: HashMap<PlanId, MethodResolution>,
     /// 消费台账（与表同体；4.5.1 释放计划共用同一实现）
     consumption: ConsumptionLedger<PlanId>,
 }
@@ -113,42 +144,40 @@ impl OverloadResolutions {
     pub fn resolve(
         &mut self,
         call: PlanId,
-        ir_name: String,
+        resolution: MethodResolution,
     ) {
-        self.entries.insert(call, ir_name);
+        self.entries.insert(call, resolution);
     }
 
-    /// 由 (调用点, 混编名) 序列装配（checker 组装 `TypeCheckResult` 时用）。
-    pub fn from_entries(entries: impl IntoIterator<Item = (PlanId, String)>) -> Self {
+    /// 由 (调用点, 载荷) 序列装配（checker 组装 `TypeCheckResult` 时用）。
+    pub fn from_entries(entries: impl IntoIterator<Item = (PlanId, MethodResolution)>) -> Self {
         let mut table = Self::default();
-        for (call, ir_name) in entries {
-            table.resolve(call, ir_name);
+        for (call, resolution) in entries {
+            table.resolve(call, resolution);
         }
         table
     }
 
-    /// **唯一消费入口**：按调用点身份取混编 IR 名，命中即记账。
+    /// **唯一消费入口**：按调用点身份取决议载荷，命中即记账。
     ///
     /// 未分配身份（合成调用）一律 `None`：不消费、也不冒充消费——它若真的
     /// 进了决议表，结算会把它作为未消费条目报出来（响亮）。
     pub fn get(
         &self,
         call: PlanId,
-    ) -> Option<&str> {
+    ) -> Option<&MethodResolution> {
         if !call.is_planned() {
             return None;
         }
-        let ir_name = self.entries.get(&call)?;
+        let resolution = self.entries.get(&call)?;
         self.consumption.mark(call);
-        Some(ir_name.as_str())
+        Some(resolution)
     }
 
-    /// **只读**枚举决议条目 `(调用点, 混编 IR 名)`——不触达 `get`、不计入消费台账
+    /// **只读**枚举决议条目 `(调用点, 载荷)`——不触达 `get`、不计入消费台账
     /// （WBS 4.9.6 / #450 逐候选归因的读取面；纯读保证不掩盖「消费必达」结算）。
-    pub fn iter(&self) -> impl Iterator<Item = (&PlanId, &str)> {
-        self.entries
-            .iter()
-            .map(|(call, name)| (call, name.as_str()))
+    pub fn iter(&self) -> impl Iterator<Item = (&PlanId, &MethodResolution)> {
+        self.entries.iter()
     }
 
     /// 未消费的产出键（**结算判据：必须为空**；升序，诊断可比）。

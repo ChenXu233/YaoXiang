@@ -55,7 +55,6 @@ impl AstToIrGenerator {
             frame.register_local(&param.name, env_count + i);
         }
         // 匿名绑定 / 闭包的形参就是声明（绑定注解 / 返回位内层 Fn）本身，无需补位。
-        frame.note_param_written_types(params, &[]);
 
         // 记录局部变量起始位置（env 段之后）。口径与改动前逐字一致：lambda 只
         // 重置 next_temp，不动高水位与循环态地板（既有行为的 C1 约束）。

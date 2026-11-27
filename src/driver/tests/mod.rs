@@ -13,6 +13,7 @@ mod method_dispatch;
 mod method_unused;
 mod mono_cross_unit;
 mod named_args_cross_unit_method;
+mod named_args_import_shapes;
 mod named_import_calls;
 mod obligations;
 mod overload_injection;

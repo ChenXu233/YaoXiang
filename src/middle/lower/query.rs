@@ -131,18 +131,19 @@ impl AstToIrGenerator {
 
     /// 查一个函数的**声明期形参名 + 必需下限**（供命名参数重排与「可选位放行」）。
     ///
-    /// 三个来源，按就近/精确优先：
+    /// 两个来源，按就近/精确优先：
     /// 1. 本模块的 `fn_param_names`（定义与调用同文件）——同模块函数的形参表
     ///    不含可选位语义，故 `required_min` 取全长（全必需）
-    /// 2. **跨单元方法**的候选组（[Self::method_param_info]）：`{module}.{Type}.{method}`
-    ///    形态按定义单元限定名精确取声明期形参名（WBS 4.9.9）。方法键的首段是
-    ///    **类型名**不是模块键，来源 3 的导出面对它恒不命中——本条缺位时跨单元
-    ///    方法的命名实参拿不到名字表（实测 E1014 `available:` 为空）
-    /// 3. 模块注册表里的导出：优先用导出携带的 `param_names`（无必需下限信息，
+    /// 2. 模块注册表里的导出：优先用导出携带的 `param_names`（无必需下限信息，
     ///    同样按全必需），否则走**与 typecheck 原生臂同一出口**
     ///    `signature::export_signature_param_info`（同一签名串给出形参名与必需下限）。
     ///    这层同源是 t14 的要点：ir_gen 曾硬编全必需位 ⇒ 合法省略可选位的命名调用
     ///    被共享判据误报 E1010（实测 `assert.assert(cond = 1 == 1)`）。
+    ///
+    /// **方法面的名字不从这里取**（WBS 4.9.10 D-3）：方法是类型成员、不占模块
+    /// 导出位，名字随重载决议载荷（`MethodResolution::param_names`）直达 IR 生成。
+    /// 旧「来源 2」（`method_param_info`：按 IR 调用名反查投影索引再回候选组）
+    /// 已随之删除——名字只有一条通路，不再有第二份来源。
     ///
     /// `full_path` 是解析后的限定名（如 `std.list.push`；跨单元方法形如
     /// `lib.Point.scale_by`，由 typecheck 的方法身份直出，见 WBS 4.9.10 D-8）；
@@ -163,12 +164,7 @@ impl AstToIrGenerator {
                 required_min,
             });
         }
-        // WBS 4.9.9：跨单元方法的形参名。放在**叶名回退之前**——叶名键在本单元
-        // 也定义了同名方法时会命中**别的类型**的名字表（错名字比缺名字更危险：
-        // 命名实参会按错位槽入参，静默给错答案）。
-        if let Some(info) = self.method_param_info(full_path) {
-            return Some(info);
-        }
+
         if let Some(names) = self.fn_param_names.get(leaf) {
             let names = names.clone();
             let required_min = names.len();
@@ -193,46 +189,6 @@ impl AstToIrGenerator {
         Some(crate::frontend::core::sema::environment::ExportParamInfo {
             names,
             required_min,
-        })
-    }
-
-    /// **跨单元方法**的声明期形参名（WBS 4.9.9 / 4.9.10 D-9）。
-    ///
-    /// `qualified` 是定义单元的限定名 `{module}.{Type}.{method}[#N]`——IR 函数表里
-    /// 的调用名（[Self::lookup_param_info] 的来源 2）。
-    ///
-    /// 定位**不做任何字符串反解**：投影索引取回 DefId → [`SymbolTable::path`] 取回
-    /// 路径 → 模块键 / 归属段 / 裸名三段都从路径上读；候选序由定义侧混编后缀读回
-    /// （`environment::method_key_of_definition`，与生成侧同一 helper）。
-    ///
-    /// 为什么必须单列这条通路：方法是**类型成员**，不占模块导出位，而方法名不是
-    /// 模块导出项——[Self::lookup_param_info] 的来源 3（模块导出面）对方法名恒不
-    /// 命中。声明期形参名跨单元只有**一条**载体：`ModuleInfo::method_overloads` 的
-    /// 候选组（由 `orchestrator::extract_module_info` 从定义单元的
-    /// `TypeEnvironment::method_overload_snapshot` 直取——与 typecheck 的注入面
-    /// **同一份**，此处不引入第二份名字表）。
-    ///
-    /// 名字表为空 = 声明期拿不到名字（登记期与候选签名对不齐，
-    /// 见 `add_method_overload_with_params`）：返回 `None` 让调用点按
-    /// 「名字不可用」处理——**不**拿空表冒充「名字已核对」。
-    fn method_param_info(
-        &self,
-        qualified: &str,
-    ) -> Option<crate::frontend::core::sema::environment::ExportParamInfo> {
-        // 身份与序位**同一处**读出（`method_key_of_definition` 先剥定义侧混编后缀、
-        // 再查投影索引），调用点不做任何字符串分段。
-        let (key, ordinal) = crate::frontend::core::sema::environment::method_key_of_definition(
-            qualified,
-            &self.registry.symbols(),
-        )?;
-        let group = self.registry.get(&key.module)?.method_overloads.get(&key)?;
-        let names = group.param_names.get(ordinal)?.clone();
-        if names.is_empty() {
-            return None;
-        }
-        Some(crate::frontend::core::sema::environment::ExportParamInfo {
-            required_min: names.len(),
-            names,
         })
     }
 
@@ -282,9 +238,12 @@ impl AstToIrGenerator {
     /// `ast::Type::runtime_value_params`（沿柯里链走到最内层值组、再剔除编译期位）。
     /// IR 只**渲染**声明写下的类型与名字，不参与判定（WBS 6.8.2 / D54 修复轮 F1）。
     ///
-    /// 一切「实现头第 i 位的声明信息」都从这里取：形参**类型**（`impl_param_types`）、
-    /// 形参**写出类型名**（`note_param_written_types`）、**调用侧可用名**
-    /// （`self.fn_param_names` 的登记）——同一 helper、同一顺序，不得各自再切一次。
+    /// 一切「实现头第 i 位的声明信息」都从这里取：形参**类型**（`impl_param_types`）与
+    /// **调用侧可用名**（`self.fn_param_names` 的登记）——同一 helper、同一顺序，
+    /// 不得各自再切一次。
+    ///
+    /// （形参「写出类型名」那条链已随 WBS 4.9.10 F1 退役：方法身份改由 typecheck 的
+    /// `ImportFace`（D-5/D-6）判定，IR 生成侧不再留任何「写出的类型名」存储。）
     /// SPEC §7.1 分类器的**真注入**：候选类型取 L3 权威表；类型命名空间与谓词集
     /// 由 `generate_module_ir` 入口从 AST 扫出，不使用保守假值。
     /// 实现头绑定序列第 i 位在**调用点实参序列**里的下标（SPEC §7.1「两条序列」）。
@@ -637,46 +596,6 @@ impl AstToIrGenerator {
             rest.trim_start()
         } else {
             t
-        }
-    }
-
-    /// 类型注解里**写出**的类型名：`Temp` / `TempB` / `&TempB` → 名字部分。
-    /// 内建类型、函数类型、结构体字面量返回 None（不是「某个单元的类型名」）。
-    pub(in crate::middle) fn written_type_name_of(ty: &ast::Type) -> Option<&str> {
-        match ty {
-            ast::Type::Name { name, .. } | ast::Type::Generic { name, .. } => Some(name.as_str()),
-            ast::Type::Ref { inner, .. }
-            | ast::Type::Ptr(inner)
-            | ast::Type::Paren(inner)
-            | ast::Type::NamedParen { inner, .. } => Self::written_type_name_of(inner),
-            _ => None,
-        }
-    }
-
-    /// 构造器表达式**写出**的类型名——**纯语法提取**，不做单元归属判定。
-    ///
-    /// `T(..)` → `T`；`ns.T(..)` / `ns.sub.T(..)` → 调用点原样的点分写法。
-    /// 只做**纯语法提取**：这个名字属于哪个单元由 typecheck 侧的导入面
-    /// （`ImportFace::method_key`）判定，lower 不再有第二处归属判定。
-    pub(in crate::middle) fn constructor_written_type_name(
-        &self,
-        expr: &ast::Expr,
-    ) -> Option<String> {
-        let ast::Expr::Call { func, .. } = expr else {
-            return None;
-        };
-        match func.as_ref() {
-            ast::Expr::Var(name, _) => Some(name.clone()),
-            ast::Expr::FieldAccess { .. } => {
-                let (head, fields) = flatten_namespace(func)?;
-                Some(
-                    std::iter::once(head)
-                        .chain(fields)
-                        .collect::<Vec<_>>()
-                        .join("."),
-                )
-            }
-            _ => None,
         }
     }
 

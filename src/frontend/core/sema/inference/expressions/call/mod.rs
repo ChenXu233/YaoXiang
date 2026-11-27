@@ -899,7 +899,20 @@ impl<'a> ExpressionInferrer<'a> {
                                     }
                                     *self.solver = real;
                                     // RFC-039 D20：键 = 调用表达式节点的身份（产出侧唯一写入点）
-                                    self.overload_resolutions.push((call_plan_id, ir.clone()));
+                                    // WBS 4.9.10 D-3：载荷 = IR 最终函数名 + **胜出候选**的
+                                    // 声明期形参名（同组同序，按方法身份直取——消费端不再
+                                    // 反解名字，也没有第二份名字表）
+                                    let param_names = cand_names
+                                        .and_then(|lists| lists.get(*i))
+                                        .cloned()
+                                        .unwrap_or_default();
+                                    self.overload_resolutions.push((
+                                        call_plan_id,
+                                        crate::frontend::core::sema::types::MethodResolution {
+                                            target: ir.clone(),
+                                            param_names,
+                                        },
+                                    ));
                                     Some((*i, f.clone()))
                                 }
                                 _ => None,

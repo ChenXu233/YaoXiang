@@ -169,7 +169,10 @@ pub struct StatementChecker {
         crate::frontend::core::sema::environment::MethodOverloadCandidates,
     >,
     /// RFC-011a §3：重载决议点（**调用点 PlanId** → 混编 IR 名；RFC-039 D20）
-    pub overload_resolutions: Vec<(crate::util::plan_id::PlanId, String)>,
+    pub overload_resolutions: Vec<(
+        crate::util::plan_id::PlanId,
+        crate::frontend::core::sema::types::MethodResolution,
+    )>,
     /// 期望类型（带注解绑定的初始化推断时设置，方法重载按期望返回决议）
     pub current_expected: Option<MonoType>,
     /// RFC-010: 和类型登记表（类型名 → 变体定义，声明序）
@@ -3278,7 +3281,9 @@ impl StatementChecker {
                 return Ok(());
             }
             BindingAction::Declare => {
-                // 走下方新声明
+                // 新声明：落到本 match 之后的 `add_var` 登记，并紧接着由 D-6 段
+                // （`set_type_identity`：写出注解 → 构造器名 → 导入面）记下绑定的
+                // 类型身份。两条都在下面，本臂不再重复登记。
             }
         }
 

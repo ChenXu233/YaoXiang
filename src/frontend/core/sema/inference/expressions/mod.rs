@@ -255,7 +255,10 @@ pub struct ExpressionInferrer<'a> {
     /// 期望类型（带注解绑定传入，方法重载按期望返回决议）
     current_expected: Option<MonoType>,
     /// RFC-011a §3：重载决议点（**调用点 PlanId** → 混编 IR 名；RFC-039 D20）
-    pub overload_resolutions: Vec<(crate::util::plan_id::PlanId, String)>,
+    pub overload_resolutions: Vec<(
+        crate::util::plan_id::PlanId,
+        crate::frontend::core::sema::types::MethodResolution,
+    )>,
     /// 实例化请求（收集遇到的所有泛型函数实例化需求）
     pub instantiation_requests: Vec<InstantiationRequest>,
     /// 泛型函数的声明序类型参数名：函数名 -> ["T", "Acc", ...]（由 StatementChecker 注入）。

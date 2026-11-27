@@ -204,6 +204,9 @@ test_multi_file_cross_unit_generic_chain_matches_single_file_value	src/driver/te
 test_multi_file_cross_unit_pathological_recursion_at_5000_reports_e3005	src/driver/tests/mono_cross_unit.rs	assertx2 is_nonex1 expectx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_cross_unit_method_named_arg_binds_declaration_parameter_name	src/driver/tests/named_args_cross_unit_method.rs	assertx3 is_nonex1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_cross_unit_method_named_arg_selects_overload_by_parameter_name	src/driver/tests/named_args_cross_unit_method.rs	assertx5 is_nonex1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_alias_import_method_named_arg_binds_declaration_parameter_name	src/driver/tests/named_args_import_shapes.rs	helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_namespace_qualified_method_named_arg_binds_declaration_parameter_name	src/driver/tests/named_args_import_shapes.rs	helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_inferred_receiver_method_named_arg_binds_declaration_parameter_name	src/driver/tests/named_args_import_shapes.rs	helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_named_import_bare_call_in_function_body	src/driver/tests/named_import_calls.rs	helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_named_import_bare_call_in_module_init	src/driver/tests/named_import_calls.rs	helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_whole_module_import_qualified_call	src/driver/tests/named_import_calls.rs	helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
@@ -1755,7 +1758,6 @@ test_range_pattern_compiles_to_closed_ge_le_chain	src/middle/lower/tests/pattern
 test_range_pattern_negative_bounds_compile_to_negative_constants	src/middle/lower/tests/pattern_range.rs	assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_ir_view_type_args_normalize_list_to_vec	src/middle/lower/tests/query.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_resolve_function_name_native_arm_keeps_chain_order	src/middle/lower/tests/query.rs	assert_eqx2 match_panicx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
-test_method_param_info_empty_name_table_returns_none	src/middle/lower/tests/query.rs	assert_eqx1 assertx1 is_nonex1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_allocator_reuses_slot_for_disjoint_intervals	src/middle/lower/tests/regalloc.rs	assert_eqx3 expectx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_allocator_keeps_overlapping_values_in_distinct_slots	src/middle/lower/tests/regalloc.rs	assert_nex2 expectx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_allocator_keeps_phi_edge_source_live_to_predecessor_end	src/middle/lower/tests/regalloc.rs	assert_nex1 expectx1	待判	两门皆不过；含强断言，证明门需人工复核	待判

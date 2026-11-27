@@ -1105,7 +1105,8 @@ pub(in crate::driver) fn resolved_method_marks(
             &recorder_unit,
             &module_keys,
         );
-        for (_, ir_name) in result.overload_resolutions.iter() {
+        for (_, resolution) in result.overload_resolutions.iter() {
+            let ir_name = &resolution.target;
             // 身份从**投影索引**读回（D-8 的 IR 最终名）：定义侧混编后缀 `#{序}`
             // 由同一个 helper 剥离，这里不解析字符串分段。
             let Some((identity, ordinal)) =

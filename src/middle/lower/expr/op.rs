@@ -224,10 +224,6 @@ impl AstToIrGenerator {
                     if inferred != "<unknown>" {
                         self.local_var_types.insert(var_name.clone(), inferred);
                     }
-                    // WBS 4.9.8 / issue #465：赋值的**写出**类型名（构造器形态）
-                    if let Some(written) = self.constructor_written_type_name(right) {
-                        self.note_local_written_type(var_name, &written);
-                    }
 
                     // 统一走 Store — 消除 Var→Var 走 Move 的特殊情况
                     instructions.push(Instruction::Store {

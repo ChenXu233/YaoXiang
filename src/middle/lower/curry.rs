@@ -260,7 +260,6 @@ impl AstToIrGenerator {
         frame.register_curry_layer_bindings(env_params, &layer.params, env_count);
         // curry 层形参全部来自声明注解本身（层参数由 `split_curry` 从注解切出），
         // 无需声明补位。
-        frame.note_param_written_types(&layer.params, &[]);
 
         // next_temp 起始 = 参数总数
         frame.next_temp = env_count + layer.params.len();
