@@ -530,7 +530,7 @@ P10 其余清理与状态修正 06 §S2/S3/S4/S5/S6
 > **7c 遗留（非本笔，未修）**：① 跨单元单定义方法以命名实参调用会上报 E6007——新旧 revision 完全一致（非本笔引入、本次未放大；2026-11-25 复验）。② 精化谓词求解预算固定 100ms（`src/frontend/core/sema/proof/budget.rs:41`、`:50`，经 `src/frontend/core/sema/layers/predicate.rs:203`、`:239` 传给 Z3）：求解超过该预算时落 Unknown/Unproven 分支，语料 `tests/yaoxiang/06-compile-errors/refinement/call_arg_no_evidence_err.yx` 由 E4018 退化为 E2031；标准批次环境实测 5/5 为 E4018，高负载作为触发条件未获复现。③ 4.5.2 的 `overload_resolutions` 常驻差集判据（含 `examined`/`consumed` 证据面下限，`src/middle/ir/tests/overload_resolutions.rs`）已不存在——**2026-11-25 已更正口径**：模块头改为事实陈述（原文为「差集必须为空」，现写明该语料级用例已于 2026-11-07 批量退役中删除、仓内无自动执行点、同款证据面由 `release_plan_spans` 承担），恢复判据需过测试准入三扇门。
 
 - [ ] **7d 最后做**（2 个三级任务）
-- [ ] **7e `.42` 数据丢失修复**（3 个三级任务；2315/2341 由"独立 issue"收编，2026-10-05）
+- [x] **7e `.42` 数据丢失修复**（3 个三级任务）✅ 92b3229、68fee38、d39494c、00196ff
 
 | 二级 | 三级 | 前置 | 验收 |
 | --- | --- | --- | --- |
@@ -554,9 +554,10 @@ P10 其余清理与状态修正 06 §S2/S3/S4/S5/S6
 | | 7c.3 `method_def_ordinals` 只读化（定义名改由 typecheck 按声明身份产出，lowering 只读；D21 归 04） | 7c.1 | C4；**已完成（2026-11-25 收口：138f9e0f；定义身份映射落地 + 独立验证/复审通过）** |
 | 7d 最后做 | 7d.1 `generate_call_expr_ir` 拆为 `CallArgs` + 6 个 `emit_*` | 7c.x | C1 快照 zero-diff |
 | | 7d.2 「补 0」兜底改返回诊断 | 7d.1 | C4 |
-| 7e `.42` 数据丢失修复 | 7e.1 `upvalue_count: 0` 修正（`bytecode.rs:2312`）+ `VERSION` 4→5（D17）+ 已分配未使用 opcode 回收（D32/D34 随升版） | 7d.x | C4 + `.42` 往返测试；独占 commit |
-| | 7e.2 `exception_handlers` 落盘（`bytecode.rs:2315`——throw/try 是语言核心语义，**不得留待实现**） | 7e.1 | `.42` 直跑异常用例差分 |
-| | 7e.3 `globals` 落盘（`bytecode.rs:2341`） | 7e.1 | `.42` 直跑全局变量用例差分 |
+| 7e `.42` 数据丢失修复 | 7e.1 `upvalue_count: 0` 修正（`bytecode.rs:2312`）+ `VERSION` 4→5（D17）+ 已分配未使用 opcode 回收（D32/D34 随升版） | 7d.x | C4 + `.42` 往返测试；独占 commit；**已完成（92b3229）** |
+| | 7e.2 ~~`exception_handlers` 落盘~~ **取消（前提不成立）**：该字段无生产者、无消费者，语言层无 throw/try/catch（RFC-030/036，见 D52）；异常遗留（字段 + `TRY_BEGIN`/`TRY_END`，`THROW` 单列）归 P10 S6 | — | — |
+| | 7e.3 `globals` 落盘（`bytecode.rs:2341`） | 7e.1 | C4 + `.42` 直跑全局变量用例差分；**已完成（68fee38）** |
+| | 7e.4 类型号表可逆化 + 全局表载体统一（7e.3 收口发现的静默错配：`Int(64)` 与 `Float(32)` 同号 `9`、`Float(64)` 读回 `TypeRef("_")`；D59 **B 类**；写侧对未知位宽与编译期 FFI 类型响亮拒绝） | 7e.3 | C4 + 类型号往返/无碰撞断言；**已完成（d39494c、00196ff）** |
 
 **预期管理**：行数**净增 900–1600 行**。若立项时以"代码变短"为成功标准，本阶段会被判定为失败。
 
@@ -639,7 +640,7 @@ P10 其余清理与状态修正 06 §S2/S3/S4/S5/S6
 | S3 空头设计文档 | C1+C2 删除后重写为指向 `src/frontend/module/`（约 2,670 行）；C3 改写边界表；**同步清理 `config.js:259-268`** | 文档站无 404；`check-docs-truth.py` 通过 |
 | S4 RFC 状态修正 | C4 RFC-018 移回 `draft/`（D46）；C5 RFC-028 补 `impl_status: 'not-started'`；F3 `TRACKING.md` 加「实现状态」列（D36） | `check_tracking.py` 退出码 0（**不手改 TRACKING.md**） |
 | S5 `pub` 项降可见性 | B2 `TypeSystem` / B4 `check_type_equivalence`（**`is_subtype` 必须保留**） | 编译器能指出真正的死代码 |
-| S6 opcode 死路径清理 | B8 `TailCall` 与 B9 `Switch`（D32/D34：删，opcode 值回收已在 7e.1 随升版落地）；B10 `UnaryOp::Not`（D33：`opcode()` 区分 `op` 字段）；**F7+F8 opcode 生成期门禁**（`tools/code-tables` 扩展 opcode 提取器约 30 行 + 5 处事实表达单源化 + `size()` 全 opcode 对拍测试） | opcode 事实 5 处表达收敛为 1 处权威源；`size()` 注释与实际编码不符（`bytecode.rs:2181-2182`）修复 |
+| S6 opcode 死路径清理 | B8 `TailCall` 与 B9 `Switch`（D32/D34：删，opcode 值回收已在 7e.1 随升版落地）；B10 `UnaryOp::Not`（D33：`opcode()` 区分 `op` 字段）；B11 `exception_handlers` 字段 + B12 `TRY_BEGIN`/`TRY_END` 两 opcode（2026-11-28 复核：字段无生产者、无消费者，两 opcode 无生产者，属死路径而非数据丢失；`THROW` 单列待裁决——RFC-030 记为 assert-as-raise 的前向预留）；**F7+F8 opcode 生成期门禁**（`tools/code-tables` 扩展 opcode 提取器约 30 行 + 5 处事实表达单源化 + `size()` 全 opcode 对拍测试） | opcode 事实 5 处表达收敛为 1 处权威源；`size()` 注释与实际编码不符（`bytecode.rs:2181-2182`）修复 |
 | S7 wasm32 门控 project-mode 子树（2026-10-18 登记，D35 假设修正；用户） | S7.1 把整条 project-mode 子树在 wasm32 上门控（`#[cfg(not(target_arch = "wasm32"))]` 或等价 cfg 面）：D35 设想的「删不可达者」在 `orchestrator.rs` **无适用目标**（4 条 wasm32 正臂运行期不可达但编译期承重——调用点未门控；6 条 `not(wasm32)` 反臂 native 三条阶段表承重；逐条判定见 `06-cleanup-inventory.md` §「F2 判定」）。**三条未核实（原样保留，落地前须补）**：① 产物规模收益未量测；② shim 之外的 wasm32 消费者未穷举；③ native 承重为静态调用链未端到端 | 先红后绿不适用（无行为变化面）：门控后 wasm32 目标编译通过且产物缩小可测；native 全量回归零漂移（语料 + IR 快照）；`06` F2 行同步指向本登记 |
 | S8 文档更正形式收敛（就地改写，删修订注记）——2026-10-18 登记（ | S8.1 按本批固化规则（`coding-rules.md` 第四部分）审计存量「修订注记」并就地改写。**scope（本次审计清单）**：① `02-stage-contract.md:431` 阶段表草图两条次序偏差集成进草图；② `02:486-492` 三档表与「为什么先做 W 级」段改写为终态 E 级事实；③ `02:780-798` Driver 草图改为落地形态；④ `02:461-479` Obligations 草图先逐条核对；⑤ `013-error-code-specification.md:517` 正文改写为现状、删旧引文；⑥ `09:130` 3.2 行写实测结论；⑦ 指针 6 处（`02:1217`、`02:1239`、`04-ssa.md:194/447/721`、`:141`）改指正文对应段 | `docs/src/dev/architecture/` 下 `grep -c 修订注记` 归零（`` 除外）+ 6 处指针改指正文 + 涉及代码事实处 file:line 在冻结 revision 重取 |
 | S9 发版前审计的抽象化收口（**2026-10-18 登记**；**归属阶段：P10；是否阻塞主线：否**） | S9.1 `typecheck/inference/statements.rs` 的上下文灌注块两份（`infer_statement` 两条分支各抄一份，字段顺序已漂移）；本次把新 setter 同时写进两块 ⇒ **本次新增 2 份**。抽共有 setter ≈ **−14 行** | issue [#473](https://github.com/ChenXu233/YaoXiang/issues/473) |
@@ -697,7 +698,7 @@ P10 其余清理与状态修正 06 §S2/S3/S4/S5/S6
 - ~~**7b.1 粒度过粗**~~ **已修（2026-10-05）**：按 DoD 6 拆为 7b.1a / 7b.1b 两个独占 commit。
 - **8.2.1 粒度过粗**——约 89 处改名引用，漏改**静默改变结合性**。
 - ~~**D17 / D20 无对应三级任务**~~ **已修（2026-10-05）**：D17 落地为 7e.1，D20 落地为 4.5.1/4.5.2；D32/D34 的 opcode 回收并入 7e.1，删除动作留 P10 S6。
-- ~~**`2315` / `2341` 数据丢失缺陷原定"独立 issue"**~~ **已修（2026-10-05）**：收编为 7e.2 / 7e.3。异常表（throw/try）是语言核心语义，不得留待实现遗留。
+- ~~**`2315` / `2341` 数据丢失缺陷原定"独立 issue"**~~ **已修（2026-10-05）**：`2341` 收编为 7e.3；`2315` 于 2026-11-28 复核为审计误报（字段无生产者、语言层无 throw/try/catch），7e.2 取消，异常遗留归 P10 S6。
 - ~~**E2（`lib.rs:568/582` `todo!()`）无阶段归属**~~ **已修（2026-10-05）**：并入 P10 S2。
 - ~~**F7（opcode 门禁提取器）归属含糊**~~ **已修（2026-10-05）**：并入 P10 S6 的生成期门禁任务。
 

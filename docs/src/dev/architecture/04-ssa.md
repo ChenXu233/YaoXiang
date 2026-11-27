@@ -422,23 +422,19 @@ self.release_plan_total = type_result.release_plan.drops.len();
 **机制三：`method_def_ordinals` 的定义序依赖（独立小项，**2026-11-25 已落地**）。**
 该字段原为 `HashMap<String, usize>`，key 为无模块限定的 `"{type_name}.{method_name}"`，按定义遍历序分配 `#N` 混编名——若 typecheck 的注册序与 lowering 的定义序不一致，同名方法会解析到不同目标。**落地形态**：typecheck 在登记重载候选的同一处**一次性产出** `method_def_ir_names: HashMap<PlanId, String>`（裸名或 `#N` 混编名），随 `TypeCheckResult` 交给 IR 生成。键取**方法声明语句的 `PlanId`**（AST 结构身份，D20 同款）——`DefId` 在 lowering 尾部的 `assign_defs` 才分配，typecheck 侧不存在。lowering 按声明身份只读取名，**未命中即 E3005 响亮失败**（不回退裸名——回退会把「定义名与调用名不同源」伪装成可运行程序）。可变计数器及其写入点已删除，定义名不再有第二个推导入口。
 
-### 三条硬编码丢弃的跟踪
+### 硬编码丢弃的跟踪
 
-**已核实事实。** `impl From<BytecodeFile> for BytecodeModule`（`bytecode.rs:943-2350`，1408 行）中有三处硬编码丢弃：
+`impl From<BytecodeFile> for BytecodeModule`（今 `src/middle/bytecode/mod.rs`）原有三处硬编码丢弃；7e 复核后为**两处真丢失 + 一处误报**：
 
-| 位置 | 字段 | 值 | 后果 |
+| 位置（旧行号） | 字段 | 原值 | 复核结论 |
 | --- | --- | --- | --- |
-| `bytecode.rs:2312` | `upvalue_count` | `0` // Not stored in BytecodeFile | 闭包 upvalue 数量在 `.42` 往返后归零 |
-| `bytecode.rs:2315` | `exception_handlers` | `Vec::new()` // Not implemented yet | **`.42` 产物丢失整个异常表** |
-| `bytecode.rs:2341` | `globals` | `Vec::new()` // Not stored in BytecodeFile yet | **`.42` 产物丢失全局变量信息**（注意 `2347` 的 `global_names` **有**被填充，两者不一致） |
+| `bytecode.rs:2312` | `upvalue_count` | `0` // Not stored in BytecodeFile | **真丢失**：闭包上值槽数经 `.42` 往返归零；已随 v5 落盘（7e.1） |
+| `bytecode.rs:2315` | `exception_handlers` | `Vec::new()` // Not implemented yet | **误报**：字段无生产者、无消费者，语言层无 throw/try/catch（RFC-030 把 `Throw` 记为字节码层预留，RFC-036 否决进程内 catch 边界）⇒ 没有「丢失的数据」，是死字段；不落盘，删除归 P10 S6 |
+| `bytecode.rs:2341` | `globals` | `Vec::new()` // Not stored in BytecodeFile yet | **真丢失**：全局表（名字 + 类型）经往返归零；已随 v5 落盘（7e.3），载体与函数签名同为 `MonoType`（7e.4） |
 
-**设计判断（2026-10-05 修订，决议 D52）：三处全部收进本文范围，作为 P7 批 e（7e），不再立"独立 issue"。** 原判断（后两条立独立 issue）的理由记录如下，以及为什么被推翻：
+**判据（决议 D52）：没有生产者的空表不是丢失的数据，是死路径**——与 D32 同一判据。有生产者而容器不落盘的才是数据丢失，因此 `2312` / `2341` 收进 P7 批 e（7e）；`2315` 不落盘，作为死字段归 P10 S6 的 opcode 死路径清理（`THROW` 单列待裁决）。升版一次覆盖两处真丢失（`VERSION` 4→5，D17）；`.42` 是构建产物，跨版本兼容不是目标。
 
-1. ~~它们是**格式层缺口**（`BytecodeFile` 没序列化这些字段），与 SSA 无关。~~ 成立，但不构成排除理由——P7 本来就动 `bytecode.rs`，且三处同修只需一次 `VERSION` 升版（4→5），拆成两次升版反而更贵。
-2. ~~修它们需要改 `.42` 落盘格式 → 升版 → 范围从"IR 形态"膨胀到"产物格式"。~~ 升版机制已存在（`MAGIC` + `VERSION` 头，读取侧按版本拒绝），且 `.42` 是构建产物，跨版本兼容不是目标——膨胀的是工作量，不是风险。
-3. ~~`2315` / `2341` 实际风险等级低，`.42` 直跑是次要路径。~~ **被推翻**：异常表丢失使 throw/try 在 `.42` 直跑时行为错误——throw/try 是语言核心语义；次要路径不等于可以静默错。本次重构的原则是**不留核心功能的待实现遗留**（`Vec::new() // Not implemented yet` 正是这类遗留）。
-
-**同时保留**：三处仍必须在 `Obligations` 账本里登记为"产出但未序列化"直至 7e 完成，避免它变成第四种"没人知道的事"。`2312` 随升版一并落地（D17），已分配未使用的 opcode 值（D32/D34）同批回收。
+**7e 同批的第三处格式失真**：`.42` 类型号表不可逆且撞号——`Int(64)` 与 `Float(32)` 同为 `9`、`Float(64)` 读回 `TypeRef("_")`。号表改为可逆无碰撞（7e.4），写侧对未知位宽与编译期 FFI 类型响亮拒绝。
 
 ## 详细设计
 
