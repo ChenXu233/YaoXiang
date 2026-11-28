@@ -1490,15 +1490,26 @@ impl<'ctx> Emitter<'ctx> {
         })
     }
 
+    /// 物化字符串常量为 **裸字节数组**（不追加 NUL 终止符）。
+    ///
+    /// `String` 的值是 `{ ptr, len }`：`len` 是真实字节数，读取一律按显式长度
+    /// （见设计文档「运行时 ABI 约定」）。`build_global_string_ptr` 走 C 字符串
+    /// 通道（`CString`），会在第一个内嵌 NUL 处截断，导致 `len` 与落盘字节
+    /// 不一致（`"a\0b"` 只剩 `a`）——因此这里按 `&[u8]` 直接建常量数组。
     fn global_string(
         &mut self,
         value: &str,
     ) -> Result<inkwell::values::GlobalValue<'ctx>> {
         self.string_serial += 1;
-        llvm(
-            self.builder
-                .build_global_string_ptr(value, &format!("yx.string.{}", self.string_serial)),
-        )
+        let bytes = self.context.const_string(value.as_bytes(), false);
+        let global = self.module.add_global(
+            bytes.get_type(),
+            Some(AddressSpace::default()),
+            &format!("yx.string.{}", self.string_serial),
+        );
+        global.set_initializer(&bytes);
+        global.set_constant(true);
+        Ok(global)
     }
 }
 

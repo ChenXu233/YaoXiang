@@ -2475,6 +2475,55 @@ mod enabled {
     }
 
     #[test]
+    fn test_native_embedded_nul_stdout_matches_vm() {
+        // Arrange：字符串常量含**内嵌 NUL 字节**——`String` 是 `{ptr,len}` 借用视图，长度是
+        // 真实字节数，输出按显式长度落字节（不追加 NUL、不以 NUL 为界）。
+        // 注：`\\0` / `\\u{0}` 这类**转义拼写**在到达 IR 之前就被丢掉（前端 escape 解码
+        // 的既有缺口，见 t26 finding），因此这里用运行期真字节钉端到端契约。
+        let source = concat!(
+            "use std.io\n",
+            "main: () -> Void = {\n",
+            "    io.println(\"a\u{0}b\")\n",
+            "    io.print(\"x\u{0}y\")\n",
+            "    io.println(\"\")\n",
+            "    io.println(\"\u{0}\")\n",
+            "    io.println(\"h\\u{00e9}\u{0}z\\u{4e16}\")\n",
+            "}\n",
+            "main()\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "embedded_nul_stdout");
+
+        // Assert
+        // assert_native_matches_vm 已逐字节比对 VM 与 O0/O2 的 stdout：VM 侧 a<NUL>b 是
+        // `61 00 62 0a`；常量若在 NUL 处截断会只剩 `61`，输出按 NUL 为界则整段消失。
+    }
+
+    #[test]
+    fn test_native_embedded_nul_comparison_matches_vm() {
+        // Arrange：含内嵌 NUL 的串参与判等与长度——比较按显式长度的内容，不看 NUL。
+        let source = concat!(
+            "use std.string\n",
+            "use std.assert\n",
+            "main: () -> Void = {\n",
+            "    assert.assert(\"a\u{0}b\" != \"a\u{0}c\", \"differ after NUL\")\n",
+            "    assert.assert(\"a\u{0}b\" == \"a\u{0}b\", \"equal with NUL\")\n",
+            "    assert.assert(\"a\u{0}b\" != \"a\u{0}b\u{0}\", \"length matters\")\n",
+            "    assert.assert(string.len(\"a\u{0}b\") == 3, \"NUL is one code point\")\n",
+            "    assert.assert(\"\u{0}\" != \"\", \"NUL string is not empty\")\n",
+            "}\n",
+            "main()\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "embedded_nul_compare");
+
+        // Assert
+        // assert_native_matches_vm 已比对 VM 与 O0/O2 的退出码与 stdout。
+    }
+
+    #[test]
     fn test_native_println_stdout_matches_vm() {
         // Arrange：println 的 Int/Bool/String（含 UTF-8）显示、print 无换行、多次拼接。
         // 判据是 stdout 逐字节相等（assert_native_matches_vm 比对 VM 与 O0/O2）。

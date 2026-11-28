@@ -66,7 +66,9 @@ VM 的同类系统上运行它，既能算对结果，也能在出错时指出�
       `test_native_float_mixed_int_operands_are_rejected`）；4.6 已收口：
       `std.io.print`/`println`（单参数 `Int`/`Bool`/`String`）与 `std.string.len`（码点数），
       stdout 与 VM 逐字节一致，判据 `test_native_println_stdout_matches_vm`、
-      `test_native_string_len_matches_vm`。容器、闭包、资源、FFI 与并作未开始。
+      `test_native_string_len_matches_vm`；同批修掉字符串常量的 C 字符串物化（内嵌 NUL 截断），
+      改为裸字节数组，判据 `test_native_embedded_nul_stdout_matches_vm`、
+      `test_native_embedded_nul_comparison_matches_vm`。容器、闭包、资源、FFI 与并作未开始。
 
   **批次 4 前置（阻塞，2026-11-28 登记）**：
 
@@ -404,7 +406,7 @@ python scripts/dev/testsuite.py plan
 | 6   | 合并 `Local`                 | 已收口         | `test_native_local_multi_arm_merge_matches_vm`                                                               | 多前臂写—汇合读由入口块 alloca 承载，与 VM 帧槽语义同结果，不外泄 LLVM 原文                              |
 | 7   | 显式未知类型                 | 已收口（拒绝） | `test_native_explicit_unknown_value_is_rejected`                                                             | 未知类型不静默猜测、不静默 Void                                                                          |
 | 8   | `String` 判等与顺序          | 已收口         | `test_native_string_equality_matches_vm`、`test_native_string_ordering_matches_vm`                           | 内容相等不是指针相等；六个算子按 UTF-8 字节字典序，空串、前缀、多字节为边界；合并值经 `Phi` 仍按内容比较 |
-| 9   | 控制台 stdout                | 已收口         | `test_native_println_stdout_matches_vm`                                                                      | 输出与 VM 逐字节一致：`Int`/`Bool`/`String` 三种显示、`print` 不换行、`println` 一个 `\n`、UTF-8 不被 NUL 截断 |
+| 9   | 控制台 stdout                | 已收口         | `test_native_println_stdout_matches_vm`、`test_native_embedded_nul_stdout_matches_vm`                          | 输出与 VM 逐字节一致：`Int`/`Bool`/`String` 三种显示、`print` 不换行、`println` 一个 `\n`、含内嵌 NUL 的常量按显式长度整段输出 |
 
 这九条是等价账本的最小交付边界：**已支持项不得移出集合换绿**——支持集只增不减，绿灯不得靠把已支持项移出集合获得。
 
@@ -526,8 +528,10 @@ python scripts/dev/testsuite.py plan
 ### String 布局
 
 - `len` 是 UTF-8 字节数，不是码点数。
-- 字符串不以 NUL 结尾，内容可以包含 0 字节；运行时一律按显式长度处理，禁止 `strlen` / `strcmp` / `printf("%s")` 一类以 NUL 为界的调用。
+- 字符串不以 NUL 结尾，内容可以包含 0 字节；运行时一律按显式长度处理，禁止 `strlen` / `strcmp` / `printf("%s")` 一类以 NUL 为界的调用。该契约的端到端判据是含内嵌 NUL 的常量输出（`test_native_embedded_nul_stdout_matches_vm`）：把 `__yx_rt_print_str` 的 `fwrite(ptr, 1, len)` 换成 `fputs(ptr)` 会让它变红。
+- 已知缺口（前端，不属 L4）：`\0` 与 `\u{0}` 这类**转义拼写**在到达 IR 之前就被丢掉（`string.len("a\u{0}b")` 在 VM 与 AOT 都返回 2），因此含内嵌 NUL 的可达形态目前是源码里的**裸 NUL 字节**；该缺口归前端 escape 解码，L4 按 IR 事实物化。
 - 批次 4.1 的字符串只有静态字面量一种来源：LLVM 全局常量，生命期等于进程，**永不释放**，语义是借用视图。
+- 字面量按**裸字节数组**物化（`[N x i8]`，`set_constant`），**不追加 NUL 终止符、不以 NUL 为界**：`{ptr, len}` 的 `len` 是真实字节数，含内嵌 NUL 的常量整段落盘。批次 4.6 修掉的正是 `build_global_string_ptr`（C 字符串通道）在第一个 NUL 处截断、而 `len` 仍按 `str::len()` 计数导致「长度与落盘字节不一致」的既有缺陷；判据 `test_native_embedded_nul_stdout_matches_vm`、`test_native_embedded_nul_comparison_matches_vm`（受控变异：把物化换回 C 字符串通道，两条判据都变红）。
 - 所有权是**编译期事实**：由 IR 的释放计划决定谁在哪个语句边界释放，L4 不重做所有权分析；值里不携带运行时所有权标记。
 - 未来的 owned 字符串在 `ptr` 之前放堆头（引用计数、种类、长度），值形状仍是 `{ ptr, len }`——新增分配不改变任何函数签名。
 - 用户可见的长度有两套口径，不得混用：`StringLength` 指令对 `String` 是字节数（对容器是元素数）；`std.string.len` 与内建 `len` 对 `String` 是码点数。选择由调用方按语义决定，ABI 层不统一。

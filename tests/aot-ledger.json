@@ -64,7 +64,8 @@
       "id": "stdout",
       "state": "supported",
       "tests": [
-        "native_aot::enabled::test_native_println_stdout_matches_vm"
+        "native_aot::enabled::test_native_println_stdout_matches_vm",
+        "native_aot::enabled::test_native_embedded_nul_stdout_matches_vm"
       ]
     }
   ]
