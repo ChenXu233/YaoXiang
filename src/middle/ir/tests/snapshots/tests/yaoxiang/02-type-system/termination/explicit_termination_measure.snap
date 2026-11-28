@@ -8,7 +8,7 @@ module
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
-    value v4: Refined { base: TypeVar(TypeVar(40)), constraint: Call { func: "Terminates", args: [NamedVar("b")] } } @block0
+    value v4: Int(64) @block0
     value v5: Int(64) @block0
     value v6: Int(64) @block0
     value v7: Int(64) @block0
@@ -31,23 +31,23 @@ module
   fn main() -> Void
     locals_total=3
     values_total=21
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
-    value v2: Refined { base: TypeVar(TypeVar(40)), constraint: Call { func: "Terminates", args: [NamedVar("b")] } } @block0
+    value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
     value v6: Generic { name: "String", args: [] } @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
-    value v9: Refined { base: TypeVar(TypeVar(40)), constraint: Call { func: "Terminates", args: [NamedVar("b")] } } @block0
+    value v9: Int(64) @block0
     value v10: Int(64) @block0
     value v11: Int(64) @block0
     value v12: Int(64) @block0
     value v13: Generic { name: "String", args: [] } @block0
-    value v14: TypeRef("?") @block0
+    value v14: Never @block0
     value v15: Bool @block0
-    value v16: Refined { base: TypeVar(TypeVar(40)), constraint: Call { func: "Terminates", args: [NamedVar("b")] } } @block0
+    value v16: Int(64) @block0
     value v17: Int(64) @block0
     value v18: Int(64) @block0
     value v19: Int(64) @block0
@@ -59,6 +59,7 @@ module
     Eq v1 <- v2, v3
     Load v6 <- string("gcd(12,8) == 4")
     Call v0 <- string("std.assert.assert") [v1, v6] (def=d1)
+    Drop v6
     Load v11 <- int(1071)
     Load v12 <- int(462)
     Call v9 <- string("gcd") [v11, v12] (def=d0)
@@ -66,6 +67,7 @@ module
     Eq v8 <- v9, v10
     Load v13 <- string("gcd(1071,462) == 21")
     Call v7 <- string("std.assert.assert") [v8, v13] (def=d1)
+    Drop v13
     Load v18 <- int(7)
     Load v19 <- int(0)
     Call v16 <- string("gcd") [v18, v19] (def=d0)
@@ -73,6 +75,7 @@ module
     Eq v15 <- v16, v17
     Load v20 <- string("gcd(7,0) == 7（零边界不递归）")
     Call v14 <- string("std.assert.assert") [v15, v20] (def=d1)
+    Drop v20
     Ret v14
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

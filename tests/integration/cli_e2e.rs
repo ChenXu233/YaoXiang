@@ -321,6 +321,45 @@ fn test_e2e_check_unused_private_fn_warns_but_exits_zero() {
     );
 }
 
+// run 命令 — 项目模式警告面的「项目内文件」过滤（#578）
+//
+// 病史：find_project_root 对相对入口（run main.yx，cwd = 项目根）返回空路径，
+// 消费方 canonicalize("") 失败后退化为空路径；Path::starts_with("") 对任意
+// 路径恒真，std 虚拟单元 <std/list> 被判成项目内文件，run 对 std 内部函数
+// 误报 23-25 条 W1001（check 链入口恒为绝对路径，不复现）。
+// 判据双面：std 内部函数不得报；项目内真正的未引用函数仍须报。
+
+#[test]
+fn test_e2e_run_project_relative_entry_reports_only_project_dead_code() {
+    // Arrange：项目模式 + 相对入口（#578 触发形态）
+    let tmp = TempDir::new().unwrap();
+    std::fs::write(
+        tmp.path().join("yaoxiang.toml"),
+        "[package]\nname = \"w1001-scope\"\nversion = \"0.1.0\"\n\n[run]\nmain = \"main.yx\"\n",
+    )
+    .expect("写 manifest");
+    std::fs::write(
+        tmp.path().join("main.yx"),
+        "dead_fn = () => { 1 }\nmain = () => { 1 }\n",
+    )
+    .expect("写入口");
+
+    // Act
+    let (code, _stdout, stderr) = run_yx(&["run", "main.yx"], tmp.path());
+
+    // Assert
+    assert_eq!(code, 0, "警告不阻断运行，run 应 exit 0: {stderr}");
+    assert_eq!(
+        stderr.matches("warning [W1001]").count(),
+        1,
+        "只有项目内的 dead_fn 可报 W1001；std 虚拟单元不在项目内（#578）: {stderr}"
+    );
+    assert!(
+        stderr.contains("unused function: 'dead_fn'"),
+        "项目内未引用函数仍须报 W1001（过滤面不得整体关掉）: {stderr}"
+    );
+}
+
 #[test]
 fn test_e2e_check_unused_import_warns_but_exits_zero() {
     // Arrange: 整模块导入且未被引用 → W1003

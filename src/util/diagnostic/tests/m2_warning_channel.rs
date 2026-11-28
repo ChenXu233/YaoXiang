@@ -65,8 +65,8 @@ main = () => {
     w = weak.new(p)
     u = weak.upgrade(w)
     match u {
-        some(v) => println("alive"),
-        none() => println("dropped"),
+        some(v) -> println("alive"),
+        none() -> println("dropped"),
     }
 }
 "#;

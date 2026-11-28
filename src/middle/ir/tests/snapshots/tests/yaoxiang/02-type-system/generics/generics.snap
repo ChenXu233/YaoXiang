@@ -15,13 +15,13 @@ module
     locals_total=5
     values_total=12
     value v0: Int(64) @block0
-    value v1: TypeRef("?") @block0
+    value v1: Never @block0
     value v2: Bool @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Generic { name: "String", args: [] } @block0
     value v6: Generic { name: "String", args: [] } @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
     value v9: Generic { name: "String", args: [] } @block0
     value v10: Generic { name: "String", args: [] } @block0
@@ -33,13 +33,18 @@ module
     Eq v2 <- v3, v4
     Load v5 <- string("identity(42) should be 42")
     Call v1 <- string("std.assert.assert") [v2, v5] (def=d1)
+    Drop v5
     Load v6 <- string("hello")
     Call %1 <- string("identity") [v6] (def=d0)
+    Drop v6
     Load v9 <- %1
     Load v10 <- string("hello")
     Eq v8 <- v9, v10
+    Drop v9
+    Drop v10
     Load v11 <- string("identity(\"hello\") should be \"hello\"")
     Call v7 <- string("std.assert.assert") [v8, v11] (def=d1)
+    Drop v11
     Drop %1
     Drop %0
     Ret v7

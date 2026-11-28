@@ -55,14 +55,32 @@ pub struct TypeCheckResult {
     /// RFC-010 和类型的类型参数名（类型名 → [T, E]，声明序）——ir_gen
     /// 载荷类型替换用（变体 params 里的 TypeRef(名) 按位绑定 scrutinee 实参）
     pub sum_type_param_names: HashMap<String, Vec<String>>,
+    /// 类型身份 → 本地键（[`crate::frontend::core::sema::TypeEnvironment`]
+    /// 派生索引的只读快照；唯一写者是 `TypeEnvironment::add_type`）。
+    ///
+    /// 跨阶段消费者（lower）据它把「本地键表」投影成**身份可查**的视图：
+    /// 同一编译集里的同名类型（a.T / b.T）因此各按自己的身份取字段/变体，
+    /// 不从名字串反解模块（D64；§2.5 执行口径「身份不得从名字串反解」）。
+    pub type_identity_index: HashMap<crate::frontend::core::types::identity::Nominal, String>,
+    /// 本地键（写名）→ 类型身份：与 [`Self::type_identity_index`] 同一份事实的
+    /// **正向**投影；由 `TypeEnvironment::add_type` 与索引**同笔**写入，
+    /// 结果构造处平移（单源：唯一写者 add_type）。
+    ///
+    /// 两向都保留的原因：索引（身份→本地键）只留第一个写名；别名 + 定义名
+    /// 双登记时第二个写名在索引里没有条目。lower 按写名取身份只查这张表，
+    /// 不得遍历索引按 value 反查（O(n) 且丢多写名）。
+    pub type_identity_by_local_key:
+        HashMap<String, crate::frontend::core::types::identity::Nominal>,
     /// RFC-011b 运算符派发点（span 键控；ir_gen 据此把原生指令换为方法调用）
     pub operator_dispatches: Vec<super::operator_interfaces::OperatorDispatch>,
     /// RFC-011a §3：重载决议表（**调用点 `PlanId` 键控**，RFC-039 D20/WBS 4.5.2；
     /// ir_gen 据此把方法调用命名为决议出的混编名——同名多候选时裸名会撞函数表）
     pub overload_resolutions: OverloadResolutions,
-    /// RFC-011b `?` 表达式的 Try 实现类型名（span 键控；ir_gen 据此命名
-    /// 四方法调用链——接收者是任意表达式时类型名别无来处）
-    pub try_expr_impls: Vec<(crate::util::span::Span, String)>,
+    /// RFC-011b `?` 表达式的 Try 结算结果（span 键控）：实现**类型身份**（module +
+    /// 定义名；跨模块同名 Try 类型的四方法调用名按定义模块限定，单文件投影为裸名，
+    /// D64 显示口径）+ 成功载荷 + 残余载荷。三样同出一次结算：ir_gen 据此命名四方法
+    /// 并落它们的结果类型（接收者是任意表达式时，这几样都别无来处）。
+    pub try_expr_impls: super::operator_interfaces::TryExprImpls,
     /// #389 match scrutinee 推断类型（match 节点 span 键控；ir_gen 的
     /// generate_match_expr_ir 按 span 回查——AST 猜测器对调用/内联构造/
     /// 字段访问形态返回 None，Union 模式会被 #330 安全网误拦 E3008）
@@ -77,6 +95,55 @@ pub struct TypeCheckResult {
     /// B.2 起生产路径产出 witness 字段，IR 的 `TypeDeclField.quantity` 与构造
     /// 参数/默认值填充都从这张表读量词；消费端不得自行重算分类。
     pub record_models: HashMap<String, super::record_model::RecordModel>,
+    /// 方法定义的混编 IR 名（RFC-011a §3 / WBS 7c.3）。
+    ///
+    /// 键 = 方法声明语句的 [`PlanId`]（AST 结构身份；`DefId` 在 lowering 尾部
+    /// `assign_defs` 才分配，typecheck 侧不存在）。typecheck 在登记重载候选的
+    /// 同一处产出裸名或 `#N` 混编名（与 `overload_resolutions` 的候选名同源），
+    /// IR 生成按声明身份只读取名，不再按定义遍历顺序二次推导。
+    ///
+    /// 消费缺失即 `E3005`（`lower/stmt.rs` 的 `generate_method_ir`），无静默回退。
+    pub method_def_ir_names: HashMap<PlanId, String>,
+    /// 调用点结果类型（**调用点 `PlanId` 键控**，RFC-039 D20；ir_gen 的
+    /// `expr_value_type` 按同一节点的同一身份回查）。
+    ///
+    /// 唯一产出点是 `infer_call_expr` 的返回处（`inference/expressions/expr.rs`
+    /// 的 Call 臂）：限定名 / native / 方法 / 泛型调用的**最终**类型只在 sema
+    /// 手里，IR 侧按被调名反查原生签名取不到，值表遂落显式未知 `TypeRef("?")`。
+    /// 落表前先 zonk；仍含推断变量（`TypeVar`）或身份未分配
+    /// （[`PlanId::UNPLANNED`]）的条目不落——IR 宁可显式未知，也不写未收敛变量。
+    pub expr_result_types: HashMap<PlanId, MonoType>,
+}
+
+/// 一次方法调用重载决议的**载荷**（WBS 4.9.10 D-3）。
+///
+/// 两个字段是消费端的两件不同的事，且都由 typecheck 唯一产出：
+/// - `target`：**IR 函数表里真实存在的函数名**（D-8：多文件 `{模块键}.{Type}.{method}`
+///   （同名重载按声明序加 `#序`），单文件裸名）——IR 生成直接用它当被调名，
+///   不再按短名二次查表；
+/// - `param_names`：**胜出候选**的声明期形参名（接收者居首，与候选签名同序）。
+///   命名实参的按名入槽以它为准：产出点按方法身份（[`DefPath`]）直查候选组取得，
+///   消费端因此既不用反解名字、也不再有第二份名字表（WBS 4.9.10 删 `method_param_info`）。
+///   空表 = 声明期名字不可用（候选与形参名对不齐）——消费端不得把空表冒充「名字已核对」。
+///
+/// [`DefPath`]: crate::frontend::core::types::identity::DefPath
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MethodResolution {
+    /// IR 最终函数名（D-8）
+    pub target: String,
+    /// 胜出候选的声明期形参名（空表 = 不可用）
+    pub param_names: Vec<String>,
+}
+
+impl MethodResolution {
+    /// 只有目标名、声明期形参名不可得——仅测试夹具与「无候选名来源」用；
+    /// 生产路径一律给出两者（见 `infer_call_expr` 的产出点）。
+    pub fn target_only(target: impl Into<String>) -> Self {
+        Self {
+            target: target.into(),
+            param_names: Vec::new(),
+        }
+    }
 }
 
 /// 方法级重载决议表（RFC-011a §3 / RFC-039 D20 / WBS 4.5.2）。
@@ -93,8 +160,8 @@ pub struct TypeCheckResult {
 /// 未混编名。
 #[derive(Debug, Clone, Default)]
 pub struct OverloadResolutions {
-    /// 产出：调用点身份 → 决议出的混编 IR 名
-    entries: HashMap<PlanId, String>,
+    /// 产出：调用点身份 → 决议载荷（最终函数名 + 声明期形参名）
+    entries: HashMap<PlanId, MethodResolution>,
     /// 消费台账（与表同体；4.5.1 释放计划共用同一实现）
     consumption: ConsumptionLedger<PlanId>,
 }
@@ -104,42 +171,40 @@ impl OverloadResolutions {
     pub fn resolve(
         &mut self,
         call: PlanId,
-        ir_name: String,
+        resolution: MethodResolution,
     ) {
-        self.entries.insert(call, ir_name);
+        self.entries.insert(call, resolution);
     }
 
-    /// 由 (调用点, 混编名) 序列装配（checker 组装 `TypeCheckResult` 时用）。
-    pub fn from_entries(entries: impl IntoIterator<Item = (PlanId, String)>) -> Self {
+    /// 由 (调用点, 载荷) 序列装配（checker 组装 `TypeCheckResult` 时用）。
+    pub fn from_entries(entries: impl IntoIterator<Item = (PlanId, MethodResolution)>) -> Self {
         let mut table = Self::default();
-        for (call, ir_name) in entries {
-            table.resolve(call, ir_name);
+        for (call, resolution) in entries {
+            table.resolve(call, resolution);
         }
         table
     }
 
-    /// **唯一消费入口**：按调用点身份取混编 IR 名，命中即记账。
+    /// **唯一消费入口**：按调用点身份取决议载荷，命中即记账。
     ///
     /// 未分配身份（合成调用）一律 `None`：不消费、也不冒充消费——它若真的
     /// 进了决议表，结算会把它作为未消费条目报出来（响亮）。
     pub fn get(
         &self,
         call: PlanId,
-    ) -> Option<&str> {
+    ) -> Option<&MethodResolution> {
         if !call.is_planned() {
             return None;
         }
-        let ir_name = self.entries.get(&call)?;
+        let resolution = self.entries.get(&call)?;
         self.consumption.mark(call);
-        Some(ir_name.as_str())
+        Some(resolution)
     }
 
-    /// **只读**枚举决议条目 `(调用点, 混编 IR 名)`——不触达 `get`、不计入消费台账
+    /// **只读**枚举决议条目 `(调用点, 载荷)`——不触达 `get`、不计入消费台账
     /// （WBS 4.9.6 / #450 逐候选归因的读取面；纯读保证不掩盖「消费必达」结算）。
-    pub fn iter(&self) -> impl Iterator<Item = (&PlanId, &str)> {
-        self.entries
-            .iter()
-            .map(|(call, name)| (call, name.as_str()))
+    pub fn iter(&self) -> impl Iterator<Item = (&PlanId, &MethodResolution)> {
+        self.entries.iter()
     }
 
     /// 未消费的产出键（**结算判据：必须为空**；升序，诊断可比）。

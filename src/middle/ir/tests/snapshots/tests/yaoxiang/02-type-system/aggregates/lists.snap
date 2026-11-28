@@ -12,7 +12,7 @@ module
     value v5: Int(64) @block0
     value v6: Generic { name: "Vec", args: [Int(64)] } @block0
     value v7: Int(64) @block0
-    value v8: TypeRef("?") @block0
+    value v8: Never @block0
     value v9: Bool @block0
     value v10: Int(64) @block0
     value v11: Int(64) @block0
@@ -30,11 +30,13 @@ module
     Load v6 <- %0
     Load v7 <- int(0)
     LoadIndex %1 <- v6[v7]
+    Drop v6
     Load v10 <- %1
     Load v11 <- int(1)
     Eq v9 <- v10, v11
     Load v12 <- string("first element should be 1")
     Call v8 <- string("std.assert.assert") [v9, v12] (def=d0)
+    Drop v12
     Drop %1
     Drop %0
     Ret v8

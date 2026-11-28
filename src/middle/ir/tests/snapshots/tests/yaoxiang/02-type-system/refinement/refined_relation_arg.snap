@@ -32,28 +32,28 @@ module
     values_total=28
     value v0: Int(64) @block0
     value v1: Int(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Never @block0
     value v3: Bool @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
     value v6: Generic { name: "String", args: [] } @block0
     value v7: Int(64) @block0
     value v8: Int(64) @block0
-    value v9: TypeRef("?") @block0
+    value v9: Never @block0
     value v10: Bool @block0
     value v11: Int(64) @block0
     value v12: Int(64) @block0
     value v13: Generic { name: "String", args: [] } @block0
     value v14: Int(64) @block0
     value v15: Int(64) @block0
-    value v16: TypeRef("?") @block0
+    value v16: Never @block0
     value v17: Bool @block0
     value v18: Int(64) @block0
     value v19: Int(64) @block0
     value v20: Generic { name: "String", args: [] } @block0
     value v21: Int(64) @block0
     value v22: Int(64) @block0
-    value v23: TypeRef("?") @block0
+    value v23: Never @block0
     value v24: Bool @block0
     value v25: Int(64) @block0
     value v26: Int(64) @block0
@@ -66,6 +66,7 @@ module
     Eq v3 <- v4, v5
     Load v6 <- string("f(42, 42) 应返回 42")
     Call v2 <- string("std.assert.assert") [v3, v6] (def=d1)
+    Drop v6
     Load v7 <- int(3)
     Load v8 <- int(6)
     Call %1 <- string("g") [v7, v8] (def=d2)
@@ -74,6 +75,7 @@ module
     Eq v10 <- v11, v12
     Load v13 <- string("g(3, 6) 应返回 6（s == n * 2）")
     Call v9 <- string("std.assert.assert") [v10, v13] (def=d1)
+    Drop v13
     Load v14 <- int(42)
     Load v15 <- int(42)
     Call %2 <- string("f") [v15, v14] (def=d0)
@@ -82,6 +84,7 @@ module
     Eq v17 <- v18, v19
     Load v20 <- string("f(n = 42, N = 42) 应返回 42（命名实参按形参名入槽）")
     Call v16 <- string("std.assert.assert") [v17, v20] (def=d1)
+    Drop v20
     Load v21 <- int(6)
     Load v22 <- int(3)
     Call %3 <- string("g") [v22, v21] (def=d2)
@@ -90,6 +93,7 @@ module
     Eq v24 <- v25, v26
     Load v27 <- string("g(s = 6, n = 3) 应返回 6（非交换关系 + 命名实参按名入槽）")
     Call v23 <- string("std.assert.assert") [v24, v27] (def=d1)
+    Drop v27
     Drop %3
     Drop %0
     Drop %1

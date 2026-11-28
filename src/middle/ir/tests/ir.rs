@@ -1,8 +1,8 @@
 //! `Instruction` / `FunctionBody` 结构判据 — 04-ssa.md §目标设计
 //!
 //! 7b.1a：`Instruction::Phi` 的 `span()` 与 `for_each_operand_mut()`
-//! 两个穷尽 match 臂（09a §P7 7b.1a 契约 §二 第 1/2 行）。
-//! 7b.1b：`FunctionBody::Code.values` 值表与 `ValueInfo`（09a §P7 7b.1b 契约 §二）。
+//! 两个穷尽 match 臂（提交信息）。
+//! 7b.1b：`FunctionBody::Code.values` 值表与 `ValueInfo`（提交信息）。
 
 use crate::frontend::core::sema::MonoType;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand, ValueId, ValueInfo};

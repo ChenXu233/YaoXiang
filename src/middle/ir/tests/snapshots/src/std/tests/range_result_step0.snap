@@ -4,40 +4,41 @@ module
     slot[1] r : Int(64) @depth1
     slot[2] it : Int(64) @depth1
     locals_total=6
-    values_total=11
+    values_total=12
     value v0: Int(64) @block0
     value v1: Int(64) @block0
     value v2: Int(64) @block0
-    value v3: Generic { name: "Range", args: [Int(64)] } @block0
-    value v4: TypeRef("?") @block0
-    value v5: TypeRef("?") @block0
-    value v6: TypeRef("?") @block0
-    value v7: TypeRef("?") @block0
-    value v8: TypeRef("?") @block0
-    value v9: TypeRef("?") @block0
-    value v10: Generic { name: "Iterator", args: [TypeRef("Any")] } @block0
+    value v3: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block0
+    value v4: Generic { name: "Range", args: [Int(64)] } @block0
+    value v5: Bool @block0
+    value v6: Generic { name: "Iterator", args: [TypeRef("Any")] } @block0
+    value v7: TypeRef("Error") @block0
+    value v8: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block0
+    value v9: Generic { name: "Result", args: [TypeRef("Any"), TypeRef("Error")] } @block0
+    value v10: TypeRef("Any") @block0
+    value v11: Generic { name: "Iterator", args: [TypeRef("Any")] } @block0
     Load %0 <- arg%0
     Load v0 <- int(1)
     Load v1 <- int(10)
     Load v2 <- %0
     NewRange %1 <- v0, v1, v2
-    Load v3 <- %1
-    Call %2 <- string("std.range.iter") [v3] (def=d0)
-    Call v4 <- string("std.result.Result.is_failure") [%2] (def=_)
-    JmpIf v4 -> instr(12)
-    Call v5 <- string("std.result.Result.success") [%2] (def=_)
-    Load %2 <- v5
+    Load v4 <- %1
+    Call v3 <- string("std.range.iter") [v4] (def=d0)
+    Call v5 <- string("std.result.Result.is_failure") [v3] (def=_)
+    JmpIf v5 -> instr(12)
+    Call v6 <- string("std.result.Result.success") [v3] (def=_)
+    Load %2 <- v6
     Jmp -> instr(15)
-    Call v6 <- string("std.result.Result.residual") [%2] (def=_)
-    Call v7 <- string("std.result.Result.from_error") [v6] (def=_)
-    Ret v7
-    Load v10 <- %2
-    Call v9 <- string("std.range.next") [v10] (def=d1)
-    CreateVariant v8 <- Result::0 v9
+    Call v7 <- string("std.result.Result.residual") [v3] (def=_)
+    Call v8 <- string("std.result.Result.from_error") [v7] (def=_)
     Ret v8
+    Load v11 <- %2
+    Call v10 <- string("std.range.next") [v11] (def=d1)
+    CreateVariant v9 <- Result::0 v10
+    Ret v9
     Drop %2
     Drop %1
-    Ret v8
+    Ret v9
   fn contains_low(Int(64), Int(64)) -> Generic { name: "Result", args: [Bool, TypeRef("Error")] }
     slot[0] n : Int(64) @depth1
     slot[1] x : Int(64) @depth1
@@ -47,14 +48,14 @@ module
     value v0: Int(64) @block0
     value v1: Int(64) @block0
     value v2: Int(64) @block0
-    value v3: TypeRef("?") @block0
-    value v4: TypeRef("?") @block0
+    value v3: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block0
+    value v4: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block0
     value v5: Generic { name: "Range", args: [Int(64)] } @block0
     value v6: Int(64) @block0
-    value v7: TypeRef("?") @block0
-    value v8: TypeRef("?") @block0
-    value v9: TypeRef("?") @block0
-    value v10: TypeRef("?") @block0
+    value v7: Bool @block0
+    value v8: Bool @block0
+    value v9: TypeRef("Error") @block0
+    value v10: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
     Load v0 <- int(0)
@@ -86,48 +87,48 @@ module
     locals_total=10
     values_total=46
     value v0: Int(64) @block0
-    value v1: TypeRef("?") @block0
-    value v2: TypeRef("?") @block0
+    value v1: Never @block0
+    value v2: Bool @block0
     value v3: Generic { name: "Result", args: [TypeRef("Any"), TypeRef("Error")] } @block0
     value v4: Generic { name: "String", args: [] } @block0
-    value v5: TypeRef("?") @block0
+    value v5: Never @block0
     value v6: Bool @block0
-    value v7: TypeRef("?") @block0
+    value v7: Int(64) @block0
     value v8: Int(64) @block0
     value v9: Generic { name: "Result", args: [TypeRef("Any"), TypeRef("Error")] } @block0
     value v10: Generic { name: "String", args: [] } @block0
     value v11: Int(64) @block0
-    value v12: TypeRef("?") @block0
-    value v13: TypeRef("?") @block0
+    value v12: Never @block0
+    value v13: Bool @block0
     value v14: Generic { name: "Result", args: [TypeRef("Any"), TypeRef("Error")] } @block0
     value v15: Generic { name: "String", args: [] } @block0
     value v16: Int(64) @block0
-    value v17: TypeRef("?") @block0
+    value v17: Never @block0
     value v18: Bool @block0
-    value v19: TypeRef("?") @block0
+    value v19: Int(64) @block0
     value v20: Int(64) @block0
     value v21: Generic { name: "Result", args: [TypeRef("Any"), TypeRef("Error")] } @block0
     value v22: Generic { name: "String", args: [] } @block0
     value v23: Int(64) @block0
     value v24: Int(64) @block0
-    value v25: TypeRef("?") @block0
-    value v26: TypeRef("?") @block0
+    value v25: Never @block0
+    value v26: Bool @block0
     value v27: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block0
     value v28: Generic { name: "String", args: [] } @block0
     value v29: Int(64) @block0
     value v30: Int(64) @block0
-    value v31: TypeRef("?") @block0
-    value v32: TypeRef("?") @block0
+    value v31: Never @block0
+    value v32: Bool @block0
     value v33: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block0
     value v34: Generic { name: "String", args: [] } @block0
-    value v35: TypeRef("?") @block0
-    value v36: TypeRef("?") @block0
+    value v35: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block0
+    value v36: Generic { name: "Range", args: [Int(64)] } @block0
     value v37: Int(64) @block0
     value v38: Int(64) @block0
     value v39: Int(64) @block0
-    value v40: TypeRef("?") @block0
+    value v40: Never @block0
     value v41: Bool @block0
-    value v42: TypeRef("?") @block0
+    value v42: TypeRef("Any") @block0
     value v43: Int(64) @block0
     value v44: Generic { name: "Iterator", args: [TypeRef("Any")] } @block0
     value v45: Generic { name: "String", args: [] } @block0
@@ -135,60 +136,77 @@ module
     Call %0 <- string("first_of") [v0] (def=d3)
     Load v3 <- %0
     Call v2 <- string("std.result.is_ok") [v3] (def=d4)
+    Drop v3
     Load v4 <- string("step=2 → Ok")
     Call v1 <- string("std.assert.assert") [v2, v4] (def=d5)
+    Drop v4
     Drop %0
     Load v9 <- %0
     Call v7 <- string("std.result.unwrap") [v9] (def=d6)
+    Drop v9
     Load v8 <- int(1)
     Eq v6 <- v7, v8
     Load v10 <- string("step=2 首元素 1")
     Call v5 <- string("std.assert.assert") [v6, v10] (def=d5)
+    Drop v10
     Drop %0
     Load v11 <- int(0)
     Call %1 <- string("first_of") [v11] (def=d3)
     Load v14 <- %1
     Call v13 <- string("std.result.is_err") [v14] (def=d7)
+    Drop v14
     Load v15 <- string("step=0 → Err 传播")
     Call v12 <- string("std.assert.assert") [v13, v15] (def=d5)
+    Drop v15
     Drop %1
     Load v16 <- int(3)
     Call %2 <- string("first_of") [v16] (def=d3)
     Load v21 <- %2
     Call v19 <- string("std.result.unwrap") [v21] (def=d6)
+    Drop v21
     Load v20 <- int(1)
     Eq v18 <- v19, v20
     Load v22 <- string("step=3 首元素 1")
     Call v17 <- string("std.assert.assert") [v18, v22] (def=d5)
+    Drop v22
     Drop %2
     Load v23 <- int(2)
     Load v24 <- int(4)
     Call %3 <- string("contains_low") [v23, v24] (def=d8)
     Load v27 <- %3
     Call v26 <- string("std.result.unwrap") [v27] (def=d6)
+    Drop v27
     Load v28 <- string("step=2 对齐元素 in")
     Call v25 <- string("std.assert.assert") [v26, v28] (def=d5)
+    Drop v28
     Drop %3
     Load v29 <- int(0)
     Load v30 <- int(4)
     Call %4 <- string("contains_low") [v29, v30] (def=d8)
     Load v33 <- %4
     Call v32 <- string("std.result.is_err") [v33] (def=d7)
+    Drop v33
     Load v34 <- string("contains step=0 → Err")
     Call v31 <- string("std.assert.assert") [v32, v34] (def=d5)
+    Drop v34
     Drop %4
     Load v37 <- int(1)
     Load v38 <- int(3)
     Load v39 <- int(1)
     NewRange v36 <- v37, v38, v39
     Call v35 <- string("std.range.iter") [v36] (def=d0)
+    Drop v36
+    Drop v35
     Call %5 <- string("std.result.unwrap") [v35] (def=d6)
     Load v44 <- %5
     Call v42 <- string("std.range.next") [v44] (def=d1)
+    Drop v44
     Load v43 <- int(1)
+    Drop v42
     Eq v41 <- v42, v43
     Load v45 <- string("unwrap 后迭代器可用")
     Call v40 <- string("std.assert.assert") [v41, v45] (def=d5)
+    Drop v45
     Drop %0
     Drop %1
     Drop %2

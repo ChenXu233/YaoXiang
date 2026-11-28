@@ -20,7 +20,7 @@ module
     value v13: TypeRef("?") @block0
     value v14: Generic { name: "Vec", args: [Int(64)] } @block0
     value v15: Int(64) @block0
-    value v16: TypeRef("?") @block0
+    value v16: Generic { name: "String", args: [] } @block0
     AllocArray %0 size=int(3), elem=int(1)
     Load v0 <- int(1)
     Load v1 <- int(0)
@@ -36,14 +36,18 @@ module
     Load v7 <- %1
     Load v8 <- int(99)
     StoreIndex v6[v7] <- v8
+    Drop v6
     Load v11 <- %0
     Load v12 <- int(0)
     LoadIndex v10 <- v11[v12]
+    Drop v11
     Load v14 <- %0
     Load v15 <- int(0)
     LoadIndex v13 <- v14[v15]
+    Drop v14
     Call v16 <- string("int.to_string") [v13] (def=d0)
     Call v9 <- string("std.io.print") [v16] (def=d1)
+    Drop v16
     Drop %0
     Drop %1
     Ret v9

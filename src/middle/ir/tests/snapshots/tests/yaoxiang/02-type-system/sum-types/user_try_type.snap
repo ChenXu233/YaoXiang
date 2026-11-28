@@ -47,7 +47,7 @@ module
     value v7: TypeRef("?") @block0
     value v8: Int(64) @block0
     value v9: Bool @block0
-    value v10: TypeRef("?") @block0
+    value v10: Never @block0
     value v11: Bool @block0
     Load v0 <- void
     Load v1 <- %0
@@ -82,7 +82,7 @@ module
     value v7: Int(64) @block0
     value v8: Bool @block0
     value v9: TypeRef("?") @block0
-    value v10: TypeRef("?") @block0
+    value v10: Never @block0
     value v11: Bool @block0
     Load v0 <- void
     Load v1 <- %0
@@ -108,7 +108,7 @@ module
     values_total=4
     value v0: Void @block0
     value v1: Generic { name: "String", args: [] } @block0
-    value v2: TypeRef("?") @block0
+    value v2: Generic { name: "Maybe", args: [] } @block0
     value v3: Void @block0
     Load v0 <- void
     Load v1 <- %0
@@ -121,32 +121,33 @@ module
     slot[0] m : Int(64) @depth1
     slot[1] v : Int(64) @depth1
     locals_total=5
-    values_total=8
-    value v0: TypeRef("?") @block0
-    value v1: TypeRef("?") @block0
-    value v2: TypeRef("?") @block0
-    value v3: TypeRef("?") @block0
-    value v4: TypeRef("?") @block0
-    value v5: Int(64) @block0
+    values_total=9
+    value v0: Ref { mutable: false, inner: TypeRef("Maybe") } @block0
+    value v1: Bool @block0
+    value v2: Int(64) @block0
+    value v3: Generic { name: "String", args: [] } @block0
+    value v4: Ref { mutable: false, inner: TypeRef("Maybe") } @block0
+    value v5: Generic { name: "Maybe", args: [] } @block0
     value v6: Int(64) @block0
     value v7: Int(64) @block0
+    value v8: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Call v0 <- string("Maybe.is_failure") [%1] (def=d1)
-    JmpIf v0 -> instr(7)
-    Call v1 <- string("Maybe.success") [%1] (def=d2)
-    Load %1 <- v1
+    Load v0 <- %0
+    Call v1 <- string("Maybe.is_failure") [v0] (def=d1)
+    JmpIf v1 -> instr(7)
+    Call v2 <- string("Maybe.success") [v0] (def=d2)
+    Load %1 <- v2
     Jmp -> instr(10)
-    Call v2 <- string("Maybe.residual") [%1] (def=d3)
-    Call v3 <- string("Maybe.from_error") [v2] (def=d4)
-    Ret v3
-    Load v6 <- %1
-    Load v7 <- int(1)
-    Add v5 <- v6, v7
-    CreateVariant v4 <- Maybe::0 v5
+    Call v3 <- string("Maybe.residual") [v0] (def=d3)
+    Call v4 <- string("Maybe.from_error") [v3] (def=d4)
     Ret v4
+    Load v7 <- %1
+    Load v8 <- int(1)
+    Add v6 <- v7, v8
+    CreateVariant v5 <- Maybe::0 v6
+    Ret v5
     Drop %1
-    Ret v4
+    Ret v5
   fn main() -> Void
     slot[0] some_case : Int(64) @depth1
     slot[1] none_case : Int(64) @depth1
@@ -165,7 +166,7 @@ module
     value v7: Int(64) @block0
     value v8: Bool @block0
     value v9: TypeRef("?") @block0
-    value v10: TypeRef("?") @block0
+    value v10: Never @block0
     value v11: Bool @block0
     value v12: Int(64) @block0
     value v13: Int(64) @block0
@@ -173,7 +174,7 @@ module
     value v15: TypeRef("?") @block0
     value v16: Int(64) @block0
     value v17: Bool @block0
-    value v18: TypeRef("?") @block0
+    value v18: Never @block0
     value v19: Bool @block0
     value v20: Generic { name: "String", args: [] } @block0
     value v21: Generic { name: "Maybe", args: [] } @block0
@@ -184,13 +185,13 @@ module
     value v26: Int(64) @block0
     value v27: Bool @block0
     value v28: TypeRef("?") @block0
-    value v29: TypeRef("?") @block0
+    value v29: Never @block0
     value v30: Bool @block0
     value v31: Generic { name: "String", args: [] } @block0
     value v32: TypeRef("?") @block0
     value v33: Int(64) @block0
     value v34: Bool @block0
-    value v35: TypeRef("?") @block0
+    value v35: Never @block0
     value v36: Bool @block0
     value v37: Generic { name: "String", args: [] } @block0
     Load v0 <- int(4)

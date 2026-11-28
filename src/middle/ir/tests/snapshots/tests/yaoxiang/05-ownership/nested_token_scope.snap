@@ -13,12 +13,12 @@ module
     values_total=32
     value v0: Int(64) @block0
     value v1: Int(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Void @block0
     value v3: TypeRef("?") @block0
     value v4: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v5: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v6: Int(64) @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
     value v9: TypeRef("?") @block0
     value v10: Int(64) @block0
@@ -26,10 +26,10 @@ module
     value v12: Generic { name: "String", args: [] } @block0
     value v13: Int(64) @block0
     value v14: Int(64) @block0
-    value v15: TypeRef("Inner") @block0
+    value v15: Struct(StructType { name: "Inner", fields: [("view", Ref { mutable: false, inner: TypeRef("Point") })], methods: {}, interfaces: [] }) @block0
     value v16: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v17: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v18: TypeRef("?") @block0
+    value v18: Never @block0
     value v19: Bool @block0
     value v20: TypeRef("?") @block0
     value v21: Int(64) @block0
@@ -37,7 +37,7 @@ module
     value v23: TypeRef("?") @block0
     value v24: Struct(StructType { name: "Outer", fields: [("inner", TypeRef("Inner"))], methods: {}, interfaces: [] }) @block0
     value v25: Generic { name: "String", args: [] } @block0
-    value v26: TypeRef("?") @block0
+    value v26: Never @block0
     value v27: Bool @block0
     value v28: TypeRef("?") @block0
     value v29: Int(64) @block0
@@ -48,39 +48,50 @@ module
     Call %0 <- string("Point") [v0, v1] (def=d0)
     Load v4 <- %0
     LoadField v3 <- v4.0
+    Drop v4
     Call v2 <- string("std.io.println") [v3] (def=d1)
     Load v5 <- %0
     Load v6 <- int(10)
     StoreField v5.0 <- v6 (type=None, name=Some("x"))
+    Drop v5
     Drop %0
     Load v11 <- %0
     LoadField v9 <- v11.0
+    Drop v11
     Load v10 <- int(10)
     Eq v8 <- v9, v10
     Load v12 <- string("good_seq 嵌套块后写")
     Call v7 <- string("std.assert.assert") [v8, v12] (def=d2)
+    Drop v12
     Load v13 <- int(5)
     Load v14 <- int(6)
     Call %1 <- string("Point") [v13, v14] (def=d0)
     Load v17 <- %1
     Move v16 <- v17
+    Drop v17
+    Drop v16
+    Drop v15
     Call v15 <- string("Inner") [v16] (def=d3)
     Call %2 <- string("Outer") [v15] (def=d4)
     Drop %1
     Load v24 <- %2
     LoadField v23 <- v24.0
+    Drop v24
     LoadField v22 <- v23.0
     LoadField v20 <- v22.1
     Load v21 <- int(6)
     Eq v19 <- v20, v21
     Load v25 <- string("三层嵌套令牌访问")
     Call v18 <- string("std.assert.assert") [v19, v25] (def=d2)
+    Drop v25
     Load v30 <- %1
     LoadField v28 <- v30.0
+    Drop v30
     Load v29 <- int(5)
     Eq v27 <- v28, v29
     Load v31 <- string("派生令牌后源仍可读")
     Call v26 <- string("std.assert.assert") [v27, v31] (def=d2)
+    Drop v31
     Drop %0
     Drop %1
     Drop %2

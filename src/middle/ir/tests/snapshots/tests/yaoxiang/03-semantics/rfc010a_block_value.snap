@@ -80,6 +80,7 @@ module
     value v1: Generic { name: "String", args: [] } @block0
     Load v1 <- string("assign tail")
     Call %0 <- string("std.io.println") [v1] (def=d0)
+    Drop v1
     Drop %0
     Ret
   fn if_no_else_is_void() -> Void
@@ -138,43 +139,43 @@ module
   fn main() -> Void
     locals_total=3
     values_total=46
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Generic { name: "String", args: [] } @block0
-    value v6: TypeRef("?") @block0
+    value v6: Never @block0
     value v7: Bool @block0
     value v8: Int(64) @block0
     value v9: Int(64) @block0
     value v10: Int(64) @block0
     value v11: Generic { name: "String", args: [] } @block0
-    value v12: TypeRef("?") @block0
+    value v12: Never @block0
     value v13: Bool @block0
     value v14: Int(64) @block0
     value v15: Int(64) @block0
     value v16: Generic { name: "String", args: [] } @block0
-    value v17: TypeRef("?") @block0
+    value v17: Never @block0
     value v18: Bool @block0
     value v19: Int(64) @block0
     value v20: Int(64) @block0
     value v21: Int(64) @block0
     value v22: Generic { name: "String", args: [] } @block0
-    value v23: TypeRef("?") @block0
+    value v23: Never @block0
     value v24: Bool @block0
     value v25: Int(64) @block0
     value v26: Int(64) @block0
     value v27: Int(64) @block0
     value v28: Generic { name: "String", args: [] } @block0
-    value v29: TypeRef("?") @block0
+    value v29: Never @block0
     value v30: Bool @block0
     value v31: Int(64) @block0
     value v32: Int(64) @block0
     value v33: Int(64) @block0
     value v34: Int(64) @block0
     value v35: Generic { name: "String", args: [] } @block0
-    value v36: TypeRef("?") @block0
+    value v36: Never @block0
     value v37: Bool @block0
     value v38: Int(64) @block0
     value v39: Int(64) @block0
@@ -182,7 +183,7 @@ module
     value v41: Generic { name: "String", args: [] } @block0
     value v42: Void @block0
     value v43: Void @block0
-    value v44: TypeRef("?") @block0
+    value v44: Void @block0
     value v45: Generic { name: "String", args: [] } @block0
     Load v4 <- int(4)
     Call v2 <- string("tail_expr") [v4] (def=d1)
@@ -190,29 +191,34 @@ module
     Eq v1 <- v2, v3
     Load v5 <- string("tail_expr(4) should be 5")
     Call v0 <- string("std.assert.assert") [v1, v5] (def=d2)
+    Drop v5
     Load v10 <- int(3)
     Call v8 <- string("tail_after_stmts") [v10] (def=d3)
     Load v9 <- int(7)
     Eq v7 <- v8, v9
     Load v11 <- string("tail_after_stmts(3) should be 7")
     Call v6 <- string("std.assert.assert") [v7, v11] (def=d2)
+    Drop v11
     Call v14 <- string("tail_if") [] (def=d4)
     Load v15 <- int(5)
     Eq v13 <- v14, v15
     Load v16 <- string("tail_if() should be 5 (if in tail position)")
     Call v12 <- string("std.assert.assert") [v13, v16] (def=d2)
+    Drop v16
     Load v21 <- int(1)
     Call v19 <- string("tail_match") [v21] (def=d5)
     Load v20 <- int(10)
     Eq v18 <- v19, v20
     Load v22 <- string("tail_match(1) should be 10")
     Call v17 <- string("std.assert.assert") [v18, v22] (def=d2)
+    Drop v22
     Load v27 <- int(9)
     Call v25 <- string("tail_match") [v27] (def=d5)
     Load v26 <- int(20)
     Eq v24 <- v25, v26
     Load v28 <- string("tail_match(9) should be 20")
     Call v23 <- string("std.assert.assert") [v24, v28] (def=d2)
+    Drop v28
     Load v34 <- int(1)
     Neg v33 <- v34
     Call v31 <- string("early_return") [v33] (def=d6)
@@ -220,16 +226,19 @@ module
     Eq v30 <- v31, v32
     Load v35 <- string("early_return(-1) should be 0")
     Call v29 <- string("std.assert.assert") [v30, v35] (def=d2)
+    Drop v35
     Load v40 <- int(3)
     Call v38 <- string("early_return") [v40] (def=d6)
     Load v39 <- int(3)
     Eq v37 <- v38, v39
     Load v41 <- string("early_return(3) should be 3")
     Call v36 <- string("std.assert.assert") [v37, v41] (def=d2)
+    Drop v41
     Call v42 <- string("tail_assign") [] (def=d7)
     Call v43 <- string("if_no_else_is_void") [] (def=d8)
     Load v45 <- string("rfc010a block value ok")
     Call v44 <- string("std.io.println") [v45] (def=d0)
+    Drop v45
     Ret v44
   init (locals=0)
     Call %0 <- string("main") [] (def=d9)

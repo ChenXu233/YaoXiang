@@ -16,6 +16,7 @@
 use crate::ast::{Expr, PlanId};
 use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::{MonoType, TypeCheckResult};
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::{ConstValue, Operand};
 use crate::middle::lower::AstToIrGenerator;
@@ -73,9 +74,11 @@ fn test_ir_view_type_args_normalize_list_to_vec() {
     // 同时域的 L2 pin（frontend::core::types::tests::mono）在 M3 下保持绿——两 pin
     // 各自杀死本面变异（M1），互不搭便车。
     let expected = Some(MonoType::Generic {
-        name: "Vec".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Vec")))
+            .expect("type name must be bare and non-empty"),
         args: vec![MonoType::Generic {
-            name: "Vec".to_string(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Vec")))
+                .expect("type name must be bare and non-empty"),
             args: vec![MonoType::Int(64)],
         }],
     });
@@ -134,3 +137,26 @@ fn test_resolve_function_name_native_arm_keeps_chain_order() {
         "裸名 println 必须经 std 短名限定表解析为 std.io.println（NativeName 对无点裸名答「否」，臂序不得改动）"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WBS 4.9.10 D-3 退役登记（coding-rules 7.3 三扇门）
+//
+// 判据 `test_method_param_info_empty_name_table_returns_none`（WBS 4.9.9）随
+// `lower/query.rs::method_param_info` 一并退役——该函数把「IR 调用名 → 投影索引 →
+// 候选组 → 第 k 个形参名表」反查了一遍，D-3 起这条通路整体消失：名字由 typecheck
+// 随重载决议载荷（`MethodResolution::param_names`）直达 IR 生成。
+//
+// 三扇门：
+// - 条款门：现行条款不再要求 IR 侧具备该反查能力——D-3 的判据是「载荷携带名字」，
+//   相应判据在 driver 级落位（值断言）：`src/driver/tests/named_args_cross_unit_method.rs`
+//   （裸名导入 + 单候选/两候选按名筛候选）与 `src/driver/tests/named_args_import_shapes.rs`
+//   （别名导入 / 命名空间写法 / 推断接收者三形态）；载荷面另有
+//   `frontend::core::sema::tests::overload_resolutions`；
+// - 病史门：本测试钉的是「空名表不得冒充已核对」，该形态自登记期留空的路径在
+//   公开语法下不可达（测试自己的文档已写明），历史红态由 S1 矩阵 18 号记录；
+// - 证明门：同一性质在新装置的落点改为**生产端**——`add_method_overload_with_params`
+//   对不齐的名字表留空 ⇒ 载荷 `param_names` 为空 ⇒ 消费端 `bind_args_to_params`
+//   遇命名实参响亮报 E1014（不静默丢弃），由 `sema` 的 E1014 判据与上列两个
+//   driver 判据文件共同守住。
+//
+// 输入构造 helper `module_with_group` 仅服务该测试，一并删除。

@@ -6,26 +6,28 @@ module
     values_total=4
     value v0: Ref { mutable: true, inner: TypeRef("File") } @block0
     value v1: Bool @block0
-    value v2: TypeRef("?") @block0
+    value v2: Void @block0
     value v3: Generic { name: "String", args: [] } @block0
     Load v0 <- %0
     Load v1 <- bool(false)
     StoreField v0.1 <- v1 (type=None, name=Some("closed"))
     Load v3 <- string("opening file")
     Call v2 <- string("std.io.println") [v3] (def=d0)
+    Drop v3
     Ret v2
   fn File.close(Ref { mutable: true, inner: TypeRef("File") }) -> Void
     locals_total=3
     values_total=4
     value v0: Ref { mutable: true, inner: TypeRef("File") } @block0
     value v1: Bool @block0
-    value v2: TypeRef("?") @block0
+    value v2: Void @block0
     value v3: Generic { name: "String", args: [] } @block0
     Load v0 <- %0
     Load v1 <- bool(true)
     StoreField v0.1 <- v1 (type=None, name=Some("closed"))
     Load v3 <- string("closing file")
     Call v2 <- string("std.io.println") [v3] (def=d0)
+    Drop v3
     Ret v2
   fn main() -> Void
     slot[0] f : Int(64) @depth1
@@ -33,39 +35,46 @@ module
     values_total=16
     value v0: Generic { name: "String", args: [] } @block0
     value v1: Bool @block0
-    value v2: TypeRef("?") @block0
+    value v2: Void @block0
     value v3: Struct(StructType { name: "File", fields: [("name", Generic { name: "String", args: [] }), ("closed", Bool)], methods: {}, interfaces: [] }) @block0
-    value v4: TypeRef("?") @block0
+    value v4: Never @block0
     value v5: Bool @block0
     value v6: Generic { name: "String", args: [] } @block0
-    value v7: TypeRef("?") @block0
+    value v7: Void @block0
     value v8: Struct(StructType { name: "File", fields: [("name", Generic { name: "String", args: [] }), ("closed", Bool)], methods: {}, interfaces: [] }) @block0
-    value v9: TypeRef("?") @block0
+    value v9: Never @block0
     value v10: TypeRef("?") @block0
     value v11: Struct(StructType { name: "File", fields: [("name", Generic { name: "String", args: [] }), ("closed", Bool)], methods: {}, interfaces: [] }) @block0
     value v12: Generic { name: "String", args: [] } @block0
-    value v13: TypeRef("?") @block0
+    value v13: Never @block0
     value v14: Bool @block0
     value v15: Generic { name: "String", args: [] } @block0
     Load v0 <- string("test.txt")
     Load v1 <- bool(true)
     Call %0 <- string("File") [v0, v1] (def=d1)
+    Drop v0
     Load v3 <- %0
     Call v2 <- string("File.open") [v3] (def=d2)
+    Drop v3
     Drop %0
     Load v5 <- bool(true)
     Load v6 <- string("file opened")
     Call v4 <- string("std.assert.assert") [v5, v6] (def=d3)
+    Drop v6
     Load v8 <- %0
     Call v7 <- string("File.close") [v8] (def=d4)
+    Drop v8
     Drop %0
     Load v11 <- %0
     LoadField v10 <- v11.1
+    Drop v11
     Load v12 <- string("file should be closed after close()")
     Call v9 <- string("std.assert.assert") [v10, v12] (def=d3)
+    Drop v12
     Load v14 <- bool(true)
     Load v15 <- string("all passed")
     Call v13 <- string("std.assert.assert") [v14, v15] (def=d3)
+    Drop v15
     Drop %0
     Ret v13
   init (locals=1)

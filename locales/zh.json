@@ -136,6 +136,8 @@
     "example": "x = 1 @ 2;",
     "error_output": "error[E0011]: 意外的令牌\n --> example.yx:1:7\n  |\n1 | x = 1 @ 2;\n  |       ^ 意外的令牌 '@'"
   },
+  "E0011.branch_arrow.message": "=> 应为 ->（match 分支箭头用 ->，=> 只用于 lambda）",
+  "E0011.branch_arrow.help": "把 match 分支的 '=>' 改成 '->'；'->' 是分支箭头，'=>' 只用于 lambda",
   "E0012": {
     "title": "无效语法",
     "message": "表达式或语句存在语法错误",

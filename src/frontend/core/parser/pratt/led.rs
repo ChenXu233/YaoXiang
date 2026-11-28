@@ -25,118 +25,53 @@ impl<'a> ParserState<'a> {
 
 impl<'a> ParserState<'a> {
     /// Get infix binding power and parser for current token
+    ///
+    /// 绑定力与算子属性来自 `precedence::INFIX_OPS`（唯一声明处）；本函数只做
+    /// 「查表 + 把解析策略映射成函数指针」，不再列第二份 token → 绑定力表。
     #[inline]
     #[allow(clippy::type_complexity)]
     pub(crate) fn infix_info(&self) -> Option<(u8, u8, fn(&mut Self, Expr, u8) -> Option<Expr>)> {
-        match self.current().map(|t| &t.kind) {
-            // Assignment
-            Some(TokenKind::Eq) => Some((BP_ASSIGN, BP_ASSIGN + 1, Self::parse_assign)),
-            // Range
-            // #300 F/I 项：`..` 绑定力 (BP_RANGE_L, BP_RANGE_R)——左 6 低于加法（7），右 7 吞加法不吞同级 `..`。
-            // `0..n+2` → 0..(n+2)（上界是算术表达式）；
-            // `a..b..c` → (a..b)..c（step 形态，左结合）；
-            // `x in 1..10` → x in (1..10)（区间整体作为 in 右操作数）；
-            // `a == b..c` → a == (b..c)（直觉语义，`..` 高于比较级）。
-            Some(TokenKind::DotDot) => Some((BP_RANGE_L, BP_RANGE_R, Self::parse_binary)),
-            // Logical OR
-            Some(TokenKind::Or) => Some((BP_OR, BP_OR + 1, Self::parse_binary)),
-            // Logical AND
-            Some(TokenKind::And) => Some((BP_AND, BP_AND + 1, Self::parse_binary)),
-            // Equality
-            Some(TokenKind::EqEq) | Some(TokenKind::Neq) => {
-                Some((BP_EQ, BP_EQ + 1, Self::parse_binary))
-            }
-            // #285: 移位 << >>（SPEC §2.2 级 7）——parser 层 peek 合成，token 流保持无歧义（泛型嵌套 >> 不受影响）
-            Some(TokenKind::Lt) if self.peek_kind(TokenKind::Lt) => {
-                Some((BP_SHIFT, BP_SHIFT + 1, Self::parse_shift))
-            }
-            Some(TokenKind::Gt) if self.peek_kind(TokenKind::Gt) => {
-                Some((BP_SHIFT, BP_SHIFT + 1, Self::parse_shift))
-            }
-            // #285: 位运算 & | ^（SPEC §2.2 级 8）
-            Some(TokenKind::Ampersand | TokenKind::Pipe | TokenKind::Caret) => {
-                Some((BP_BIT, BP_BIT + 1, Self::parse_binary))
-            }
-            // Comparison
-            Some(TokenKind::Lt | TokenKind::Le | TokenKind::Gt | TokenKind::Ge) => {
-                Some((BP_CMP, BP_CMP + 1, Self::parse_binary))
-            }
-            // #299 §3: membership 谓词 `elem in container`（关系级，返 Bool）
-            Some(TokenKind::KwIn) => Some((BP_CMP, BP_CMP + 1, Self::parse_in)),
-            // Addition/Subtraction
-            Some(TokenKind::Plus | TokenKind::Minus) => {
-                Some((BP_ADD, BP_ADD + 1, Self::parse_binary))
-            }
-            // Multiplication/Division/Modulo
-            Some(TokenKind::Star | TokenKind::Slash | TokenKind::Percent) => {
-                Some((BP_MUL, BP_MUL + 1, Self::parse_binary))
-            }
-            // Function call
-            Some(TokenKind::LParen) => Some((BP_CALL, BP_CALL + 1, Self::parse_call)),
-            // Field access
-            Some(TokenKind::Dot) => Some((BP_CALL, BP_CALL + 1, Self::parse_field)),
-            // Indexing
-            Some(TokenKind::LBracket) => Some((BP_CALL, BP_CALL + 1, Self::parse_index)),
-            // Type cast
-            Some(TokenKind::KwAs) => Some((BP_CAST, BP_CAST + 1, Self::parse_cast)),
-            // Try operator (error propagation)
-            Some(TokenKind::Question) => Some((BP_CALL, BP_CALL + 1, Self::parse_try)),
-            // Lambda (single parameter)
-            Some(TokenKind::FatArrow) => Some((11, 1, Self::parse_lambda_infix)),
-            _ => None,
-        }
+        let kind = self.current().map(|t| &t.kind)?;
+        // `<<` / `>>` 是「两枚相邻同种 token」合成的一枚算子：按 peek 结果选中对应行。
+        let double_token = matches!(kind, TokenKind::Lt | TokenKind::Gt) && self.peek_kind(kind);
+        let entry = infix_op_matching(kind, double_token)?;
+        Some((
+            entry.left_bp,
+            entry.right_bp,
+            Self::infix_strategy_fn(&entry.strategy),
+        ))
     }
 
+    /// 查表后的解析策略 → 实现函数（策略是「怎么解析」，不是算子属性）。
+    fn infix_strategy_fn(strategy: &InfixStrategy) -> fn(&mut Self, Expr, u8) -> Option<Expr> {
+        match strategy {
+            InfixStrategy::Binary => Self::parse_binary,
+            InfixStrategy::Assign => Self::parse_assign,
+            InfixStrategy::In => Self::parse_in,
+            InfixStrategy::Shift => Self::parse_shift,
+            InfixStrategy::Call => Self::parse_call,
+            InfixStrategy::Field => Self::parse_field,
+            InfixStrategy::Index => Self::parse_index,
+            InfixStrategy::Try => Self::parse_try,
+            InfixStrategy::Cast => Self::parse_cast,
+            InfixStrategy::Lambda => Self::parse_lambda_infix,
+        }
+    }
     /// Parse assignment expression
+    ///
+    /// 算子取自 `precedence::INFIX_OPS` 的 `=` 行（`infix_ast_op`）：表是 token → 算子的
+    /// 唯一声明处，本函数不再硬编 `BinOp::Assign`（复审 t29 F1）。
     fn parse_assign(
         &mut self,
         lhs: Expr,
-        _left_bp: u8,
+        left_bp: u8,
     ) -> Option<Expr> {
         let span = self.span();
+        // 表是 token → 算子的唯一声明处：`=` 行缺失即解析失败（不静默回落硬编码算子）。
+        let op = infix_ast_op(&TokenKind::Eq)?;
         self.bump(); // consume '='
 
-        let rhs = self.parse_expression(BP_ASSIGN)?;
-
-        Some(Expr::BinOp {
-            op: BinOp::Assign,
-            left: Box::new(lhs),
-            right: Box::new(rhs),
-            span,
-        })
-    }
-
-    /// Parse binary operator expression
-    fn parse_binary(
-        &mut self,
-        lhs: Expr,
-        _left_bp: u8,
-    ) -> Option<Expr> {
-        let span = self.span();
-        let op = match self.current().map(|t| &t.kind) {
-            Some(TokenKind::Plus) => BinOp::Add,
-            Some(TokenKind::Minus) => BinOp::Sub,
-            Some(TokenKind::Star) => BinOp::Mul,
-            Some(TokenKind::Slash) => BinOp::Div,
-            Some(TokenKind::Percent) => BinOp::Mod,
-            Some(TokenKind::EqEq) => BinOp::Eq,
-            Some(TokenKind::Neq) => BinOp::Neq,
-            Some(TokenKind::Lt) => BinOp::Lt,
-            Some(TokenKind::Le) => BinOp::Le,
-            Some(TokenKind::Gt) => BinOp::Gt,
-            Some(TokenKind::Ge) => BinOp::Ge,
-            Some(TokenKind::And) => BinOp::And,
-            Some(TokenKind::Or) => BinOp::Or,
-            // #285: 位运算（SPEC §2.2 级 8）
-            Some(TokenKind::Ampersand) => BinOp::BitAnd,
-            Some(TokenKind::Pipe) => BinOp::BitOr,
-            Some(TokenKind::Caret) => BinOp::BitXor,
-            Some(TokenKind::DotDot) => BinOp::Range,
-            _ => return None,
-        };
-        self.bump();
-
-        let rhs = self.parse_expression(_left_bp)?;
+        let rhs = self.parse_expression(left_bp)?;
 
         Some(Expr::BinOp {
             op,
@@ -146,25 +81,51 @@ impl<'a> ParserState<'a> {
         })
     }
 
+    /// Parse binary operator expression
+    ///
+    /// 算子（`ast::BinOp`）从 `precedence::INFIX_OPS` 取——token → 算子的唯一映射在表里；
+    /// 绑定力由调用方按表的 `right_bp` 传入。
+    fn parse_binary(
+        &mut self,
+        lhs: Expr,
+        left_bp: u8,
+    ) -> Option<Expr> {
+        let span = self.span();
+        let op = self.current().map(|t| &t.kind).and_then(infix_ast_op)?;
+        self.bump();
+
+        let rhs = self.parse_expression(left_bp)?;
+
+        Some(Expr::BinOp {
+            op,
+            left: Box::new(lhs),
+            right: Box::new(rhs),
+            span,
+        })
+    }
     /// #299 §3: membership 谓词 `elem in container`
+    ///
+    /// 容器按表里 `in` 这一行的左绑定力解析（`..` 级 6 高于 `in` 级 9，区间整体作为
+    /// 容器；同级算子留给外层继续左结合——#300 I 项）。绑定力取自表，不在本函数写字面量。
     fn parse_in(
         &mut self,
         lhs: Expr,
         _left_bp: u8,
     ) -> Option<Expr> {
         let span = self.span();
+        let container_bp = self
+            .current()
+            .map(|t| &t.kind)
+            .and_then(infix_op)
+            .map_or(BP_LOWEST, |entry| entry.left_bp);
         self.bump(); // 消费 'in'
-                     // 右操作数按比较级以下解析：BP_RANGE(7) 高于 BP_CMP(4)，
-                     // `x in 1..10` 中区间整体作为容器；但 `x in 0..10..2` 中第二个 `..`
-                     // 必须留给外层 step 形态，故用 BP_CMP（4）截断——#300 I 项
-        let container = self.parse_expression(BP_CMP)?;
+        let container = self.parse_expression(container_bp)?;
         Some(Expr::In {
             elem: Box::new(lhs),
             container: Box::new(container),
             span,
         })
     }
-
     /// Parse shift operation (`<<` / `>>`, #285)
     ///
     /// `<<`/`>>` 在 parser 层由两个相邻 Lt/Gt token peek 合成，避免泛型嵌套 `List<List<Int>>`
@@ -175,11 +136,10 @@ impl<'a> ParserState<'a> {
         _left_bp: u8,
     ) -> Option<Expr> {
         let span = self.span();
-        let op = match self.current().map(|t| &t.kind) {
-            Some(TokenKind::Lt) => BinOp::Shl,
-            Some(TokenKind::Gt) => BinOp::Shr,
-            _ => return None,
-        };
+        let op = self
+            .current()
+            .map(|t| &t.kind)
+            .and_then(infix_double_ast_op)?;
         // 消费两个相邻 token（`<<` 或 `>>`）
         self.bump();
         self.bump();
@@ -197,9 +157,9 @@ impl<'a> ParserState<'a> {
     /// Check if the token after current matches the given kind (without consuming)
     fn peek_kind(
         &self,
-        kind: TokenKind,
+        kind: &TokenKind,
     ) -> bool {
-        matches!(self.peek().map(|t| &t.kind), Some(k) if *k == kind)
+        matches!(self.peek().map(|t| &t.kind), Some(k) if k == kind)
     }
 
     /// Parse function call expression
@@ -227,27 +187,25 @@ impl<'a> ParserState<'a> {
             let arg = self.parse_expression(BP_LOWEST)?;
 
             // RFC-010: 检测命名参数 `name=expr`
-            // 赋值表达式 x=1 会被解析为 BinOp { Assign, Var("x"), Lit(1) }
-            if let Expr::BinOp {
-                op: BinOp::Assign,
-                left,
-                right,
-                ..
-            } = arg
-            {
-                if let Expr::Var(name, _) = *left {
-                    named_args.push((name, *right));
-                } else {
-                    // 左侧不是简单变量，视为普通参数
-                    args.push(Expr::BinOp {
-                        op: BinOp::Assign,
-                        left,
-                        right,
-                        span,
-                    });
+            // 赋值表达式 x=1 会被解析为 BinOp { op: 表声明, Var("x"), Lit(1) }：
+            // 判定与重建共用解析出的 op 值，不手写第二份算子副本（复审 t29 F1）。
+            match arg {
+                Expr::BinOp {
+                    op, left, right, ..
+                } if op == BinOp::Assign => {
+                    if let Expr::Var(name, _) = *left {
+                        named_args.push((name, *right));
+                    } else {
+                        // 左侧不是简单变量，视为普通参数
+                        args.push(Expr::BinOp {
+                            op,
+                            left,
+                            right,
+                            span,
+                        });
+                    }
                 }
-            } else {
-                args.push(arg);
+                other => args.push(other),
             }
 
             if self.skip(&TokenKind::Comma) {
@@ -351,7 +309,7 @@ impl<'a> ParserState<'a> {
         let span = self.span();
         self.bump(); // consume 'as'
 
-        let ty = self.parse_type_annotation_required()?;
+        let ty = self.parse_cast_target_type()?;
 
         Some(Expr::Cast {
             expr: Box::new(lhs),
@@ -424,6 +382,7 @@ impl<'a> ParserState<'a> {
             params,
             body: Box::new(body),
             span,
+            plan_id: self.alloc_plan_id(),
         })
     }
 

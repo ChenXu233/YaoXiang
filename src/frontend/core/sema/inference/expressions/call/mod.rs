@@ -13,6 +13,7 @@ mod method;
 
 use crate::frontend::core::sema::judgement::decide;
 use crate::frontend::core::sema::passes::overload;
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::core::types::MonoType;
 use crate::util::diagnostic::{ErrorCodeDefinition, Result};
 use std::collections::{HashMap, HashSet};
@@ -26,6 +27,7 @@ use super::{ConstArgOutcome, ExpressionInferrer};
 use crate::frontend::core::sema::inference::arg_binding;
 use crate::frontend::core::sema::inference::call_ownership::{self, CallOwnership, ParamOwnership};
 use crate::frontend::core::sema::inference::statements;
+use crate::frontend::core::types::identity::Nominal;
 
 impl<'a> ExpressionInferrer<'a> {
     /// RFC-010: 变体构造调用检查——`Result(Int, String).ok(5)` / `Color.red()`。
@@ -46,7 +48,12 @@ impl<'a> ExpressionInferrer<'a> {
         named_args: &[(String, crate::ast::Expr)],
         span: crate::util::span::Span,
     ) -> Result<MonoType> {
-        let Some(variants) = self.sum_types.get(type_name) else {
+        // 和类型名 → 类型身份（D64）：别名导入/跨模块同名类型在类型层可分。
+        let nominal = self.type_identity(type_name).unwrap_or_else(|| {
+            Nominal::flat(AsRef::<str>::as_ref(&(type_name)))
+                .expect("type name must be bare and non-empty")
+        });
+        let Some(variants) = self.sum_variants(&nominal) else {
             return Err(
                 ErrorCodeDefinition::field_not_found(variant_name, type_name)
                     .at(span)
@@ -67,8 +74,7 @@ impl<'a> ExpressionInferrer<'a> {
         // 载荷签名 = 变体参数经类型实参替换
         // 非泛型和类型（Color）不在 generic_type_defs，形参表为空
         let param_names = self
-            .generic_type_defs
-            .get(type_name)
+            .generic_def(&nominal)
             .map(|d| d.type_param_names.clone())
             .unwrap_or_default();
         let subst_params: Vec<MonoType> = vdef
@@ -119,10 +125,10 @@ impl<'a> ExpressionInferrer<'a> {
                 ));
             }
         }
-        Ok(MonoType::Generic {
-            name: type_name.to_string(),
+        Ok(self.resolve_identity(MonoType::Generic {
+            name: nominal,
             args: concrete,
-        })
+        }))
     }
 
     /// 函数调用表达式的类型推断（自 `infer_expr` 的 Call 臂抽出）。
@@ -372,10 +378,10 @@ impl<'a> ExpressionInferrer<'a> {
         if let crate::ast::Expr::Var(type_name, _) = func {
             // func_ty 在此处可能是 MetaType（Var 臂开口）或 Struct（类型声明的
             // scope 镜像先命中 Var 臂）——两者都收成 Generic 形态
-            if self.sum_types.contains_key(type_name) {
+            let type_nominal = self.nominal_for(type_name);
+            if self.sum_variants(&type_nominal).is_some() {
                 let type_param_count = self
-                    .generic_type_defs
-                    .get(type_name)
+                    .generic_def(&type_nominal)
                     .map(|d| d.type_param_names.len())
                     .unwrap_or(0);
                 if args.len() != type_param_count {
@@ -404,24 +410,24 @@ impl<'a> ExpressionInferrer<'a> {
                             // 输出一致的 `Generic{名, []}`（TypeRef 与之不 unify）；
                             // 其余按名收名义引用
                             if let crate::ast::Expr::Var(n, _) = a {
-                                if self.sum_types.contains_key(n) {
+                                let n_nominal = self.nominal_for(n);
+                                if self.sum_variants(&n_nominal).is_some() {
                                     let has_params = self
-                                        .generic_type_defs
-                                        .get(n)
+                                        .generic_def(&n_nominal)
                                         .map(|d| !d.type_param_names.is_empty())
                                         .unwrap_or(false);
                                     if has_params {
-                                        return Some(MonoType::TypeRef(n.clone()));
+                                        return Some(MonoType::TypeRef(n_nominal));
                                     }
                                     return Some(MonoType::Generic {
-                                        name: n.clone(),
+                                        name: n_nominal,
                                         args: vec![],
                                     });
                                 }
                                 if self.generic_type_defs.contains_key(n)
                                     || self.type_defs.contains_key(n)
                                 {
-                                    return Some(MonoType::TypeRef(n.clone()));
+                                    return Some(MonoType::TypeRef(n_nominal));
                                 }
                             }
                             // 元组类型实参（`Result((Json, Int), Error)`）：语法
@@ -434,19 +440,21 @@ impl<'a> ExpressionInferrer<'a> {
                                             e,
                                             self.type_defs,
                                             self.generic_type_defs,
+                                            self.import_face,
+                                            self.type_identity_index,
                                         )
                                         .or_else(|| {
-                                            if self.sum_types.contains_key(n) {
+                                            let n_nominal = self.nominal_for(n);
+                                            if self.sum_variants(&n_nominal).is_some() {
                                                 let has_params = self
-                                                    .generic_type_defs
-                                                    .get(n)
+                                                    .generic_def(&n_nominal)
                                                     .map(|d| !d.type_param_names.is_empty())
                                                     .unwrap_or(false);
                                                 if has_params {
-                                                    return Some(MonoType::TypeRef(n.clone()));
+                                                    return Some(MonoType::TypeRef(n_nominal));
                                                 }
                                                 return Some(MonoType::Generic {
-                                                    name: n.clone(),
+                                                    name: n_nominal,
                                                     args: vec![],
                                                 });
                                             }
@@ -457,7 +465,8 @@ impl<'a> ExpressionInferrer<'a> {
                                     .collect();
                                 if let Some(ps) = parts {
                                     return Some(MonoType::Generic {
-                                        name: "Tuple".to_string(),
+                                        name: Nominal::flat(AsRef::<str>::as_ref(&("Tuple")))
+                                            .expect("type name must be bare and non-empty"),
                                         args: ps,
                                     });
                                 }
@@ -466,11 +475,20 @@ impl<'a> ExpressionInferrer<'a> {
                         }
                         // 具名类型解包失败（Any 等非注册名）时保留
                         // 名义引用 TypeRef(名)——错拼名由类型名校验拦截
-                        concrete_type_from_expr_arg(a, self.type_defs, self.generic_type_defs)
-                            .or_else(|| match a {
-                                crate::ast::Expr::Var(n, _) => Some(MonoType::TypeRef(n.clone())),
-                                _ => None,
-                            })
+                        concrete_type_from_expr_arg(
+                            a,
+                            self.type_defs,
+                            self.generic_type_defs,
+                            self.import_face,
+                            self.type_identity_index,
+                        )
+                        .or_else(|| match a {
+                            crate::ast::Expr::Var(n, _) => Some(MonoType::TypeRef(
+                                Nominal::flat(AsRef::<str>::as_ref(&(n.clone())))
+                                    .expect("type name must be bare and non-empty"),
+                            )),
+                            _ => None,
+                        })
                     })
                     .collect::<Option<Vec<_>>>()
                     .ok_or_else(|| {
@@ -481,10 +499,10 @@ impl<'a> ExpressionInferrer<'a> {
                         .at(span)
                         .build()
                     })?;
-                return Ok(MonoType::Generic {
-                    name: type_name.clone(),
+                return Ok(self.resolve_identity(MonoType::Generic {
+                    name: type_nominal,
                     args: concrete,
-                });
+                }));
             }
         }
 
@@ -497,7 +515,16 @@ impl<'a> ExpressionInferrer<'a> {
             crate::ast::Expr::FieldAccess { field, .. } => Some(field.as_str()),
             _ => None,
         };
-        let mono_func_ty = self.monomorphize(func_ty.clone(), &value_arg_types, fn_name_for_mono);
+        // 内置容器构造器（`Vec(Int)` / `Array(Int, 3)`）的类型实参在值位置
+        // 只是 `MetaType` 空壳，具体类型必须按 AST 形态解出（#575）。
+        let builtin_ctor_args =
+            self.builtin_container_ctor_args(fn_name_for_mono, args, &arg_types);
+        let mono_func_ty = self.monomorphize(
+            func_ty.clone(),
+            &value_arg_types,
+            fn_name_for_mono,
+            builtin_ctor_args,
+        );
 
         // #394：`{}` 空块落入容器参数位——调用实参位没有 current_expected
         // 可用，但签名形参在 mono 后已知，按位预扫：空块实参 × 容器形参
@@ -716,21 +743,17 @@ impl<'a> ExpressionInferrer<'a> {
         //   - 记录决议（**调用点 PlanId** → 混编 IR 名），ir_gen 据此命名调用
         let selected_overload: Option<(MonoType, Vec<String>)> = match &method_key {
             Some(key) => {
-                let cands = self.method_overloads.as_ref().and_then(|m| m.get(key));
-                let irs = self
-                    .method_overload_ir_names
-                    .as_ref()
-                    .and_then(|m| m.get(key));
-                // #452：候选的声明期形参名（与候选序一一对应；缺表/空表 = 该候选
-                // 名字不可用，按「无约束」放行——宁可不按名匹配也不拿错位名字匹配）
-                let cand_names = self
-                    .method_overload_param_names
-                    .as_ref()
-                    .and_then(|m| m.get(key));
-                match (cands, irs) {
+                // 候选组：候选签名与声明期形参名**同组同序**（D-1 / #452）——
+                // 决议按候选序取名、命名实参按形参名入槽，读的是同一组。
+                let group = self.method_overloads.and_then(|m| m.get(key));
+                let cands = group.map(|g| &g.candidates);
+                // #452：缺表/空表 = 该候选名字不可用，按「无约束」放行——
+                // 宁可不按名匹配也不拿错位名字匹配
+                let cand_names = group.map(|g| &g.param_names);
+                match cands {
                     // #452 / F1：候选**非空**即走决议——单候选也要跑，否则单签名的
                     // 命名实参调用整段跳过逐参类型检查（实测运行时才 E6007）。
-                    (Some(cands), Some(irs)) if !cands.is_empty() && irs.len() == cands.len() => {
+                    Some(cands) if !cands.is_empty() => {
                         let mut matches: Vec<(usize, MonoType)> = Vec::new();
                         for (i, cand) in cands.iter().enumerate() {
                             let Some(MonoType::Fn { params, .. }) = Some(cand) else {
@@ -845,7 +868,11 @@ impl<'a> ExpressionInferrer<'a> {
                         let chosen: Option<(usize, MonoType)> = match matches.len() {
                             1 => match (
                                 matches.first(),
-                                matches.first().and_then(|(i, _)| irs.get(*i)),
+                                matches.first().map(|(i, _)| {
+                                    crate::frontend::core::sema::environment::method_ir_name(
+                                        key, *i,
+                                    )
+                                }),
                             ) {
                                 (Some((i, f)), Some(ir)) => {
                                     // 沙盒里判出的匹配要在求解器里**补做一次**
@@ -889,7 +916,20 @@ impl<'a> ExpressionInferrer<'a> {
                                     }
                                     *self.solver = real;
                                     // RFC-039 D20：键 = 调用表达式节点的身份（产出侧唯一写入点）
-                                    self.overload_resolutions.push((call_plan_id, ir.clone()));
+                                    // WBS 4.9.10 D-3：载荷 = IR 最终函数名 + **胜出候选**的
+                                    // 声明期形参名（同组同序，按方法身份直取——消费端不再
+                                    // 反解名字，也没有第二份名字表）
+                                    let param_names = cand_names
+                                        .and_then(|lists| lists.get(*i))
+                                        .cloned()
+                                        .unwrap_or_default();
+                                    self.overload_resolutions.push((
+                                        call_plan_id,
+                                        crate::frontend::core::sema::types::MethodResolution {
+                                            target: ir.clone(),
+                                            param_names,
+                                        },
+                                    ));
                                     Some((*i, f.clone()))
                                 }
                                 _ => None,
@@ -897,9 +937,12 @@ impl<'a> ExpressionInferrer<'a> {
                             // 多候选无法区分 = 隐式假设调用者想要哪一个——
                             // 不该隐式的地方不隐式：歧义即报错（E1107）
                             n if n > 1 => {
-                                return Err(ErrorCodeDefinition::ambiguous_method_overload(key, n)
-                                    .at(span)
-                                    .build());
+                                return Err(ErrorCodeDefinition::ambiguous_method_overload(
+                                    &key.project(),
+                                    n,
+                                )
+                                .at(span)
+                                .build());
                             }
                             _ => None, // 0 = 无实参匹配的候选（落旧路径报错）
                         };
@@ -945,11 +988,7 @@ impl<'a> ExpressionInferrer<'a> {
             // 列出全部候选形参名的并集——只列首候选（旧预检读元数组首候选名表）
             // 会把用户往错误的重载上引（#466 复现即被 `(available: n)` 误导）。
             // 名字可用的候选一个都没有（全空表）⇒ 无可信名字来源，不检。
-            if let Some(lists) = self
-                .method_overload_param_names
-                .as_ref()
-                .and_then(|m| m.get(key))
-            {
+            if let Some(lists) = self.overload_param_names(key) {
                 if lists.iter().any(|l| !l.is_empty()) {
                     let mut known: Vec<&str> = Vec::new();
                     for name in lists.iter().flat_map(|l| l.iter().skip(1)) {
@@ -962,7 +1001,7 @@ impl<'a> ExpressionInferrer<'a> {
                         .find(|(n, _)| !known.contains(&n.as_str()))
                     {
                         return Err(ErrorCodeDefinition::unknown_argument(
-                            key,
+                            &key.project(),
                             bad,
                             &known.join(", "),
                         )
@@ -988,15 +1027,12 @@ impl<'a> ExpressionInferrer<'a> {
             let names: Option<Vec<String>> = match selected_param_names {
                 Some(names) => Some(names),
                 None => {
-                    let lists = self
-                        .method_overload_param_names
-                        .as_ref()
-                        .and_then(|m| m.get(key));
+                    let lists = self.overload_param_names(key);
                     match lists {
                         None => None,
                         Some(lists) => {
                             let total_args = arg_types.len() + named_args.len();
-                            let cands = self.method_overloads.as_ref().and_then(|m| m.get(key));
+                            let cands = self.overload_candidates(key);
                             let (names, sig) = Self::fallback_named_arg_context(
                                 lists, cands, total_args, named_args,
                             );
@@ -1016,8 +1052,13 @@ impl<'a> ExpressionInferrer<'a> {
                     Some(names.len() - 1)
                 };
                 if !names.is_empty() {
-                    param_positions =
-                        Some(Self::bind_named_args(key, &names, args, named_args, span)?);
+                    param_positions = Some(Self::bind_named_args(
+                        &key.project(),
+                        &names,
+                        args,
+                        named_args,
+                        span,
+                    )?);
                 }
             }
         }
@@ -1121,6 +1162,8 @@ impl<'a> ExpressionInferrer<'a> {
                                 &args[i],
                                 self.type_defs,
                                 self.generic_type_defs,
+                                self.import_face,
+                                self.type_identity_index,
                             )
                             .is_some()
                     };
@@ -1150,6 +1193,8 @@ impl<'a> ExpressionInferrer<'a> {
                                 &args[i],
                                 self.type_defs,
                                 self.generic_type_defs,
+                                self.import_face,
+                                self.type_identity_index,
                             ) {
                                 full_args[i] = concrete;
                             }
@@ -1333,7 +1378,12 @@ impl<'a> ExpressionInferrer<'a> {
                                 param_vars
                                     .get(p)
                                     .map(|v| self.solver.resolve_type(v))
-                                    .unwrap_or_else(|| MonoType::TypeRef(p.clone()))
+                                    .unwrap_or_else(|| {
+                                        MonoType::TypeRef(
+                                            Nominal::flat(AsRef::<str>::as_ref(&(p.clone())))
+                                                .expect("type name must be bare and non-empty"),
+                                        )
+                                    })
                             })
                             .collect();
                         // 类型实参含未绑定类型参数（`L(T)`，T 是所在泛型的参数）时
@@ -1348,7 +1398,9 @@ impl<'a> ExpressionInferrer<'a> {
                                 && !is_ctor_reference(t, self.generic_type_defs)
                         }) {
                             return Ok(MonoType::Generic {
-                                name: fn_name.clone(),
+                                // 与注解侧同一身份（D64）：构造器名的身份必须成对注入，
+                                // 否则同一形态一侧 Generic 平路径、一侧身份，unify 判异。
+                                name: self.nominal_for(fn_name),
                                 args: type_args,
                             });
                         }
@@ -1427,7 +1479,7 @@ impl<'a> ExpressionInferrer<'a> {
                         // 形态），它们没有记录模型——保留旧的 arity 宽容，不把
                         // 「命名空间值被调用」误判成记录构造的字段类型错。
                         let is_declared_record = matches!(
-                            self.type_defs.get(&st.name).map(|poly| &poly.body),
+                            self.type_defs.get(st.name.bare()).map(|poly| &poly.body),
                             Some(MonoType::Struct(_))
                         );
                         if !is_declared_record {
@@ -1436,12 +1488,23 @@ impl<'a> ExpressionInferrer<'a> {
                                 st.fields.iter().filter(|field| !field.has_default).count();
                             if named_args.is_empty() && (provided < required || provided > total) {
                                 return Err(ErrorCodeDefinition::argument_count_mismatch(
-                                    &st.name, total, provided,
+                                    st.name.bare(),
+                                    total,
+                                    provided,
                                 )
                                 .at(span)
                                 .build());
                             }
-                            return Ok(func_ty.clone());
+                            // 命名空间被调用（`use std.assert` 后裸名 `assert(...)`）：
+                            // IR 侧按 short→qualified 解析成原生导出（`std.assert.assert`）；
+                            // sema 的判据同源——`native_signatures` 同时登记短名
+                            // （environment.rs 的 add_native_signature），命中即按该签名
+                            // 的返回位给结果类型。未命中（导出面 Struct 的其它形态）
+                            // 保持旧的命名空间类型。
+                            return Ok(match self.native_signatures.get(fn_name) {
+                                Some(MonoType::Fn { return_type, .. }) => (**return_type).clone(),
+                                _ => func_ty.clone(),
+                            });
                         }
                         // 普通 struct 构造器：Point(1.0, 2.0)。构造参数 = **数据字段**
                         // （witness 字段不占槽位，B.2）；位置/命名/争槽/未知名/重复名/
@@ -1463,7 +1526,7 @@ impl<'a> ExpressionInferrer<'a> {
                         let optional: Vec<bool> =
                             data_fields.iter().map(|field| field.has_default).collect();
                         let positions = Self::bind_record_ctor_args(
-                            &st.name,
+                            st.name.bare(),
                             &param_names,
                             &optional,
                             args,
@@ -1543,9 +1606,7 @@ impl<'a> ExpressionInferrer<'a> {
         if let Some(method_key) = &method_key {
             // 候选形参表按元数分组（每组首候选作代表；空表不构成证据）
             let arity_groups: Vec<(usize, Vec<String>)> = self
-                .method_overload_param_names
-                .as_ref()
-                .and_then(|m| m.get(method_key))
+                .overload_param_names(method_key)
                 .map(|lists| Self::candidate_arity_groups(lists))
                 .unwrap_or_default();
             let bind_names: Option<&Vec<String>> = arity_groups.first().map(|(_, n)| n);
@@ -1565,7 +1626,9 @@ impl<'a> ExpressionInferrer<'a> {
             if let Some(expected) = expected_arity {
                 if total_args != expected {
                     return Err(ErrorCodeDefinition::argument_count_mismatch(
-                        method_key, expected, total_args,
+                        &method_key.project(),
+                        expected,
+                        total_args,
                     )
                     .at(span)
                     .build());
@@ -1599,7 +1662,7 @@ impl<'a> ExpressionInferrer<'a> {
                         .or_else(|| {
                             ns_key
                                 .as_deref()
-                                .map(|k| format!("std.{k}"))
+                                .map(|k| DefPath::item("std", k).project())
                                 .and_then(|k| self.native_arity.get(k.as_str()).copied())
                         });
                     // #454 / t12-F1 / t14：原生导出与方法级调用**同一套判据**——
@@ -1614,7 +1677,7 @@ impl<'a> ExpressionInferrer<'a> {
                             .or_else(|| {
                                 ns_key
                                     .as_deref()
-                                    .map(|k| format!("std.{k}"))
+                                    .map(|k| DefPath::item("std", k).project())
                                     .and_then(|k| self.native_param_names.get(k.as_str()))
                             })
                         {
@@ -1786,16 +1849,23 @@ impl<'a> ExpressionInferrer<'a> {
                         let is_iface_param = matches!(
                             &resolved_param,
                             MonoType::TypeRef(n)
-                                if self.generic_type_defs.contains_key(n)
+                                if self.generic_type_defs.contains_key(n.bare())
                         );
                         // TypeRef: 先 solver.resolve 解析内置类型（Int/Float 等），
                         // 再 type_defs 解析用户自定义类型；都不匹配则跳过
                         if let MonoType::TypeRef(name) = &resolved_param {
                             if !is_iface_param {
-                                resolved_param = match self.type_defs.get(name).map(|p| &p.body) {
-                                    Some(def_ty) => self.solver.resolve_type(def_ty),
-                                    None => continue,
-                                };
+                                match self.type_def(name).map(|p| &p.body) {
+                                    Some(def_ty) => {
+                                        resolved_param = self.solver.resolve_type(def_ty)
+                                    }
+                                    // 平路径未知名（类型参数/幻名）沿用旧口径：跳过结构比较。
+                                    None if name.module().is_empty() => continue,
+                                    // **已声明类型**（身份非空）但本单元没有定义体：
+                                    // 不跳过——按名义身份判等（D64）；跳过等于把同名
+                                    // 跨模块类型判成可互传（静默混同）。
+                                    None => {}
+                                }
                             }
                         }
                         if let Err(failure) = decide(
@@ -1813,7 +1883,8 @@ impl<'a> ExpressionInferrer<'a> {
                                     if let MonoType::TypeRef(iface) = &resolved_param {
                                         return Err(
                                             ErrorCodeDefinition::type_does_not_implement_interface(
-                                                &s.name, iface,
+                                                s.name.bare(),
+                                                iface.bare(),
                                             )
                                             .at(span)
                                             .build(),

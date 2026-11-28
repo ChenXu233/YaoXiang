@@ -41,8 +41,8 @@ const BODY_READS_N: &str = concat!(
 const RECURSIVE_FALLBACK: &str = concat!(
     "factorial: (N: Int) -> (k: N) -> Int = {\n",
     "    return match k {\n",
-    "        0 => 1,\n",
-    "        _ => k * factorial(k - 1)(k - 1)\n",
+    "        0 -> 1,\n",
+    "        _ -> k * factorial(k - 1)(k - 1)\n",
     "    }\n",
     "}\n",
     "main: () -> Void = {\n",
@@ -218,7 +218,7 @@ fn param_types(
 /// `MonoType` 里出现的全部 `TypeRef` 名（只收容器，其余变体不可能携带名字）。
 fn type_ref_names(ty: &MonoType) -> Vec<String> {
     match ty {
-        MonoType::TypeRef(name) => vec![name.clone()],
+        MonoType::TypeRef(name) => vec![name.bare().to_string()],
         MonoType::Generic { args, .. } => args.iter().flat_map(type_ref_names).collect(),
         MonoType::Fn {
             params,

@@ -9,10 +9,11 @@ import type { Glossary, I18nConfig, SystemConfig, TranslateEnv } from './config.
 import { loadCache, saveCache, getKeysToTranslate, updateCache } from './cache.ts';
 import type { TranslationCache } from './cache.ts';
 import { translateBatch } from './ai.ts';
-import { resolveLanguagePrompt } from './prompt.ts';
+import { resolveLanguagePrompt, composePrompt } from './prompt.ts';
 import { getAdapter } from './adapters/index.ts';
 import type { TranslateAdapter } from './adapters/index.ts';
 import type { FlatKeys, LocaleJson } from './adapters/locales.ts';
+import { normalizeCodeTitles } from './adapters/locales.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../..');
@@ -141,7 +142,7 @@ async function translateSystem(
           keys: batchKeys,
           sourceLang: config.languages[config.source]?.name || config.source,
           targetLang: langConfig.name || lang,
-          languagePrompt,
+          languagePrompt: composePrompt(languagePrompt),
           glossary,
           apiKey: env.AI_API_KEY,
           baseUrl: env.AI_BASE_URL,
@@ -150,6 +151,11 @@ async function translateSystem(
 
         // 合并翻译结果
         targetJson = adapter.applyTranslations(targetJson, translations);
+        // 标题大小写由机械规范化兜底（模型自选大小写会混用）——
+        // 只对有大小写的语言开启，见 i18n.config.json 的 capitalizeTitles。
+        if (langConfig.capitalizeTitles) {
+          targetJson = normalizeCodeTitles(targetJson);
+        }
 
         // 立即写入文件（崩溃恢复）
         fs.writeFileSync(targetPath, JSON.stringify(targetJson, null, 2) + '\n', 'utf-8');

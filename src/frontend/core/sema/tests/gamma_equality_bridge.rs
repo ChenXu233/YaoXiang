@@ -412,8 +412,8 @@ f: (N: Int) -> (n: N) -> Int = (n) => n
 shadowed: (y: Int) -> Int = {
     if y == 42 {
         r = match Option(Int).some(7) {
-            some(y) => f(y)(42),
-            none() => 0,
+            some(y) -> f(y)(42),
+            none() -> 0,
         }
         r
     } else {
@@ -437,8 +437,8 @@ f: (N: Int) -> (n: N) -> Int = (n) => n
 
 unguarded: (y: Int) -> Int = {
     r = match Option(Int).some(7) {
-        some(y) => f(y)(42),
-        none() => 0,
+        some(y) -> f(y)(42),
+        none() -> 0,
     }
     r
 }
@@ -460,11 +460,11 @@ f: (N: Int) -> (n: N) -> Int = (n) => n
 asserted: (y: Int) -> Int = {
     if y == 42 {
         r = match Option(Int).some(7) {
-            some(y) => {
+            some(y) -> {
                 assert.assert(y == 7, "臂内载荷是 7，不是外层守卫的 42")
                 f(y)(42)
             },
-            none() => 0,
+            none() -> 0,
         }
         r
     } else {
@@ -489,8 +489,8 @@ f: (N: Int) -> (n: N) -> Int = (n) => n
 value_env: () -> Int = {
     y = 7
     r = match Option(Int).some(7) {
-        some(y) => f(y)(42),
-        none() => 0,
+        some(y) -> f(y)(42),
+        none() -> 0,
     }
     r
 }
@@ -512,9 +512,9 @@ f: (N: Int) -> (n: N) -> Int = (n) => n
 guarded_arm: (y: Int) -> Int = {
     if y == 42 {
         r = match Option(Int).some(7) {
-            some(y) if f(y)(42) > 0 => y,
-            some(_) => 0,
-            none() => 0,
+            some(y) if f(y)(42) > 0 -> y,
+            some(_) -> 0,
+            none() -> 0,
         }
         r
     } else {
@@ -539,8 +539,8 @@ f: (N: Int) -> (n: N) -> Int = (n) => n
 restored: (y: Int) -> Int = {
     if y == 42 {
         r = match Option(Int).some(7) {
-            some(y) => y,
-            none() => 0,
+            some(y) -> y,
+            none() -> 0,
         }
         f(y)(42)
     } else {
@@ -564,11 +564,11 @@ f: (N: Int) -> (n: N) -> Int = (n) => n
 
 own_fact: () -> Int = {
     r = match Option(Int).some(7) {
-        some(y) => {
+        some(y) -> {
             assert(y == 7, "臂内自产事实")
             f(y)(7)
         },
-        none() => 0,
+        none() -> 0,
     }
     r
 }
@@ -590,14 +590,14 @@ f: (N: Int) -> (n: N) -> Int = (n) => n
 nested_shadow: (y: Int) -> Int = {
     if y == 42 {
         r = match Option(Int).some(7) {
-            some(y) => {
+            some(y) -> {
                 inner = match Option(Int).some(9) {
-                    some(y) => y,
-                    none() => 0,
+                    some(y) -> y,
+                    none() -> 0,
                 }
                 f(y)(42)
             },
-            none() => 0,
+            none() -> 0,
         }
         r
     } else {

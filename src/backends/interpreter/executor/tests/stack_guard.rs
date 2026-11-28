@@ -89,7 +89,6 @@ fn countdown_function() -> BytecodeFunction {
             BytecodeInstr::ReturnValue { value: Reg(7) },
         ],
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     }
 }

@@ -3,14 +3,75 @@
 //! while/for/range/in/spawn-for 与迭代器协议循环，含 break/continue 跳转目标上下文。
 //! 方法体逐字搬自原 `middle/ir/ir_gen.rs`（WBS 7.0.2），语义未改。
 
+use super::synth::{synth_closure, SynthEnv};
 use super::AstToIrGenerator;
 use super::LoopTargets;
 use crate::ast;
+use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::Span;
 
 impl AstToIrGenerator {
+    /// 迭代协议合成调用的结果类型（for / spawn-for 糖降级用）。
+    ///
+    /// 这两条糖把 for 降级成对协议函数的**合成调用**——AST 里没有调用节点，
+    /// 所以 sema 的调用点结果类型表（call_result_types）覆盖不到它们；类型只能
+    /// 由协议函数的**声明签名**与可迭代对象的静态类型共同给出：
+    ///
+    /// - std.list.iter: (list: Vec(T)) -> Iter(T)、has_next -> Bool、next -> T
+    ///   （src/std/list.yx）；
+    /// - std.range.iter: (r: Range(Int)) -> Result(Iterator(Any), Error)、
+    ///   has_next: (it: Iterator(Any)) -> Bool、next: (&Iterator(Any)) -> Any
+    ///   （src/std/range.rs 的 export 表）。
+    ///
+    /// 返回 (元素类型, 迭代器类型)；拿不到可迭代对象静态类型时对应项为 None
+    /// ——合成调用保持显式未知，不猜。
+    fn iterator_protocol_types(
+        &self,
+        iterable: &ast::Expr,
+        is_range: bool,
+    ) -> (Option<MonoType>, Option<MonoType>) {
+        let flat = |name: &str| Nominal::flat(name).expect("协议类型名必须是裸名");
+
+        // Range 的元素位在签名里是 Any（next -> Any），不是 Int。
+        if is_range {
+            return (
+                Some(MonoType::TypeRef(flat("Any"))),
+                Some(MonoType::Generic {
+                    name: flat("Iterator"),
+                    args: vec![MonoType::TypeRef(flat("Any"))],
+                }),
+            );
+        }
+
+        let Some(mut ty) = self.get_expr_mono_type(iterable) else {
+            return (None, None);
+        };
+        while let MonoType::Ref { inner, .. } = ty {
+            ty = *inner;
+        }
+        let MonoType::Generic { name, args } = ty else {
+            return (None, None);
+        };
+        if !(name == "Vec" || name == "List") || args.len() != 1 {
+            return (None, None);
+        }
+        // `Void` 元素是「元素类型推导不出来」的历史占位，不是真实类型——不采信。
+        if matches!(&args[0], MonoType::Void) {
+            return (None, None);
+        }
+        let element = args[0].clone();
+        (
+            Some(element.clone()),
+            Some(MonoType::Generic {
+                name: flat("Iter"),
+                args: vec![element],
+            }),
+        )
+    }
+
     /// 进入循环体生成：压入跳转目标上下文（#311）
     fn enter_loop_targets(
         &mut self,
@@ -264,6 +325,8 @@ impl AstToIrGenerator {
                 span,
                 instructions,
             );
+            // `x in r` 的谓词结果：解包后是 Bool（contains 声明 Result(Bool, Error)）
+            self.note_value_type(&result_reg, MonoType::Bool);
             return Ok(());
         }
 
@@ -283,6 +346,110 @@ impl AstToIrGenerator {
         Ok(())
     }
 
+    /// 迭代协议「取迭代器」的**唯一**实现（for / 列表推导 / spawn-for 共用）。
+    ///
+    /// 协议函数名（Range → `std.range.*`，其余 → `std.list.*`）、结果类型
+    /// （[`Self::iterator_protocol_types`]）、Range 的 `Result` 解包——三件都在
+    /// 这里结清；调用方只负责后续循环骨架。返回
+    /// `(iterator_reg, element_ty, has_next_fn, next_fn)`。
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn emit_iteration_protocol(
+        &mut self,
+        iterable: &ast::Expr,
+        iterable_reg: Operand,
+        is_range: bool,
+        span: Span,
+        instructions: &mut Vec<Instruction>,
+    ) -> (Operand, Option<MonoType>, String, String) {
+        // 迭代协议函数名：range 仍是 native（限定名直用）；list 已迁到纯 yx
+        // （src/std/list.yx），其函数以裸名注册，交给 `resolve_namespace` 决定
+        // 最终名（命中限定名用限定名，否则退裸名）。
+        let (iter_fn, has_next_fn, next_fn) = if is_range {
+            (
+                "std.range.iter".to_string(),
+                "std.range.has_next".to_string(),
+                "std.range.next".to_string(),
+            )
+        } else {
+            (
+                self.resolver().resolve_namespace("list", &["iter"]),
+                self.resolver().resolve_namespace("list", &["has_next"]),
+                self.resolver().resolve_namespace("list", &["next"]),
+            )
+        };
+        let (element_ty, iterator_ty) = self.iterator_protocol_types(iterable, is_range);
+        let iterator_reg = self.next_temp_reg();
+        instructions.push(Instruction::Call {
+            dst: Some(iterator_reg.clone()),
+            func: Operand::Const(ConstValue::String(iter_fn)),
+            args: vec![iterable_reg.clone()],
+            span,
+            def: None,
+        });
+        if !is_range {
+            if let Some(ty) = iterator_ty.clone() {
+                self.note_value_type(&iterator_reg, ty);
+            }
+        } else {
+            // #316：Range 协议 iter 已 Result(Iterator, Error) 化——糖降级统一解包，
+            // Err（动态 step=0）分支显式失败（for 循环无可传播的 Result）。
+            self.emit_result_unwrap_or_abort(
+                iterator_reg.clone(),
+                iterator_reg.clone(),
+                "std.range.abort_invalid_step",
+                iterable_reg,
+                span,
+                instructions,
+            );
+            if let Some(ty) = iterator_ty {
+                self.note_value_type(&iterator_reg, ty);
+            }
+        }
+        (iterator_reg, element_ty, has_next_fn, next_fn)
+    }
+
+    /// `has_next` 调用（两条协议的声明返回位恒为 `Bool`）。
+    pub(super) fn emit_has_next(
+        &mut self,
+        has_next_fn: &str,
+        iterator: &Operand,
+        span: Span,
+        instructions: &mut Vec<Instruction>,
+    ) -> Operand {
+        let reg = self.next_temp_reg();
+        self.note_value_type(&reg, MonoType::Bool);
+        instructions.push(Instruction::Call {
+            dst: Some(reg.clone()),
+            func: Operand::Const(ConstValue::String(has_next_fn.to_string())),
+            args: vec![iterator.clone()],
+            span,
+            def: None,
+        });
+        reg
+    }
+
+    /// `next` 调用（结果 = 元素类型；推导不出即显式未知）。
+    pub(super) fn emit_next(
+        &mut self,
+        next_fn: &str,
+        iterator: &Operand,
+        element_ty: &Option<MonoType>,
+        span: Span,
+        instructions: &mut Vec<Instruction>,
+    ) -> Operand {
+        let reg = self.next_temp_reg();
+        if let Some(ty) = element_ty.clone() {
+            self.note_value_type(&reg, ty);
+        }
+        instructions.push(Instruction::Call {
+            dst: Some(reg.clone()),
+            func: Operand::Const(ConstValue::String(next_fn.to_string())),
+            args: vec![iterator.clone()],
+            span,
+            def: None,
+        });
+        reg
+    }
     /// #316：Result 解包，Err 分支转显式失败——`for`/`in` 糖消费 Result API 的统一降级
     ///
     /// IR 序列同 #301 `?`（VariantTag/Eq/JmpIfNot/VariantPayload），差别在 Err
@@ -332,6 +499,7 @@ impl AstToIrGenerator {
             group: "Result".to_string(),
             span,
         });
+
         let end_idx = instructions.len();
         instructions.push(Instruction::Jmp {
             target: 0,
@@ -388,49 +556,20 @@ impl AstToIrGenerator {
         let iterable_reg = self.next_temp_reg();
         self.generate_expr_ir(iterable, iterable_reg.clone(), instructions, constants)?;
 
-        // 1.5 #302：按静态类型派发协议函数名（Range → std.range.*，其余 → std.list.*）
+        // 1.5 #302：按静态类型派发协议（Range → std.range.*，其余 → std.list.*）
         let is_range = self
             .get_expr_mono_type(iterable)
             .map(|t| t.is_range())
             .unwrap_or(false);
-        // 迭代协议函数名：range 仍是 native（限定名直用）；
-        // list 已迁到纯 yx（src/std/list.yx），其函数以裸名注册，
-        // 交给 `resolve_namespace` 决定最终名（命中限定名用限定名，否则退裸名）。
-        let (iter_fn, has_next_fn, next_fn) = if is_range {
-            (
-                "std.range.iter".to_string(),
-                "std.range.has_next".to_string(),
-                "std.range.next".to_string(),
-            )
-        } else {
-            (
-                self.resolver().resolve_namespace("list", &["iter"]),
-                self.resolver().resolve_namespace("list", &["has_next"]),
-                self.resolver().resolve_namespace("list", &["next"]),
-            )
-        };
 
-        // 2. 创建迭代器: iterator = iter(iterable)
-        let iterator_reg = self.next_temp_reg();
-        instructions.push(Instruction::Call {
-            dst: Some(iterator_reg.clone()),
-            func: Operand::Const(ConstValue::String(iter_fn.clone())),
-            args: vec![iterable_reg.clone()],
-            span: for_span,
-            def: None,
-        });
-        // #316：Range 协议 iter 已 Result(Iterator, Error) 化——糖降级统一解包，
-        // Err（动态 step=0）分支显式失败（for 循环无可传播的 Result，且绝不死循环）
-        if is_range {
-            self.emit_result_unwrap_or_abort(
-                iterator_reg.clone(),
-                iterator_reg.clone(),
-                "std.range.abort_invalid_step",
-                iterable_reg.clone(),
-                for_span,
-                instructions,
-            );
-        }
+        // 1.6 协议三调用 + 结果类型：唯一实现见 `emit_iteration_protocol`。
+        let (iterator_reg, element_ty, has_next_fn, next_fn) = self.emit_iteration_protocol(
+            iterable,
+            iterable_reg.clone(),
+            is_range,
+            for_span,
+            instructions,
+        );
 
         // 3. 注册循环变量（具名变量：Local 槽，不产生 SSA 值）
         let var_reg = self.next_local_slot();
@@ -442,14 +581,7 @@ impl AstToIrGenerator {
         self.enter_loop_targets(loop_start_idx);
 
         // 5. 检查是否有更多元素: has_more = has_next(iterator)
-        let has_more_reg = self.next_temp_reg();
-        instructions.push(Instruction::Call {
-            dst: Some(has_more_reg.clone()),
-            func: Operand::Const(ConstValue::String(has_next_fn.to_string())),
-            args: vec![iterator_reg.clone()],
-            span: for_span,
-            def: None,
-        });
+        let has_more_reg = self.emit_has_next(&has_next_fn, &iterator_reg, for_span, instructions);
 
         // 6. 如果没有更多元素，跳转到结束
         let jump_end_idx = instructions.len();
@@ -460,14 +592,8 @@ impl AstToIrGenerator {
         });
 
         // 7. 获取下一个元素: var = next(iterator)
-        let element_reg = self.next_temp_reg();
-        instructions.push(Instruction::Call {
-            dst: Some(element_reg.clone()),
-            func: Operand::Const(ConstValue::String(next_fn.to_string())),
-            args: vec![iterator_reg.clone()],
-            span: for_span,
-            def: None,
-        });
+        let element_reg =
+            self.emit_next(&next_fn, &iterator_reg, &element_ty, for_span, instructions);
         instructions.push(Instruction::Store {
             dst: Operand::Local(var_reg),
             src: element_reg.clone(),
@@ -563,17 +689,9 @@ impl AstToIrGenerator {
         let iterable_reg = self.next_temp_reg();
         self.generate_expr_ir(iterable, iterable_reg.clone(), instructions, constants)?;
 
-        // 5. 创建迭代器: iterator = iter(iterable)
-        let iterator_reg = self.next_temp_reg();
-        instructions.push(Instruction::Call {
-            dst: Some(iterator_reg.clone()),
-            func: Operand::Const(ConstValue::String(
-                self.resolver().resolve_namespace("list", &["iter"]),
-            )),
-            args: vec![iterable_reg.clone()],
-            span,
-            def: None,
-        });
+        // 4.5 协议三调用（spawn-for 迭代的是 list，与 for 的 list 分支同签名）
+        let (iterator_reg, element_ty, has_next_fn, next_fn) =
+            self.emit_iteration_protocol(iterable, iterable_reg.clone(), false, span, instructions);
 
         // 6. 注册循环变量（具名变量：Local 槽，不产生 SSA 值）
         let var_reg = self.next_local_slot();
@@ -583,14 +701,7 @@ impl AstToIrGenerator {
         let loop_start_idx = instructions.len();
 
         // 8. has_next?
-        let has_more_reg = self.next_temp_reg();
-        instructions.push(Instruction::Call {
-            dst: Some(has_more_reg.clone()),
-            func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
-            args: vec![iterator_reg.clone()],
-            span,
-            def: None,
-        });
+        let has_more_reg = self.emit_has_next(&has_next_fn, &iterator_reg, span, instructions);
 
         // 9. 如果没有更多元素，跳转到结束
         let jump_end_idx = instructions.len();
@@ -601,14 +712,7 @@ impl AstToIrGenerator {
         });
 
         // 10. 获取下一个元素: var = next(iterator)
-        let element_reg = self.next_temp_reg();
-        instructions.push(Instruction::Call {
-            dst: Some(element_reg.clone()),
-            func: Operand::Const(ConstValue::String("std.list.next".to_string())),
-            args: vec![iterator_reg.clone()],
-            span,
-            def: None,
-        });
+        let element_reg = self.emit_next(&next_fn, &iterator_reg, &element_ty, span, instructions);
         instructions.push(Instruction::Store {
             dst: Operand::Local(var_reg),
             src: element_reg.clone(),
@@ -618,20 +722,20 @@ impl AstToIrGenerator {
         // 11. 在循环体内创建闭包：(item) => { body }
         //     迭代变量作为参数传入，当前值通过 env 捕获
         let closure_reg = self.next_temp_reg();
-        // 捕获迭代变量的当前值（element_reg 在 next() 返回后被设置）
-        self.pending_env_vars = vec![element_reg.clone()];
-        let lambda = ast::Expr::Lambda {
-            params: vec![ast::Param {
+        // 捕获迭代变量的当前值（element_reg 在 next() 返回后被设置）。
+        let env = SynthEnv::new(vec![element_reg.clone()], Vec::new());
+        let lambda = synth_closure(
+            vec![ast::Param {
                 name: var_name.to_string(),
                 ty: None,
                 is_mut: false,
                 quantity: None,
                 span,
             }],
-            body: Box::new(body.clone()),
+            body.clone(),
             span,
-        };
-        self.generate_expr_ir(&lambda, closure_reg.clone(), instructions, constants)?;
+        );
+        self.generate_expr_ir_with_env(&lambda, env, closure_reg.clone(), instructions, constants)?;
 
         // 12. 将闭包推入列表: push(closures, closure)
         instructions.push(Instruction::Call {

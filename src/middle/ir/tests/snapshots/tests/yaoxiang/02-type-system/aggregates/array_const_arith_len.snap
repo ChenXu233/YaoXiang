@@ -15,7 +15,7 @@ module
     value v7: Int(64) @block0
     value v8: Int(64) @block0
     value v9: Int(64) @block0
-    value v10: TypeRef("?") @block0
+    value v10: Never @block0
     value v11: Bool @block0
     value v12: TypeRef("?") @block0
     value v13: Int(64) @block0
@@ -34,7 +34,7 @@ module
     value v26: Int(64) @block0
     value v27: Int(64) @block0
     value v28: Int(64) @block0
-    value v29: TypeRef("?") @block0
+    value v29: Never @block0
     value v30: Bool @block0
     value v31: TypeRef("?") @block0
     value v32: Int(64) @block0
@@ -51,7 +51,7 @@ module
     value v43: Int(64) @block0
     value v44: Int(64) @block0
     value v45: Int(64) @block0
-    value v46: TypeRef("?") @block0
+    value v46: Never @block0
     value v47: Bool @block0
     value v48: TypeRef("?") @block0
     value v49: Int(64) @block0
@@ -77,10 +77,12 @@ module
     Load v14 <- %0
     Load v15 <- int(4)
     LoadIndex v12 <- v14[v15]
+    Drop v14
     Load v13 <- int(5)
     Eq v11 <- v12, v13
     Load v16 <- string("Array(Int, 2+3) 的长度是 5（下标 4 可读）")
     Call v10 <- string("std.assert.assert") [v11, v16] (def=d0)
+    Drop v16
     Load v17 <- int(1)
     Load v18 <- int(2)
     Load v19 <- int(3)
@@ -103,10 +105,12 @@ module
     Load v33 <- %1
     Load v34 <- int(5)
     LoadIndex v31 <- v33[v34]
+    Drop v33
     Load v32 <- int(6)
     Eq v30 <- v31, v32
     Load v35 <- string("Array(Int, 2*3) 的长度是 6（下标 5 可读）")
     Call v29 <- string("std.assert.assert") [v30, v35] (def=d0)
+    Drop v35
     Load v36 <- int(1)
     Load v37 <- int(2)
     Load v38 <- int(3)
@@ -126,10 +130,12 @@ module
     Load v50 <- %2
     Load v51 <- int(0)
     LoadIndex v48 <- v50[v51]
+    Drop v50
     Load v49 <- int(1)
     Eq v47 <- v48, v49
     Load v52 <- string("Array(Int, 7-2) 的长度是 5")
     Call v46 <- string("std.assert.assert") [v47, v52] (def=d0)
+    Drop v52
     Drop %0
     Drop %1
     Drop %2

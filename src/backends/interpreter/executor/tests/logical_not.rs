@@ -40,7 +40,6 @@ fn make_not_function() -> BytecodeFunction {
             BytecodeInstr::ReturnValue { value: Reg(1) },
         ],
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     }
 }

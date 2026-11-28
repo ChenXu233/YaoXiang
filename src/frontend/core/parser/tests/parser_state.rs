@@ -385,7 +385,7 @@ fn test_parse_deep_pattern_nesting_reports_single_e0019() {
     // parse_pattern 字段臂自递归每层的表达式探针 enter/exit 成对、不累积
     // 计数，模式递归栈不受闸保护（实测登记同上，1MB 崩溃起点 980）。
     let pat = format!("{}1{}", "P{a: ".repeat(1100), "}".repeat(1100));
-    let source = format!("main = () => {{\n    x = match 1 {{ {pat} => 1, _ => 0 }}\n}}\n");
+    let source = format!("main = () => {{\n    x = match 1 {{ {pat} -> 1, _ -> 0 }}\n}}\n");
 
     // Act
     let result = parse_on_production_stack(source);
@@ -416,7 +416,7 @@ fn test_parse_struct_type_800_below_gate_parses_clean() {
 fn test_parse_pattern_800_below_gate_parses_clean() {
     // Arrange：800 层嵌套 struct 模式——闸下形态 razor 对照。
     let pat = format!("{}1{}", "P{a: ".repeat(800), "}".repeat(800));
-    let source = format!("main = () => {{\n    x = match 1 {{ {pat} => 1, _ => 0 }}\n}}\n");
+    let source = format!("main = () => {{\n    x = match 1 {{ {pat} -> 1, _ -> 0 }}\n}}\n");
 
     // Act
     let result = parse_on_production_stack(source);

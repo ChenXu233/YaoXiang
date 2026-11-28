@@ -7,7 +7,7 @@ use super::scope::NestedBodyGuard;
 use super::AstToIrGenerator;
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
-use crate::frontend::module::symbol::SymbolTable;
+use crate::frontend::core::types::identity::{DefPath, Nominal};
 use crate::middle::ir::ir::{
     ConstValue, FunctionBody, FunctionIR, Instruction, Operand, TypeDeclBody, TypeDeclField,
 };
@@ -80,8 +80,10 @@ impl AstToIrGenerator {
                         fields,
                         ..
                     } => {
-                        self.struct_definitions
-                            .insert(struct_name.clone(), fields.clone());
+                        let identity =
+                            Nominal::item(self.module_key.as_deref().unwrap_or(""), struct_name)
+                                .expect("类型定义名不含点且非空");
+                        self.register_struct_definition(identity, fields.clone());
                     }
                     ast::Type::Struct { body } => {
                         let fields: Vec<ast::StructField> = body
@@ -105,7 +107,10 @@ impl AstToIrGenerator {
                             })
                             .collect();
                         let fields = self.classified_fields(name, &fields);
-                        self.struct_definitions.insert(name.clone(), fields);
+                        let identity =
+                            Nominal::item(self.module_key.as_deref().unwrap_or(""), name)
+                                .expect("类型定义名不含点且非空");
+                        self.register_struct_definition(identity, fields);
                         // 记录绑定信息（用于方法调用时的参数重排，RFC-004）
                         self.register_type_bindings(name, &bindings);
                         // RFC-004: 为匿名函数绑定生成独立的 FunctionIR
@@ -164,6 +169,11 @@ impl AstToIrGenerator {
                                     .collect()
                             },
                             self_type: Self::type_decl_self_type(definition),
+                            // 定义侧身份（D64）：本单元声明的类型名 + 单元键；
+                            // 单文件（module_key=None）为平路径。与 typecheck 的
+                            // `add_type_definition` 同一开关（单元键存在 ⇒ 限定）。
+                            identity: Nominal::item(self.module_key.as_deref().unwrap_or(""), name)
+                                .expect("declared type name must be bare and non-empty"),
                         },
                     },
                 }))
@@ -291,6 +301,8 @@ impl AstToIrGenerator {
                         &params,
                         &body,
                         constants,
+                        stmt.plan_id,
+                        stmt.span,
                     )
                 } else if !params.is_empty() || !body.is_empty() || is_fn_binding {
                     // Fn: 普通函数（含**空块体**的注解形态 `f: () -> Void = { }`——
@@ -350,7 +362,7 @@ impl AstToIrGenerator {
                     // 此前无差别当声明，导致 `mut i = 0; i = i + 1` 被当成
                     // 两份初始化 → 自引用 → 误报 E3019。
                     let key = match &self.module_key {
-                        Some(k) => SymbolTable::qualify(k, &name),
+                        Some(k) => DefPath::item(k, &name).project(),
                         None => name.clone(),
                     };
                     if self.declared_globals.contains(&key) {
@@ -427,23 +439,25 @@ impl AstToIrGenerator {
         params: &[ast::Param],
         body: &[ast::Stmt],
         constants: &mut Vec<ConstValue>,
+        decl_plan_id: PlanId,
+        decl_span: Span,
     ) -> Result<Option<FunctionIR>, Diagnostic> {
-        // 命名空间机制：方法函数名 = Type.method
-        // 例如：Point.get_x 生成函数名 "Point.get_x"
-        // 调用时：p.get_x() -> Point.get_x(p)
+        // 命名空间机制：方法函数名 = Type.method（同名重载为 #N 混编名）
         let base_name = format!("{}.{}", type_name, method_name);
-        // RFC-011a §3：同名重载的定义序混编（首定义裸名，后续 #序）——
-        // 与 typecheck 注册序（AST 序）对齐，调用点决议按名派发
-        let ordinal = self
-            .method_def_ordinals
-            .entry(base_name.clone())
-            .or_insert(0);
-        let counted = *ordinal;
-        *ordinal += 1;
-        let func_name = if counted == 0 {
-            base_name
-        } else {
-            format!("{base_name}#{counted}")
+        // 7c.3：定义名只从 typecheck 的权威映射按**声明身份**读取——不再按
+        // 定义遍历序二次推导（旧 `method_def_ordinals` 可变计数器已删）。
+        // 未命中 = typecheck 与 lowering 的登记面不一致：响亮失败，不回退裸名
+        //（回退会把「定义名与调用名不同源」伪装成可运行程序）。
+        let func_name = match self.method_def_ir_names.get(&decl_plan_id) {
+            Some(name) => name.clone(),
+            None => {
+                return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                    "method {base_name} missing typecheck IR name (declaration PlanId {})",
+                    decl_plan_id.ordinal()
+                ))
+                .at(decl_span)
+                .build());
+            }
         };
 
         // #466：重载候选的形参名按**混编名**精确登记——叶子名键（Assign 臂
@@ -499,7 +513,6 @@ impl AstToIrGenerator {
             // 注册参数到符号表
             self.register_local(&param.name, runtime_indices.get(i).copied().unwrap_or(i));
         }
-        self.note_param_written_types(params, &declared);
         // 量词事实（q=0 槽位）随声明一起落到形参槽位，供擦除前识别。
         self.note_param_quantities(params, &declared);
 
@@ -674,10 +687,8 @@ impl AstToIrGenerator {
 
             frame.register_local(&param.name, slot);
         }
-        // 写出类型名与形参类型同一来源（作者标注 → 声明同类位）。
-        let declared = frame.declaration_runtime_param_slots(type_annotation, params.len());
-        frame.note_param_written_types(params, &declared);
         // 量词事实（q=0 槽位）随声明一起落到形参槽位，供擦除前识别。
+        let declared = frame.declaration_runtime_param_slots(type_annotation, params.len());
         frame.note_param_quantities(params, &declared);
 
         // 检查函数体是否为 FFI ExternRef 绑定
@@ -1025,13 +1036,6 @@ impl AstToIrGenerator {
                 }
                 // 普通变量
                 let initializer = value.as_ref().map(|v| v.as_ref());
-                // WBS 4.9.8 / issue #465：记下**写出**的类型名（注解原文优先，
-                // 否则取构造器名），供方法调用派发归因到定义单元。
-                let written_type = type_annotation
-                    .as_ref()
-                    .and_then(Self::written_type_name_of)
-                    .map(str::to_string)
-                    .or_else(|| initializer.and_then(|e| self.constructor_written_type_name(e)));
                 if let Some(type_ann) = type_annotation {
                     let mono: MonoType = type_ann.clone().into();
                     let type_name = mono.type_name();
@@ -1077,9 +1081,7 @@ impl AstToIrGenerator {
                     self.register_local(&name, idx);
                     idx
                 };
-                if let Some(written) = written_type {
-                    self.note_local_written_type(&name, &written);
-                }
+
                 if let Some(expr) = initializer {
                     // #299 §2：字面量上下文落点——Array 注解直接作用于 List 字面量时，
                     // 生成定长数组构造而非 List。禁止隐式 List→Array 转换：仅字面量种子直接落 Array。

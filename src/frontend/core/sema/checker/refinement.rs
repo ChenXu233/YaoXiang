@@ -123,7 +123,7 @@ impl TypeChecker {
             } => {
                 let mut registered = Vec::new();
                 if let Expr::Var(name, _) = target.as_ref() {
-                    let mono_ty = MonoType::from(type_ann.clone());
+                    let mono_ty = self.mono_from_annotation(&type_ann.clone());
                     let resolved_ty = self.resolve_type_annotation(&mono_ty, ctx.diags);
                     // 初始值常量折叠（对前置值环境求值）——初始校验与值追踪共用
                     let init_value = value
@@ -536,7 +536,10 @@ impl TypeChecker {
             return Some(refined);
         }
         // 2. 证明函数（源码定义、返回 `Type`）：约束是不透明应用
-        let mono_args: Vec<MonoType> = args.iter().map(|a| MonoType::from(a.clone())).collect();
+        let mono_args: Vec<MonoType> = args
+            .iter()
+            .map(|a| self.mono_from_annotation(&a.clone()))
+            .collect();
         let base = match self.lookup_proof_fn_base_type(name, &mono_args) {
             Some(Ok(base)) => base,
             _ => return None,
@@ -570,7 +573,7 @@ impl TypeChecker {
             AstType::Paren(inner) | AstType::NamedParen { inner, .. } => {
                 self.ast_type_to_const_expr(inner)
             }
-            other => self.mono_type_to_const_expr(&MonoType::from(other.clone())),
+            other => self.mono_type_to_const_expr(&self.mono_from_annotation(&other.clone())),
         }
     }
 
@@ -1396,8 +1399,7 @@ impl TypeChecker {
     /// `inference::arg_binding::bind_args_to_params`（位置实参占前导槽、命名实参
     /// 按名入槽、六条规则同在一处）。本函数只做「按槽取实参 → 代入 → 判定」。
     ///
-    /// **本版边界**（不得读成「关系谓词已被全面接管」，逐条登记在
-    /// `docs/src/dev/architecture/09a-wbs-history.md` 的 6.9.1 节）：
+    /// **本版边界**（不得读成「关系谓词已被全面接管」，逐条见任务 6.9.1 的提交信息）：
     /// - 只在调用点两种形态触发（裸调用语句、赋值 RHS 为调用）。嵌套在更复杂
     ///   表达式里的调用不查（无通用表达式遍历器）——`print(f(42, 7))` 当前不判；
     /// - 多形参关系谓词要求**实参全部有已知值**（缺值闸门，与 `revalidate_refined`
@@ -1513,7 +1515,7 @@ impl TypeChecker {
                 // 约束属于哪个形参由约束自己写下的名字决定，不由被约束位的位次决定。
                 // 无本模块声明名表（导入函数 / 类型体方法）时退回**位置近似**
                 //（`slot = i`）——「被约束位的 binder 就是本位的形参名」在该形态下
-                // 是未校验的假设，已作为边界登记（见 09a），本轮不修。
+                // 是未校验的假设，已作为边界登记（见提交信息），本轮不修。
                 let slot = if declared.is_some() {
                     let Some(slot) = free_slot(&free[0]) else {
                         continue;

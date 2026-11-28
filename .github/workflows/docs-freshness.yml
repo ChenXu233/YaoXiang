@@ -26,6 +26,13 @@ jobs:
       # 时效检查只能发现「很久没人碰」的文档，发现不了「内容已经与源码矛盾
       # 但刚被批量格式化刷新过 mtime」的文档。事实对账由 ci.yml 的
       # docs-truth job 负责，两者互补。
+      # 错误码参考页是构建期产物、不入库——先再生一份，事实对账才有
+      # 「文档侧」可比（否则文档侧恒为 0，对账报告失去意义）。
+      - name: Generate error-code reference pages (zh + en)
+        run: |
+          python3 scripts/docs/gen-error-code-docs.py --lang zh
+          python3 scripts/docs/gen-error-code-docs.py --lang en
+
       - name: Run fact reconciliation (docs vs source)
         continue-on-error: true
         run: python3 scripts/ci/check-docs-truth.py || true

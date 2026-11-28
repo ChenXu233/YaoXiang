@@ -3,14 +3,17 @@
 //! 自 `inference/expressions.rs` 纯搬移（WBS 7.0.4）：方法体与文档注释零改动，
 //! 仅补跨模块可见性（`pub(super)`）与相对路径（`super::` 改指 crate 路径）。
 
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::core::types::MonoType;
-use crate::frontend::module::symbol::SymbolTable;
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use crate::util::diagnostic::ErrorCodeDefinition;
 use std::collections::{HashMap, HashSet};
 
-use super::super::{ConstArgOutcome, ExpressionInferrer};
+use super::super::{
+    concrete_type_from_expr_arg, extract_const_value_from_expr, ConstArgOutcome, ExpressionInferrer,
+};
 use crate::frontend::core::sema::inference::arg_binding;
+use crate::frontend::core::types::identity::Nominal;
 
 impl<'a> ExpressionInferrer<'a> {
     /// 递归收集类型中的所有 TypeVar 索引
@@ -110,9 +113,12 @@ impl<'a> ExpressionInferrer<'a> {
     pub(super) fn type_arg_of_expr(expr: &crate::ast::Expr) -> MonoType {
         use crate::ast::Expr;
         match expr {
-            Expr::Var(name, _) => {
-                MonoType::from_builtin_name(name).unwrap_or_else(|| MonoType::TypeRef(name.clone()))
-            }
+            Expr::Var(name, _) => MonoType::from_builtin_name(name).unwrap_or_else(|| {
+                MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
+                        .expect("type name must be bare and non-empty"),
+                )
+            }),
             // `Vec(Int)` / `Array(Int, 3)` 形态：类型构造器应用
             Expr::Call { func, args, .. } => {
                 if let Expr::Var(cname, _) = func.as_ref() {
@@ -120,14 +126,73 @@ impl<'a> ExpressionInferrer<'a> {
                         // #403：与注解同一落点判据——`List(Int)` 作类型实参
                         // 同样落 `Vec` 面（单源 `MonoType::source_container_face`，
                         // 源名进类型域的门共用）。
-                        name: MonoType::source_container_face(cname),
+                        name: Nominal::flat(AsRef::<str>::as_ref(
+                            &(MonoType::source_container_face(cname)),
+                        ))
+                        .expect("type name must be bare and non-empty"),
                         args: args.iter().map(Self::type_arg_of_expr).collect(),
                     }
                 } else {
-                    MonoType::TypeRef("_".to_string())
+                    MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&("_")))
+                            .expect("type name must be bare and non-empty"),
+                    )
                 }
             }
-            _ => MonoType::TypeRef("_".to_string()),
+            _ => MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("_")))
+                    .expect("type name must be bare and non-empty"),
+            ),
+        }
+    }
+
+    /// 内置容器构造器 `Vec(T)` / `Array(T, N)` 在**值位置**的类型实参解包。
+    ///
+    /// `Vec(Int)` 的被调名推断成 `MetaType`，实参 `Int` 的推断结果同样只是
+    /// `MetaType` 空壳（不携带具体类型名）——直接把这些实参塞进 `Generic{…}`
+    /// 会让元素位变成 `Type`，`v[0] + 1` 报 E1002（#575）。这里按 AST 取回
+    /// 具体类型：类型位复用 `type_arg_of_expr`（与显式类型实参 `mk(Int)` 同一
+    /// 单点）；`Array` 的长度位按注解同形落 `Literal`（`container_length_slot`
+    /// 读的就是它），非字面量保持原推断类型。实参不是类型表达式时（如
+    /// `Vec(3)` 的长度字面量）保持既有推断结果，不把值误当类型。
+    pub(super) fn builtin_container_ctor_args(
+        &self,
+        fn_name: Option<&str>,
+        args: &[crate::ast::Expr],
+        arg_types: &[MonoType],
+    ) -> Option<Vec<MonoType>> {
+        let is_type_arg = |i: usize| -> bool {
+            matches!(arg_types.get(i), Some(MonoType::MetaType { .. }))
+                || concrete_type_from_expr_arg(
+                    &args[i],
+                    self.type_defs,
+                    self.generic_type_defs,
+                    self.import_face,
+                    self.type_identity_index,
+                )
+                .is_some()
+        };
+        let type_slot = |i: usize| -> MonoType {
+            if is_type_arg(i) {
+                Self::type_arg_of_expr(&args[i])
+            } else {
+                arg_types[i].clone()
+            }
+        };
+        match fn_name? {
+            "Vec" if args.len() == 1 => Some(vec![type_slot(0)]),
+            "Array" if args.len() == 2 => {
+                let length = match extract_const_value_from_expr(&args[1]) {
+                    Some(value) => MonoType::Literal {
+                        name: format!("{value}"),
+                        base_type: Box::new(arg_types[1].clone()),
+                        value,
+                    },
+                    None => arg_types[1].clone(),
+                };
+                Some(vec![type_slot(0), length])
+            }
+            _ => None,
         }
     }
 
@@ -188,7 +253,10 @@ impl<'a> ExpressionInferrer<'a> {
                 },
             ) => {
                 if type_params.iter().any(|p| p == name) {
-                    bindings.insert(name.clone(), MonoType::TypeRef(a_head.clone()));
+                    bindings.insert(
+                        name.clone().bare().to_string(),
+                        MonoType::TypeRef(a_head.clone()),
+                    );
                 }
                 if s_args.len() == a_args.len() {
                     for (s, a) in s_args.iter().zip(a_args.iter()) {
@@ -198,7 +266,10 @@ impl<'a> ExpressionInferrer<'a> {
             }
             (MonoType::Generic { name, .. }, MonoType::Struct(st)) => {
                 if type_params.iter().any(|p| p == name) {
-                    bindings.insert(name.clone(), MonoType::TypeRef(st.name.clone()));
+                    bindings.insert(
+                        name.clone().bare().to_string(),
+                        MonoType::TypeRef(st.name.clone()),
+                    );
                 }
             }
             (MonoType::Ref { inner: s, .. }, MonoType::Ref { inner: a, .. }) => {
@@ -240,7 +311,10 @@ impl<'a> ExpressionInferrer<'a> {
         subst: &HashMap<String, MonoType>,
     ) -> MonoType {
         match ty {
-            MonoType::TypeRef(name) => subst.get(name).cloned().unwrap_or_else(|| ty.clone()),
+            MonoType::TypeRef(name) => subst
+                .get(name.bare())
+                .cloned()
+                .unwrap_or_else(|| ty.clone()),
             MonoType::Ref { mutable, inner } => MonoType::Ref {
                 mutable: *mutable,
                 inner: Box::new(Self::substitute_type_refs(inner, subst)),
@@ -291,6 +365,7 @@ impl<'a> ExpressionInferrer<'a> {
         func_ty: MonoType,
         arg_types: &[MonoType],
         fn_name: Option<&str>,
+        builtin_ctor_args: Option<Vec<MonoType>>,
     ) -> MonoType {
         // 内置容器构器：`Vec(Int)` / `Array(Int, 3)`。
         //
@@ -299,17 +374,19 @@ impl<'a> ExpressionInferrer<'a> {
         // `Vec(Int)()` 的 `func_ty` 就悬空成 `tN`，`.length` 报
         // E1053「非结构体不能取字段」（D6.2）。这里先把「MetaType 应用类型实参」
         // 收成 `Generic{name, args}`——这正是 `Vec(Int)` 应有的类型。
+        //
+        // 实参本身也只是 `MetaType` 空壳（`Int` 在值位置不携带具体名字，见
+        // #575），故具体类型实参由调用点按 AST 形态解出后传入；直接复用
+        // `arg_types` 会让元素位退化成 `Type`（`v[0] + 1` 报 E1002）。
         if matches!(func_ty, MonoType::MetaType { .. }) {
-            if let Some(name) = fn_name {
-                if matches!(name, "Vec" | "Array") {
-                    let args: Vec<MonoType> = arg_types.to_vec();
-                    if !args.is_empty() {
-                        self.last_type_args = args.clone();
-                        return MonoType::Generic {
-                            name: name.to_string(),
-                            args,
-                        };
-                    }
+            if let (Some(name), Some(args)) = (fn_name, builtin_ctor_args) {
+                if matches!(name, "Vec" | "Array") && !args.is_empty() {
+                    self.last_type_args = args.clone();
+                    return MonoType::Generic {
+                        name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+                            .expect("type name must be bare and non-empty"),
+                        args,
+                    };
                 }
             }
         }
@@ -587,7 +664,8 @@ impl<'a> ExpressionInferrer<'a> {
                             return MonoType::Fn {
                                 params: new_params,
                                 return_type: Box::new(MonoType::Generic {
-                                    name: name.to_string(),
+                                    name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+                                        .expect("type name must be bare and non-empty"),
                                     args,
                                 }),
                             };
@@ -613,7 +691,7 @@ impl<'a> ExpressionInferrer<'a> {
     /// - 裸 `Var`：其名本身（既有行为，`main`/单文件路径一字不改）；
     /// - 限定调用 `lib.f`：与 merged-IR 同源的限定名 `{module_key}.{f}`——
     ///   `module_key` 取该别名的模块限定键（use 路径），拼接经
-    ///   [`SymbolTable::qualify`]（全仓限定名格式的唯一所有者，与 ir_gen
+    ///   [`DefPath::project`]（唯一拼接实现，与 ir_gen
     ///   `qualify_names`、`Resolver::resolve_namespace` 同源）。
     ///
     /// 返回 None 的形态不发请求：非 Var 结尾的接收者（lambda 调用、值接收者
@@ -633,7 +711,7 @@ impl<'a> ExpressionInferrer<'a> {
                     return None;
                 };
                 let module_key = self.module_namespaces?.get(alias)?;
-                Some(SymbolTable::qualify(module_key, field))
+                Some(DefPath::item(module_key, field).project())
             }
             _ => None,
         }
@@ -723,7 +801,7 @@ impl<'a> ExpressionInferrer<'a> {
         args: &[crate::ast::Expr],
         named_args: &[(String, crate::ast::Expr)],
         span: crate::util::span::Span,
-        method_binding_key: Option<String>,
+        method_binding_key: Option<DefPath>,
     ) -> ConstArgOutcome {
         use crate::frontend::core::sema::proof::verdict::ProofFailure;
         use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
@@ -777,7 +855,8 @@ impl<'a> ExpressionInferrer<'a> {
                 let Some(method_key) = method_binding_key else {
                     return ConstArgOutcome::NotTarget;
                 };
-                let Some(slots) = self.declared_call_site_params.get(&method_key) else {
+                // 调用点形参名表按**投影**键控（函数名与方法键同一张表）
+                let Some(slots) = self.declared_call_site_params.get(&method_key.project()) else {
                     // 事实不足（方法面的跨模块方法导入——#553 face ④ / #539 轴，
                     // 方法槽位尚无跨界载体；无 q=0 事实的类型体匿名绑定等非 const
                     // 形态——方法自带 q=0 槽被 E1003/E1094 拦在声明面）⇒ 不判，不猜
@@ -789,7 +868,7 @@ impl<'a> ExpressionInferrer<'a> {
                 let Some(method_ty) = self.method_bindings.get(&method_key) else {
                     return ConstArgOutcome::NotTarget;
                 };
-                fn_name = method_key;
+                fn_name = method_key.project();
                 const_names = slots.const_params.clone();
                 body = method_ty.clone();
             }

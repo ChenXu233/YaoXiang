@@ -420,14 +420,6 @@ fn fmt_instruction(
             o(func, f, m),
             fmt_ops(args, f, m)
         ),
-        Instruction::TailCall {
-            func, args, def, ..
-        } => format!(
-            "TailCall {} {} (def={})",
-            o(func, f, m),
-            fmt_ops(args, f, m),
-            fmt_def(def, m)
-        ),
         Instruction::Ret { value, .. } => match value {
             Some(v) => format!("Ret {}", o(v, f, m)),
             None => "Ret".to_string(),
@@ -483,7 +475,7 @@ fn fmt_opt_dst(
 }
 
 fn fmt_def(
-    def: &Option<crate::frontend::module::symbol::DefId>,
+    def: &Option<crate::frontend::core::types::identity::DefId>,
     m: &mut ModCtx,
 ) -> String {
     match def {
@@ -648,7 +640,7 @@ pub fn normalize_module(ir: &ModuleIR) -> String {
                 for block in blocks {
                     // `successors` 不进入快照：块级 CFG 属分配 / 布局细节
                     // （7b.4 的线性扫描分配器还可能重塑它），判据由 `verify_ssa`
-                    // 的块级前驱承担（09a §P7 7b.3 契约 §二 第 5 条）。
+                    // 的块级前驱承担（提交信息）。
                     for instr in &block.instructions {
                         writeln!(out, "    {}", fmt_instruction(instr, &mut fctx, &mut mctx))
                             .unwrap();

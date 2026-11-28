@@ -957,7 +957,7 @@ impl GenericSize {
             MonoType::Never => Ok(0),
             MonoType::TypeRef(name) => {
                 // 检查是否是 Array<T, N> 类型
-                if let Some((elem_type, count)) = self.parse_array_type(name) {
+                if let Some((elem_type, count)) = self.parse_array_type(name.bare()) {
                     return self.size_of_array(elem_type.as_ref(), count);
                 }
                 // 对于类型引用，尝试查找基础大小
@@ -1003,7 +1003,10 @@ impl GenericSize {
         }
 
         // 解析元素类型
-        let elem_type = Box::new(MonoType::TypeRef(args[0].clone()));
+        let elem_type = Box::new(MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&(args[0].clone())))
+                .expect("type name must be bare and non-empty"),
+        ));
 
         // 解析数组长度（尝试解析为整数）
         let count = args[1].parse::<usize>().ok()?;
@@ -1122,6 +1125,7 @@ pub mod predefined_sizes {
 /// - Const 参数的类型验证
 /// - 字面量类型约束检查
 use crate::ast::{GenericParam, GenericParamKind, Type};
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::ConstKind;
 
 /// Integer types for const parameters
@@ -1290,7 +1294,10 @@ pub fn extract_const_param_info(param: &GenericParam) -> Option<(String, ConstKi
 /// 将 AST 类型转换为 MonoType
 pub fn ast_type_to_mono_type(ty: &Type) -> Option<MonoType> {
     match ty {
-        Type::Name { name, .. } => Some(MonoType::TypeRef(name.clone())),
+        Type::Name { name, .. } => Some(MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
+                .expect("type name must be bare and non-empty"),
+        )),
         _ => None,
     }
 }
@@ -1512,7 +1519,7 @@ mod tests {
         let subst = std::collections::HashMap::from([(
             "N".to_string(),
             crate::frontend::core::types::mono::MonoType::Literal {
-                name: "5".into(),
+                name: "5".to_string(),
                 base_type: Box::new(crate::frontend::core::types::mono::MonoType::Int(64)),
                 value: CV::Int(5),
             },

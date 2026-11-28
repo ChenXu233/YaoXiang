@@ -32,8 +32,8 @@ io.println("variadic", "args", "ok")
 // 和类型变体构造（FieldAccess 形态）：单载荷
 r = Result(Int, String).ok(5)
 n = match r {
-    ok(v) => v,
-    err(_) => 0,
+    ok(v) -> v,
+    err(_) -> 0,
 }
 assert.assert(n == 5, "variant ctor with payload passes arity check")
 

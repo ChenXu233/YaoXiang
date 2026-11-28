@@ -12,75 +12,75 @@ module
     slot[9] p : Int(64) @depth2
     locals_total=16
     values_total=75
-    value v0: TypeRef("?") @block0
+    value v0: Generic { name: "Range", args: [Int(64)] } @block0
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
-    value v5: TypeRef("?") @block0
+    value v5: Generic { name: "Range", args: [Int(64)] } @block0
     value v6: Int(64) @block0
     value v7: Int(64) @block0
     value v8: Int(64) @block0
     value v9: Int(64) @block0
     value v10: Generic { name: "Vec", args: [Generic { name: "Range", args: [Int(64)] }] } @block0
-    value v11: TypeRef("?") @block0
-    value v12: TypeRef("?") @block0
-    value v13: TypeRef("?") @block0
+    value v11: Generic { name: "Iter", args: [Generic { name: "Range", args: [Int(64)] }] } @block0
+    value v12: Bool @block0
+    value v13: Generic { name: "Range", args: [Int(64)] } @block0
     value v14: Generic { name: "Range", args: [Int(64)] } @block0
-    value v15: TypeRef("?") @block0
+    value v15: Generic { name: "Iterator", args: [TypeRef("Any")] } @block0
     value v16: TypeRef("?") @block0
     value v17: Int(64) @block0
     value v18: Bool @block0
-    value v19: TypeRef("?") @block0
-    value v20: TypeRef("?") @block0
+    value v19: Bool @block0
+    value v20: TypeRef("Any") @block0
     value v21: Int(64) @block0
     value v22: Int(64) @block0
-    value v23: TypeRef("?") @block0
+    value v23: Never @block0
     value v24: Bool @block0
     value v25: Int(64) @block0
     value v26: Int(64) @block0
     value v27: Generic { name: "String", args: [] } @block0
-    value v28: TypeRef("?") @block0
+    value v28: Generic { name: "Vec", args: [Int(64)] } @block0
     value v29: Int(64) @block0
     value v30: Int(64) @block0
     value v31: Int(64) @block0
     value v32: Int(64) @block0
     value v33: Int(64) @block0
-    value v34: TypeRef("?") @block0
+    value v34: Generic { name: "Vec", args: [Int(64)] } @block0
     value v35: Int(64) @block0
     value v36: Int(64) @block0
     value v37: Int(64) @block0
     value v38: Int(64) @block0
     value v39: Int(64) @block0
     value v40: Generic { name: "Vec", args: [Generic { name: "Vec", args: [Int(64)] }] } @block0
-    value v41: TypeRef("?") @block0
-    value v42: TypeRef("?") @block0
-    value v43: TypeRef("?") @block0
+    value v41: Generic { name: "Iter", args: [Generic { name: "Vec", args: [Int(64)] }] } @block0
+    value v42: Bool @block0
+    value v43: Generic { name: "Vec", args: [Int(64)] } @block0
     value v44: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v45: TypeRef("?") @block0
-    value v46: TypeRef("?") @block0
-    value v47: TypeRef("?") @block0
+    value v45: Generic { name: "Iter", args: [Int(64)] } @block0
+    value v46: Bool @block0
+    value v47: Int(64) @block0
     value v48: Int(64) @block0
     value v49: Int(64) @block0
-    value v50: TypeRef("?") @block0
+    value v50: Never @block0
     value v51: Bool @block0
     value v52: Int(64) @block0
     value v53: Int(64) @block0
     value v54: Generic { name: "String", args: [] } @block0
-    value v55: TypeRef("?") @block0
+    value v55: Generic { name: "Tuple", args: [Void, Void] } @block0
     value v56: Int(64) @block0
     value v57: Generic { name: "String", args: [] } @block0
     value v58: Int(64) @block0
-    value v59: TypeRef("?") @block0
+    value v59: Generic { name: "Tuple", args: [Void, Void] } @block0
     value v60: Int(64) @block0
     value v61: Generic { name: "String", args: [] } @block0
     value v62: Int(64) @block0
     value v63: TypeRef("?") @block0
     value v64: Generic { name: "Vec", args: [Generic { name: "Tuple", args: [Int(64), Generic { name: "String", args: [] }] }] } @block0
-    value v65: TypeRef("?") @block0
-    value v66: TypeRef("?") @block0
-    value v67: TypeRef("?") @block0
-    value v68: TypeRef("?") @block0
+    value v65: Generic { name: "Iter", args: [Generic { name: "Tuple", args: [Int(64), Generic { name: "String", args: [] }] }] } @block0
+    value v66: Bool @block0
+    value v67: Generic { name: "Tuple", args: [Int(64), Generic { name: "String", args: [] }] } @block0
+    value v68: Never @block0
     value v69: Bool @block0
     value v70: TypeRef("?") @block0
     value v71: Int(64) @block0

@@ -107,7 +107,7 @@ SSA 化要新增 `Phi` 变体，要给每个 SSA 值记录类型（供 07 校验
 
 ### 缺陷类 2：`generate_call_expr_ir` 的 `arg_regs` 语义重排
 
-**已核实事实。** `generate_call_expr_ir` 位于 `ir_gen.rs:7269-8014`，**746 行**，单函数。函数签名（`7269-7279`）接受 `func: &Expr` / `args: &[Expr]` / `named_args: &[(String, Expr)]` / `span: &Span`（另带 `_expr` / `result_reg` / `instructions` / `constants`），内部 6 个分支共享同一个 `Vec<Operand>` 并做**语义重写**：
+**已核实事实（审计时点口径；现状位置已按 7c 批 c 拆分同步）。** `generate_call_expr_ir` 现位于 `src/middle/lower/expr/call.rs`（从 `src/middle/core/ir_gen.rs` 拆出，后者已不存在），单函数；函数签名接受 `func: &Expr` / `args: &[Expr]` / `named_args: &[(String, Expr)]` / `span: &Span` / `call_plan_id: PlanId` / `result_reg: Operand` / `instructions` / `constants`（`call_plan_id` 是 RFC-039 D20 的决议消费键），内部多个分支共享同一个 `Vec<Operand>` 并做**语义重写**（下表行号为审计时点版本，拆分后按符号定位）：
 
 | 行 | 语义 |
 | --- | --- |
@@ -144,12 +144,14 @@ let final_args: Vec<Operand> = arg_regs.clone();
 
 `7835-7848` 的注释自述：「未覆盖的槽位：保持缺席，由类型检查阶段报 E1010。运行期为安全起见补 0（正常路径不会到这里）。」
 
+**命名实参的现状（4.9.9 收窄后）**：命名实参进入重排前先按**声明期形参名表**绑定——共享判据 `arg_binding::bind_args_to_params`；IR 侧名字表经 `lookup_param_info` 取，来源是本单元 `fn_param_names`、跨单元方法候选组（`method_param_info`，按 `method_dispatch_name` 的限定名查询）与模块导出面。无重载决议的跨单元方法臂不承载命名实参（旧行为静默丢弃，已知缺口登记在 09 的 4.9.9 → 4.9.10）。上面表格里的「补 0」仍是位置实参与兜底臂的运行期安全网，正常路径不可达。
+
 **这个设计有两重风险**：
 
 1. **错位不报错只错值。** 6 个分支各自决定 `arg_regs` 的最终顺序，任何一处顺序假设错误都不会 panic。
 2. **规范化快照对此免疫。** 07 已记录该局限：快照工具按"首次出现顺序"重命名临时值后，「第 3 个实参本该用第 5 个寄存器」在快照里完全相同。**这一类缺陷在 C4 阶段连快照这一层判据都不存在。**
 
-**补充核实：结构体构造路径的重排无重复槽守卫。** `7724` 的 `final_args` 按"位置实参先入位、命名实参按字段名覆写"填充，**覆写前没有 `slots[idx].is_some()` 之类的重复槽检查**（对比命名空间路径 `7381` 有）——命名实参静默顶掉位置实参时不 panic、不诊断；且实参**求值顺序**（源码序）与最终 `arg_regs` 顺序（字段声明序）在此分叉。批 d 的 `fill_missing` 断言化必须一并覆盖"重复槽"检查，否则结构体构造路径的静默顶替会原样存活。
+**补充核实：结构体构造路径的重排无重复槽守卫。** `7724` 的 `final_args` 按"位置实参先入位、命名实参按字段名覆写"填充，**覆写前没有 `slots[idx].is_some()` 之类的重复槽检查**（对比命名空间路径 `7381` 有）——命名实参静默顶掉位置实参时不 panic、不诊断；且实参**求值顺序**（源码序）与最终 `arg_regs` 顺序（字段声明序）在此分叉。**7d.2 的断言化只覆盖「缺位」三处，没有覆盖「重复槽」**——结构体构造的命名实参覆写位置实参仍静默（该分支只可达于「类型检查已报错、IR 仍生成」的状态；类型检查侧 `bind_record_ctor_args` 的共享判据规则③已以 E1111 拒绝）。该缺口登记在 [09](09-execution-wbs.md) 的「7d 遗留」段，不随 7d 结案。
 
 ### 缺陷类 3：span 键控的跨层契约静默失效（**已消除**，2026-10-13 / RFC-039 D20、WBS 4.5）
 
@@ -173,38 +175,13 @@ if let Some(vars) = self.release_plan.get(&stmt.span) {
 
 **处置（4.5 落地）**：两条键均改为 `PlanId` 结构身份，消费**命中即记账**（读与记账同一次调用），差集非空在唯一结算点报 **E 级 `W1090`**——「查不到」不再是静默。落地形态与判据见 [02](02-stage-contract.md) §2 修订注记（4.5）；本行号（`1942` / `7420` / `7493`）保留为审计时点证据，不作为现状指针。
 
-> **`method_def_ordinals` 不是 span 键控。** 它是 `HashMap<String, usize>`（`ir_gen.rs:224`），在 `:369` 初始化，唯一写入点 `:1692-1702`（按 `base_name` 的定义序分配 `#N` 后缀）。它的风险是**另一种**：定义序依赖——`#N` 后缀由 AST 定义顺序决定，若生成顺序与 typecheck 注册序不一致，同一函数名会解析到不同目标。这一条不是 span 失配，但同样"错了不报错"，处置见「span 键控的额外机制」的机制三。
+> **`method_def_ordinals` 不是 span 键控（**7c.3 已消除**）。** 它原为 `HashMap<String, usize>`，按 `base_name` 的定义遍历序分配 `#N` 后缀。它的风险是**另一种**：定义序依赖——若生成顺序与 typecheck 注册序不一致，同一函数名会解析到不同目标。落地形态见「span 键控的额外机制」的机制三：定义名由 typecheck 按声明身份一次性产出，lowering 只读消费。
 
-### 缺陷类 4：spawn/lambda 隐式握手
+### 缺陷类 4：spawn/lambda 隐式握手（已消除，7c.1）
 
-**已核实事实。** `ir_gen.rs` 有**两处**自己构造 `ast::Expr::Lambda` 并回调 `generate_expr_ir`，靠一组可变字段握手：
+**已消除。** spawn 与 spawn-for 曾要求调用方先写 `pending_env_vars` / `pending_env_names`，再由合成 Lambda 消费；闭包体另靠 `closure_captures` 判定变量是否读取 upvalue。三份字段把正确性押在调用顺序与手工清理上：嵌套合成闭包会把外层同名局部槽误作捕获值，闭包体生成提前返回也会把捕获状态泄漏给后续无关 lowering。
 
-**握手 A —— `generate_spawn_for_ir`（入口 `4143`）：**
-
-```
-4245    self.pending_env_vars = vec![Operand::Local(element_reg)];
-4246    let lambda = ast::Expr::Lambda { params: ..., body: ..., span };
-4256    self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
-```
-
-`generate_expr_ir` → `generate_lambda_expr_ir`（入口 `6543`）→ `6571-6572` `std::mem::take(&mut self.pending_env_vars)` 消费。
-
-**握手 B —— `generate_spawn_expr_ir`（入口 `6641`）：**
-
-```
-6698    self.pending_env_vars = env_ops;
-6699    self.pending_env_names = env_names;
-6701    let lambda = ast::Expr::Lambda { params: Vec::new(), body: Box::new(ast::Block { stmts: vec![ast::Stmt { ... }] }), span };
-6712    self.generate_expr_ir(&lambda, closure_reg, instructions, constants)?;
-6713    self.pending_env_vars.clear();
-6714    self.pending_env_names.clear();
-```
-
-**握手 C —— `closure_captures`**：写于 `6589-6593`，**在同一个函数里** `6598` 调用 `generate_lambda_body_ir`（入口 `4678`），`6600` 清除。读点有两处：`:6284`（闭包体内 `LoadUpvalue`）与 **`:458`**（`flatten_namespace` 路径上的 `closure_captures.contains_key(head)`）。
-
-`:458` 这个读点最危险：它在**命名空间解析**路径上，意味着一个 `HashMap<String, usize>` 的存活状态会改变变量名解析结果。`6589` 写、`6600` 清之间隔着一次完整的闭包体生成（`6598`）；若 `generate_lambda_body_ir` 内部任何一条路径提前返回而不清表（它在 `?` 运算符传播错误时有多个返回点），**`closure_captures` 就会残留到后续无关代码的 `:458`**。
-
-同类隐式状态还有 `pending_env_names`（B 握手写于 `6699`，`6714` 清）。
+7c.1 将合成 AST 收敛到 `middle/lower/synth.rs`，以显式 `SynthEnv` 取代三份共享字段，并把命名捕获注册为词法 upvalue。嵌套帧退出时按符号表深度恢复，错误路径不再残留捕获状态。落地结构见「`synth.rs` 边界」。
 
 ### SSA 不会解决的（诚实列出）
 
@@ -214,7 +191,7 @@ if let Some(vars) = self.release_plan.get(&stmt.span) {
 | `eval_const_expr` 复杂度 | `ir_gen.rs:2298-2488`，**191 行**（`2297` 有 `#[allow(clippy::only_used_in_recursion)]`，确认自递归） | 常量折叠的表达式覆盖度与 SSA 无关 |
 | span 键控失效（**已消除**） | 审计时点：`release_plan`（`1942`）、`overload_resolutions`（`7420` / `7493`）——4.5 后为 `PlanId` 键 + 结算必达 | **SSA 完全没有触及这一层**（结论不变）。已由[02](02-stage-contract.md) 的义务账本独立机制解决，见「span 键控问题的处置」机制二 |
 | `Instruction` 变体数 | 75 个（`ir.rs` 的 `Instruction` 枚举；含 7b.1a 引入的 `Phi`） | SSA 增加 `Phi`，**净变化 +1**（已落地）。变体对应字节码 opcode 或降级为 NOP，不会因 SSA 减少；`Phi` 按方案 A 是 IR-only 伪指令，不新增 opcode |
-| `method_def_ordinals` 定义序依赖 | `ir_gen.rs:224` / `369` / `1692-1702` | 与 span 键控同类但不同因，见「span 键控的额外机制」机制三 |
+| `method_def_ordinals` 定义序依赖（**已消除**） | 审计时点：`ir_gen.rs:224` / `369` / `1692-1702`；7c.3 落地见「span 键控的额外机制」机制三 | 与 span 键控同类但不同因；定义名改由 typecheck 按声明身份产出、lowering 只读 |
 
 ## 目标设计
 
@@ -334,7 +311,7 @@ pub struct ValueInfo {
 | **1c. 三处语句级回收判据** | **是（7b.4 已落地）** | 三处回收 + `generate_block_ir` 的 `result_reg.is_none()` 守卫 + `temp_floor` 簿记已删；槽位复用归 `src/middle/lower/regalloc.rs` 的线性扫描分配器（`frame_slots = named_base + max_live`） | C4：行为等价（403/403）+ 不变量 |
 | **2. `arg_regs` 语义重排** | **部分** | SSA 让"用错寄存器"变成"用错值 ID"且可被支配性检查抓住，但**重排逻辑本身仍在**。真正的消除靠函数拆分——6 个分支各自 `push`，`arg_regs` 所有权留在函数顶部 | 第一层支配性不变量（快照对此免疫） |
 | **3. span 键控失效** | **否** | SSA 完全不触及。见「span 键控的额外机制」 | 07 的 `test_release_plan_spans_consumed` |
-| **4. 隐式顺序依赖** | **否** | 见「`synth.rs` 边界」 | 需新增显式判据 |
+| **4. 隐式顺序依赖** | **否** | 见「`synth.rs` 边界」 | 由代码结构与 review 保证；原门禁脚本经用户 2026-11-24 裁决丁取消 |
 | `compile_pattern` 298 行 | 否 | 见「SSA 不会解决的」 | — |
 | `eval_const_expr` 191 行 | 否 | 见「SSA 不会解决的」 | — |
 | `Instruction` 75 变体 | 否（+1，已落地） | `Phi` 已由 7b.1a 引入；方案 A 下它是 IR-only 伪指令，不新增 opcode | — |
@@ -362,68 +339,66 @@ pub struct ValueInfo {
 
 `Cargo.toml:37-39` 的 dev-dependencies 仅 `criterion` / `proptest`；`[dependencies]` 中无 regalloc / petgraph / graphlib——引入任一 crate 都是新增依赖面。
 
-### `generate_call_expr_ir` 746 行的拆分策略
+### `generate_call_expr_ir` 的拆分（7d.1 已落地）
 
-**必须最后做**，且**必须先有 SSA 形态与判据**。理由：拆分本身是 C1（纯搬移，判据为快照 zero-diff），但只有在 `arg_regs` 的语义被 SSA 消除到"每个实参一个独立 `ValueId`"之后，拆分才不会把旧的顺序假设原样搬进新文件。
-
-**核心设计约束：`arg_regs` 所有权留在函数顶部，6 个分支只 `push` 不重排。**
+拆分前是单函数 920 行（审计时点记 746 行；迁入 `middle/lower/expr/call.rs` 后 920 行），承担六类调用形态。落地形态：
 
 ```
-generate_call_expr_ir (746 行)
-├── 参数求值：按源码顺序求值，push 到 arg_regs —— 6 个分支共用，唯一允许 append 的地方
-├── CallArgs（值对象）
-│   └── arg_regs: Vec<Operand>  —— 只在顶部创建，6 个分支只 push，绝不重新 collect/reorder
-├── 分支 1 → emit_namespace_call(args: CallArgs)         [7395 分支抽出]
-├── 分支 2 → emit_bound_call(args: CallArgs)              [7406+ 分支抽出]
-├── 分支 3 → emit_struct_ctor(args: CallArgs)             [7724 分支抽出]
-├── 分支 4 → emit_plain_call(args: CallArgs)              [7835-7848 分支抽出]
-├── 分支 5 → emit_curried_call(args: CallArgs)
-└── 分支 6 → emit_method_call(args: CallArgs)             [7420 / 7493 分支抽出]
+generate_call_expr_ir（call.rs:479-568，函数体 78 行，只做分派）
+├── 命中即返回，按序：变体构造 → 命名空间调用 → 跨文件全局槽位间接调用
+│                    → 方法调用重排 → 内置容器构造 → 普通/重载调用
+├── CallArgs（call.rs:31-271）——实参收集 / 命名重排 / 槽位绑定的唯一载体
+│    collect_regs / bind_named_slots / collect_regs_in_slot_order / arg_expr
+│    槽位判定仍唯一归 sema::inference::arg_binding::bind_args_to_params
+├── emit_variant_ctor              call.rs:575-621    （RFC-010 变体构造）
+├── emit_namespace_call            call.rs:631-684    （命名空间调用）
+├── emit_global_slot_indirect_call call.rs:695-717    （跨文件全局槽位 → CallDyn）
+├── emit_method_call_reordered     call.rs:728-853    （RFC-004 绑定重排）
+├── emit_builtin_container_ctor    container.rs:175-220（RFC-011 §Vec 容器构造）
+└── emit_plain_call                call.rs:864-1457   （无绑定方法 + 函数形态）
 ```
 
-`7835-7848` 的"补 0"逻辑（`7838-7846`）下沉为 `CallArgs::fill_missing(&mut self, instructions) -> Result<(), Diagnostic>`，**并把"正常路径不会到这里"的自述注释换成一条断言**：若任何槽位缺席且 typecheck 未报 E1010，直接返回诊断。**这一条把一个静默兜底变成硬错误，是本文对缺陷类 2 最直接的改善。**
+**对旧草图两处前提的更正**：① 原设计假设「SSA 已把 `arg_regs` 收敛为每实参一个 `ValueId`，6 个分支只 push 不重排」——该前提在当前树不成立；C1 要求保序，落地保留三条重排路径（`set_regs` / `collect_regs_in_slot_order` / `bind_named_slots`），并全部收进 `CallArgs`，不散在分支里。② 原命名 `emit_bound_call` / `emit_struct_ctor` / `emit_curried_call` / `emit_method_call` 与落地六名不符，以本表为准。
 
-**判据**：纯搬移部分（SSA 形态未变）用快照 zero-diff；`fill_missing` 的断言化属于 C4，用语料差分 + 第一层校验器。
+**收敛的内联副本**（拆分同时消掉，不是原样搬家）：位置实参求值 5→1、命名实参入槽 2→1、按槽位序重建 2→1、位置/命名下标换算 4→1。
+
+**7d.2 的「补 0」断言化**：原 `unwrap_or_else` 补 `Load 0` 的三处同形分支改为返回既有 `E3005`（`ErrorCodeDefinition::ir_internal_error`），载体是 `CallArgs::require_complete_slots`（不是草图的 `fill_missing`）；**唯一保留**空构造 `Pair(Int)()` 的字段零值——那是 SPEC §4.3 的合法零初始化，语料 `generic_constructor.yx` 断言 `z.first == 0`。
+
+**判据**：纯搬移部分 C1 快照 zero-diff + 语料 412 条逐字节相同；断言化部分 C4（新增 4 条直驱用例，旧实现红、新实现绿）。
 
 ### `synth.rs` 边界：把隐式回调变成显式的合成 AST 边界
 
-**已核实事实**：`ir_gen.rs` 中构造 `ast::Expr` 的位置**恰为 2 处**——`:4246` 与 `:6701`（另有 `:6704` 构造 `ast::Stmt`、`:510` / `:1266` / `:1399` 构造 `ast::Type`）。
+**落地形态**：`src/middle/lower/synth.rs` 是 L3/L4 生产代码唯一允许构造 `ast::Expr` / `ast::Stmt` / `ast::Type` 的模块。模式匹配、只读查询与测试夹具不属于合成。当前生产合成点是 spawn 的 Lambda/Stmt 与 spawn-for 的 Lambda，全部经该模块。
 
-**提案**：新建 `src/middle/lower/synth.rs`，作为**全仓唯一**允许在 L3 层构造 `ast::Expr` / `ast::Stmt` / `ast::Type` 的模块。理由不是"整洁"，而是：
-
-> 构造 AST 意味着**重新进入前端 lowering 入口**。而 `generate_expr_ir` 期望的 `pending_env_vars` / `closure_captures` 状态是**调用方负责准备的前置条件**，而这个前置条件目前没有任何类型或签名表达——它靠"谁调用我"这个运行时事实成立。
-
-改成显式签名：
+AST 节点不携带 lowering 环境，因此 `SynthEnv` 不作为 AST 字段，也不由 AST 助手假装消费。它包含运行时 env 操作数与命名捕获名，由调用方随合成节点显式交给 `generate_expr_ir_with_env`：
 
 ```rust
-// src/middle/lower/synth.rs
-pub struct SynthEnv {
-    pub env_vars: Vec<Operand>,
-    pub env_names: Vec<String>,
-    pub captures: HashMap<String, usize>,
+pub(super) struct SynthEnv {
+    pub(super) env_vars: Vec<Operand>,
+    pub(super) env_names: Vec<String>,
 }
 
-/// 合成一个捕获 env 的闭包 AST；捕获集由参数显式给出，
-/// 不依赖调用方对 self.pending_env_* 的事先写入
-pub fn synth_closure(
+pub(super) fn synth_closure(
     params: Vec<ast::Param>,
     body: ast::Block,
-    env: SynthEnv,
     span: Span,
 ) -> ast::Expr
 ```
 
-具体改动：
+环境流如下：
 
-| 位置 | 现状 | 改为 |
-| --- | --- | --- |
-| `ir_gen.rs:4245-4256` | 写 `pending_env_vars` → 造 Lambda → 回调 | 调 `synth::synth_closure(...)` 得 AST，显式传 `SynthEnv`；`generate_lambda_expr_ir`（`6543`）增加一个携带 `SynthEnv` 的内部入口，**不再读 `self.pending_env_vars`** |
-| `ir_gen.rs:6698-6714` | 写 → 造 → 回调 → 清 | 同上；`6713-6714` 的 `clear()` 消失（无共享状态可清） |
-| `ir_gen.rs:6571-6572` | `mem::take(&mut self.pending_env_vars)` | 改为从入参读取 |
-| `ir_gen.rs:6589-6593` / `6600` | 写 / 清 `closure_captures` | 同上；`closure_captures` 降为**闭包体生成期间的局部变量**，`6600` 的 `clear()` 消失 |
-| `ir_gen.rs:458` | `self.closure_captures.contains_key(head)` 在命名空间解析路径上读共享字段 | **这是最危险的一处**：改为显式参数，否则 `generate_lambda_body_ir` 的任一 `?` 提前返回都会让捕获表泄漏到无关代码 |
+- spawn 与 spawn-for 构造 `SynthEnv`，随合成 Lambda 显式传入 lowering；不再预写 `pending_env_vars` / `pending_env_names`。env 总槽数由 `env_vars.len()` 得出，命名 upvalue 从匿名前缀长度起偏移；spawn-for 的匿名迭代值、外层捕获与形参因此各居其位。
+- 普通 lambda 从既有自由变量收集器补全环境。列表推导、嵌套 Lambda 与嵌套 spawn 在同一收集器内遍历，生成器变量和嵌套形参按词法作用域排除。
+- 闭包体把 `SynthEnv` 注册为既有符号表中的 `BindingLocation::Upvalue`。变量读取与命名空间遮蔽查询共用这条词法绑定，不再读取 `closure_captures`。
+- 嵌套闭包经 `capture_operand` 先读取外层 upvalue，再把值交给内层环境；不会把外层同名局部槽误当捕获值。
+- `NestedBodyGuard` 记录进入时的符号表深度，退出（含 `?` 提前返回）截断到该深度，捕获绑定不会残留到后续无关 lowering。
+- sema 的表达式体函数检查用 `body_stmts + expression_body + span` 参数化既有输入，直接调用 `check_expr` 并复用尾校验，不再合成 Block/Stmt/Expr；没有 sema→middle/lower 反向依赖或额外架构例外。
+- SpawnFromList 在 Embedded 与 Standard 共用 `env + [匿名 item]` 的 args 布局，并以同一份 env 注入 upvalues。匿名迭代值固定为 env[0]，命名捕获从匿名前缀后读取，形参从全部 env 之后起算。
+- 双运行时行为测试显式调用 main()，在 spawn-for 任务内分别断言无捕获 item 值与 item+外层捕获；无捕获形态同时覆盖 74febd1f 引入的回归恢复。IR 断言与真实执行分别记录，403 条既有语料零漂移不冒充该形态的行为覆盖。
 
-**判据**：新增哨兵测试 `test_no_ast_construction_outside_synth`，扫 `src/middle/**` 除 `synth.rs` 外不得出现 `ast::Expr::` / `ast::Stmt {` 构造语法。形态同 RFC-039 的 `check-module-boundary.py`。
+**判据**：D22 的 AST 合成边界由代码结构保证——L3/L4 生产代码只在 `src/middle/lower/synth.rs` 中构造 `ast::Expr` / `ast::Stmt` / `ast::Type`，模式匹配、只读查询与测试夹具不属于合成；`synth.rs` 之外的合成点由 review 拒绝。原 `scripts/ci/check-synth-boundary.py` 与 CI 的 `synth-boundary` job 已按用户 2026-11-24 裁决丁删除，不再维护自动扫描门禁：启发式 token 扫描无法覆盖任意合法的 use / 别名 / 重导出形态（历次补口后仍被 `pub type` 重导出绕过），维护成本超过收益。
+
+D1/D2：`SynthEnv` 与 `BindingLocation` 都是本批新增的内部类型，不是既有类型复用。前者把生产端 env 操作数、命名项与槽位推导集中为一个显式参数；后者把原 `SymbolEntry.local_idx` 提升为可判别的 Local/Upvalue 位置。替代方案是继续传三份共享字段（无法阻止嵌套覆盖与错误残留），或只传 `Vec<Operand>`（无法表达匿名前缀与命名捕获的对应关系）；两者均因正确性理由否决。新概念不与既有 AST/消费台账同义，也不需要 import 别名或转换表。
 
 ### span 键控问题的处置（SSA 解决不了的部分）
 
@@ -448,26 +423,22 @@ self.release_plan_total = type_result.release_plan.drops.len();
 **机制二：Span 键改为 `DefId` 或显式计划 ID（**2026-10-13 已落地**：RFC-039 D20 / WBS 4.5 按本机制实现为 `PlanId(u32)` 结构身份键 + 消费必达结算，落地形态见 [02](02-stage-contract.md) §2 修订注记）。**
 根本修法是**不要用 Span 当键**。`Span` 是源码位置，会因宏展开、`include`、多文件合并而漂移。`FunctionIR` 已有 `def: Option<DefId>` 字段（`ir.rs:677`），说明 DefId 在 IR 层可用。**设计判断**：为 `ReleasePlan` 与 `overload_resolutions` 引入 `PlanId(u32)`，由 ownership / overload 决议在产出时分配，IR 消费时按 `PlanId` 匹配。**这属于 02 的义务账本（`Obligations`）范畴，应与 [02](02-stage-contract.md) 一并实施，不放在本文。**
 
-**机制三：`method_def_ordinals` 的定义序依赖（独立小项）。**
-该字段是 `HashMap<String, usize>`（`ir_gen.rs:224`），key 为 `"{type_name}.{method_name}"`（**无模块限定**，`:1691-1700` 写入）——两个模块若定义同名 `Type.method`，共享同一计数器，`#N` 混编名随之漂移。**它的失效模式不是 span 失配而是顺序/重名失配**——若 typecheck 的注册序与 ir_gen 的定义序不一致，同名方法会解析到不同目标。处置：改为由 typecheck 侧**一次性产出** `HashMap<DefId, String>`（裸名或 `#N` 混编名），ir_gen 只查不改。**这消除 `ir_gen` 内的一个可变跨函数状态。**
+**机制三：`method_def_ordinals` 的定义序依赖（独立小项，**2026-11-25 已落地**）。**
+该字段原为 `HashMap<String, usize>`，key 为无模块限定的 `"{type_name}.{method_name}"`，按定义遍历序分配 `#N` 混编名——若 typecheck 的注册序与 lowering 的定义序不一致，同名方法会解析到不同目标。**落地形态**：typecheck 在登记重载候选的同一处**一次性产出** `method_def_ir_names: HashMap<PlanId, String>`（裸名或 `#N` 混编名），随 `TypeCheckResult` 交给 IR 生成。键取**方法声明语句的 `PlanId`**（AST 结构身份，D20 同款）——`DefId` 在 lowering 尾部的 `assign_defs` 才分配，typecheck 侧不存在。lowering 按声明身份只读取名，**未命中即 E3005 响亮失败**（不回退裸名——回退会把「定义名与调用名不同源」伪装成可运行程序）。可变计数器及其写入点已删除，定义名不再有第二个推导入口。
 
-### 三条硬编码丢弃的跟踪
+### 硬编码丢弃的跟踪
 
-**已核实事实。** `impl From<BytecodeFile> for BytecodeModule`（`bytecode.rs:943-2350`，1408 行）中有三处硬编码丢弃：
+`impl From<BytecodeFile> for BytecodeModule`（今 `src/middle/bytecode/mod.rs`）原有三处硬编码丢弃；7e 复核后为**两处真丢失 + 一处误报**：
 
-| 位置 | 字段 | 值 | 后果 |
+| 位置（旧行号） | 字段 | 原值 | 复核结论 |
 | --- | --- | --- | --- |
-| `bytecode.rs:2312` | `upvalue_count` | `0` // Not stored in BytecodeFile | 闭包 upvalue 数量在 `.42` 往返后归零 |
-| `bytecode.rs:2315` | `exception_handlers` | `Vec::new()` // Not implemented yet | **`.42` 产物丢失整个异常表** |
-| `bytecode.rs:2341` | `globals` | `Vec::new()` // Not stored in BytecodeFile yet | **`.42` 产物丢失全局变量信息**（注意 `2347` 的 `global_names` **有**被填充，两者不一致） |
+| `bytecode.rs:2312` | `upvalue_count` | `0` // Not stored in BytecodeFile | **真丢失**：闭包上值槽数经 `.42` 往返归零；已随 v5 落盘（7e.1） |
+| `bytecode.rs:2315` | `exception_handlers` | `Vec::new()` // Not implemented yet | **误报**：字段无生产者、无消费者，语言层无 throw/try/catch（RFC-030 把 `Throw` 记为字节码层预留，RFC-036 否决进程内 catch 边界）⇒ 没有「丢失的数据」，是死字段；不落盘，**已删除（6753bbe，P10 S6.1）** |
+| `bytecode.rs:2341` | `globals` | `Vec::new()` // Not stored in BytecodeFile yet | **真丢失**：全局表（名字 + 类型）经往返归零；已随 v5 落盘（7e.3），载体与函数签名同为 `MonoType`（7e.4） |
 
-**设计判断（2026-10-05 修订，决议 D52）：三处全部收进本文范围，作为 P7 批 e（7e），不再立"独立 issue"。** 原判断（后两条立独立 issue）的理由记录如下，以及为什么被推翻：
+**判据（决议 D52）：没有生产者的空表不是丢失的数据，是死路径**——与 D32 同一判据。有生产者而容器不落盘的才是数据丢失，因此 `2312` / `2341` 收进 P7 批 e（7e）；`2315` 不落盘，作为死字段**已随 P10 S6.1 删除（6753bbe）**（`THROW` 单列待裁决）。升版一次覆盖两处真丢失（`VERSION` 4→5，D17）；`.42` 是构建产物，跨版本兼容不是目标。
 
-1. ~~它们是**格式层缺口**（`BytecodeFile` 没序列化这些字段），与 SSA 无关。~~ 成立，但不构成排除理由——P7 本来就动 `bytecode.rs`，且三处同修只需一次 `VERSION` 升版（4→5），拆成两次升版反而更贵。
-2. ~~修它们需要改 `.42` 落盘格式 → 升版 → 范围从"IR 形态"膨胀到"产物格式"。~~ 升版机制已存在（`MAGIC` + `VERSION` 头，读取侧按版本拒绝），且 `.42` 是构建产物，跨版本兼容不是目标——膨胀的是工作量，不是风险。
-3. ~~`2315` / `2341` 实际风险等级低，`.42` 直跑是次要路径。~~ **被推翻**：异常表丢失使 throw/try 在 `.42` 直跑时行为错误——throw/try 是语言核心语义；次要路径不等于可以静默错。本次重构的原则是**不留核心功能的待实现遗留**（`Vec::new() // Not implemented yet` 正是这类遗留）。
-
-**同时保留**：三处仍必须在 `Obligations` 账本里登记为"产出但未序列化"直至 7e 完成，避免它变成第四种"没人知道的事"。`2312` 随升版一并落地（D17），已分配未使用的 opcode 值（D32/D34）同批回收。
+**7e 同批的第三处格式失真**：`.42` 类型号表不可逆且撞号——`Int(64)` 与 `Float(32)` 同为 `9`、`Float(64)` 读回 `TypeRef("_")`。号表改为可逆无碰撞（7e.4），写侧对未知位宽与编译期 FFI 类型响亮拒绝。
 
 ## 详细设计
 
@@ -546,15 +517,15 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | 17 | `src/middle/core/ir_gen.rs` | `1987-2000` | E3014 检查提取为 `check_register_budget()`，供 `1798`/`2001` 口径统一后共用 |
 | 18 | `src/middle/core/ir_gen.rs` | `1798` | `take_cur_locals(param_types.len())` → `take_cur_locals(self.temp_high_water)`，消除口径不一致 |
 | 19 | `src/middle/core/ir_gen.rs` | `248-249` | 注释契约删除（由类型系统强制），替换为指向 `verify` 的说明 |
-| 20 | `src/middle/core/ir_gen.rs` | `4245-4256` | 改调 `synth::synth_closure` |
-| 21 | `src/middle/core/ir_gen.rs` | `6698-6714` | 改调 `synth::synth_closure`，删 `6713-6714` |
-| 22 | `src/middle/core/ir_gen.rs` | `6571-6572` | 改从入参读 `SynthEnv`，不再 `mem::take` 共享字段 |
-| 23 | `src/middle/core/ir_gen.rs` | `6589-6593` / `6600` | `closure_captures` 降为局部，删 `clear()` |
-| 24 | `src/middle/core/ir_gen.rs` | `458` | `closure_captures.contains_key` 改显式参数（**最高优先级的隐式依赖**） |
-| 25 | `src/middle/core/ir_gen.rs` | `341` + `1942` | 加 span 键控的消费计数 |
-| 26 | `src/middle/core/ir_gen.rs` | `224` / `369` / `1692-1702` | `method_def_ordinals` 改为只读 |
-| 27 | `src/middle/core/ir_gen.rs` | `7269-8014` | **最后做**：拆为顶部 `CallArgs` + 6 个 `emit_*` |
-| 28 | `src/middle/core/ir_gen.rs` | `7838-7846` | "补 0" 兜底改为返回诊断 |
+| 20 | `src/middle/lower/loops.rs` | `generate_spawn_for_ir` | 改调 `synth::synth_closure`（**7c.1 已落地**） |
+| 21 | `src/middle/lower/expr/spawn.rs` | `generate_spawn_expr_ir` | 改调 `synth::synth_closure`，删除共享 pending 字段的写清（**7c.1 已落地**） |
+| 22 | `src/middle/lower/expr/closure.rs` | `generate_lambda_expr_ir` | 改从入参读 `SynthEnv`，不再 `mem::take` 共享字段（**7c.1 已落地**） |
+| 23 | `src/middle/lower/{mod,scope}.rs` | 符号表与 `NestedBodyGuard` | 删除 `closure_captures` 字段，改 `BindingLocation::Upvalue` 词法绑定与按深度恢复（**7c.1 已落地**） |
+| 24 | `src/middle/lower/expr/{access,closure}.rs` + `query.rs` | 变量与命名空间查询 | `closure_captures.contains_key` 改查词法 upvalue，捕获物化统一走 `capture_operand`（**7c.1 已落地**） |
+| 25 | `src/middle/core/ir_gen.rs`（审计时点路径） | `341` + `1942` | ~~加 span 键控的消费计数~~ → 由 4.5 的 `PlanId` 消费台账覆盖（读与记账同一次、结算 W1090）；7c.2 核验零触发，无代码改动 |
+| 26 | `src/middle/lower/{mod,stmt}.rs`、语义侧 `sema/{checker,types}.rs` | `generate_method_ir` 的定义名 + `TypeCheckResult` 权威映射 | `method_def_ordinals` 只读化（**7c.3 已落地**：typecheck 按声明 `PlanId` 产出混编名，lowering 只读） |
+| 27 | `src/middle/lower/expr/call.rs` + `container.rs` | 审计时点 `ir_gen.rs:7269-8014` | 拆为 `CallArgs` + 6 个 `emit_*`（**7d.1 已落地**：`eb13cac`；主函数 `call.rs:479-568` 只做分派） |
+| 28 | `src/middle/lower/expr/call.rs` | 审计时点 `ir_gen.rs:7838-7846` | "补 0" 兜底改返回既有 `E3005`（**7d.2 已落地**：`e246d6d`；合法空构造零值保留） |
 | 29 | `src/middle/lower/synth.rs` | **新建** | 合成 AST 边界 |
 | 30 | `src/middle/ir/verify.rs` | **新建**（[07](07-equivalence-oracle.md) 第一层） | `verify_loose` / `verify_ssa` |
 | 31 | `src/middle/passes/codegen/translator.rs` | dispatch match | `Instruction::Phi` 的翻译（**7b.3 已落地**：方案 A 展开在**块入口**——`plan_phi_edges` / `emit_phi_prologue` 按前驱发 `Move` 组、组间既有 `JMP` 跳过、入边跳转按 `(前驱, 汇合块首指令)` 重定向到组起点；`translate_instruction` 的 `Phi` 臂收敛为不可达 E8001 防御臂——单条返回位放不下按前驱分布的多条 Move，到达即响亮失败） |
@@ -564,7 +535,7 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | 35 | `src/middle/core/bytecode.rs` | `2312` | `upvalue_count: 0` 修正 |
 | 36 | `src/backends/interpreter/executor/**` | — | **方案 A 下零改动** |
 | 37 | `src/middle/lower/regalloc.rs` | **新建** | 线性扫描分配器（**7b.4 已落地**：271 行；`allocate_value_slots(blocks, values, named_base, pinned, limit)`，返回 `value_slots` 与 `frame_slots = named_base + max_live`；越界返回 `Budget` 由 `finalize_code_body` 报 E3014） |
-| 38 | `scripts/ci/check-synth-boundary.py` | **新建** | `synth.rs` 边界哨兵检查 |
+| 38 | `scripts/ci/check-synth-boundary.py` | **取消** | 边界哨兵脚本经用户 2026-11-24 裁决丁取消，不新建 |
 
 ### 向后兼容性：`.42` 格式的版本号
 
@@ -588,8 +559,8 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | --- | --- | --- | --- | --- |
 | **批 a** | 切断多次定义：删 3 处语句级回收 → 6 处 save/restore 换 RAII guard → 口径统一 | 8-10（先）→ 11-16 → 17-18 | 删除回收：**C4**（行为等价 + 第一层支配性不变量）。RAII 与口径统一属纯搬移：**C1** 快照 zero-diff | 逐项单 commit，`git revert` 即回滚 |
 | **批 b** | SSA 形态切换：`ir.rs` 结构变更 + 临时值改产 `Operand::Value`（机械替换）→ `translator.rs` 的 `Phi` 臂（方案 A）→ 线性扫描分配器。批内按 WBS 三级任务串行：7b.1a（`Operand` 变体收敛 + `Instruction::Phi` 引入，**已落地**）→ 7b.1b（`FunctionIR` / `BasicBlock` / 类型标注字段，**已落地**）→ 7b.2（`next_temp_reg` 改产 `Operand::Value`，**已落地**）→ 7b.3（`translator.rs` 的 `Phi` 臂 + `BasicBlock.successors` 填充，**已落地**）→ 7b.4（线性扫描分配器 + 删三处语句级回收，与 7a.1 同批，**已落地**） | 1-5、7 → 31-32 → 37 | **C4**：行为等价 + `verify_ssa` 全绿 + `.42` 往返测试 | `ir.rs` 变更**独占一个 commit**（类型变更波及全仓编译，不可增量回滚） |
-| **批 c** | 隐式契约显式化：`synth.rs` 边界 + 哨兵脚本 → span 消费计数 → `method_def_ordinals` 只读化 | 20-24、29、38 → 25 → 26 | **C4**：行为等价 + 新脚本纳入 CI；消费计数在新诊断上零触发（否则说明真存在失配） | 独立 commit |
-| **批 d** | `generate_call_expr_ir` 拆分 + "补 0" 兜底断言化 | 27-28 | 纯搬移部分：**C1** 快照 zero-diff。断言化部分：**C4** 语料差分 + 第一层校验器 | 独立 commit |
+| **批 c** | 隐式契约显式化：`synth.rs` 边界 → 既有消费台账核验（无代码改动）→ `method_def_ordinals` 只读化（哨兵脚本经用户 2026-11-24 裁决丁取消） | 20-24、29 → 25 → 26 | **C4**：行为等价；消费计数在新诊断上零触发（否则说明真存在失配） | 独立 commit |
+| **批 d** | `generate_call_expr_ir` 拆分 + "补 0" 兜底断言化（**已落地**：7d.1 `eb13cac`、7d.2 `e246d6d`） | 27-28 | 纯搬移部分：**C1** 快照 zero-diff。断言化部分：**C4** 语料差分 + 第一层校验器 | 独立 commit |
 
 **批内顺序不可交换的三处依赖：**
 
@@ -718,12 +689,12 @@ self.release_plan_total = type_result.release_plan.drops.len();
 - `src/middle/core/ir_gen.rs:7395` / `7724` / `7835-7848` / `8000` — 三处语义重排与克隆
 - `src/middle/core/ir_gen.rs:7838-7846` — 「补 0」静默兜底
 
-**缺陷类 3（span 键控）** —— 下列为**审计时点**的取证指针（4.5 键迁移后：`release_plan` / `overload_resolutions` 两键已 `PlanId` 化，现状指针见 [02](02-stage-contract.md) §2 修订注记；`method_def_ordinals` 仍为机制三的待办）
+**缺陷类 3（span 键控）** —— 下列为**审计时点**的取证指针（4.5 键迁移后：`release_plan` / `overload_resolutions` 两键已 `PlanId` 化，现状指针见 [02](02-stage-contract.md) §2 修订注记；`method_def_ordinals` 已由 7c.3 按机制三消除）
 
 - `src/middle/core/ir_gen.rs:191` / `222` / `224` — 三个跨层字段的声明
 - `src/middle/core/ir_gen.rs:341` / `1942` — `release_plan` 的写入与消费
 - `src/middle/core/ir_gen.rs:7420` / `7493` — `overload_resolutions` 的消费
-- `src/middle/core/ir_gen.rs:369` / `1691-1700` — `method_def_ordinals` 的初始化与唯一写入点（key 为无模块限定的 `"Type.method"`）
+- `src/middle/core/ir_gen.rs:369` / `1691-1700` — `method_def_ordinals` 的初始化与唯一写入点（key 为无模块限定的 `"Type.method"`；**7c.3 已删除该字段**，此处为审计时点证据）
 - `src/frontend/core/typecheck/types.rs:31` / `56` — 传递结构上的两个字段
 - `src/frontend/core/typecheck/layers/ownership.rs:26-32` / `2574` / `2786` — `ReleasePlan` 定义与产出
 - `src/frontend/core/typecheck/checker.rs:1282` / `1440` / `1447-1448` — 跨层传递
@@ -742,7 +713,7 @@ self.release_plan_total = type_result.release_plan.drops.len();
 - `src/middle/core/bytecode.rs:127-554` — `BytecodeInstr` 66 变体
 - `src/middle/core/bytecode.rs:558` / `649` — `opcode()` / `size()`
 - `src/middle/core/bytecode.rs:943-2350` — `impl From<BytecodeFile> for BytecodeModule`（1408 行）
-- `src/middle/core/bytecode.rs:2312` / `2315` / `2341` — 三处硬编码丢弃（对照 `2344` / `2347`）
+- `src/middle/core/bytecode.rs:2312` / `2315` / `2341` — 三处硬编码丢弃（对照 `2344` / `2347`）；旧审计记录，复核结论见本文 §「硬编码丢弃的跟踪」（两处真丢失 + 一处误报）
 - `src/middle/core/bytecode.rs:2353` — `impl From<MonoType> for IrType`（[03](03-type-unification.md) 待拆的桥接）
 - `src/middle/passes/codegen/translator.rs:533` / `631` / `632` / `655-657` / `658-660` — 9 条 NOP 降级
 - `src/middle/passes/codegen/operand.rs:36-45` / `72-77` — `OperandResolver`，`u8` 上限 255

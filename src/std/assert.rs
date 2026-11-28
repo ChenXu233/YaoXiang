@@ -8,6 +8,7 @@
 
 use crate::backends::common::value::RuntimeValue;
 use crate::frontend::core::types::eval::dependent_types::{AssociatedTypeDef, SortSpace};
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::mono::MonoType;
 use crate::std::{NativeContext, NativeExport, StdModule, TypeFamilyExport};
 use crate::ExecutorError;
@@ -38,8 +39,20 @@ impl StdModule for AssertModule {
                 AssociatedTypeDef::Match {
                     arg_index: 0,
                     arms: vec![
-                        (MonoType::TypeRef("true".into()), MonoType::Void),
-                        (MonoType::TypeRef("false".into()), MonoType::Never),
+                        (
+                            MonoType::TypeRef(
+                                Nominal::flat(AsRef::<str>::as_ref(&("true")))
+                                    .expect("type name must be bare and non-empty"),
+                            ),
+                            MonoType::Void,
+                        ),
+                        (
+                            MonoType::TypeRef(
+                                Nominal::flat(AsRef::<str>::as_ref(&("false")))
+                                    .expect("type name must be bare and non-empty"),
+                            ),
+                            MonoType::Never,
+                        ),
                     ],
                 },
             ),
@@ -47,7 +60,10 @@ impl StdModule for AssertModule {
                 "Assert",
                 vec!["cond"],
                 SortSpace::Proof,
-                AssociatedTypeDef::Direct(MonoType::TypeRef("IsTrue(cond)".into())),
+                AssociatedTypeDef::Direct(MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&("IsTrue(cond)")))
+                        .expect("type name must be bare and non-empty"),
+                )),
             ),
         ]
     }

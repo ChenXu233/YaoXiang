@@ -166,7 +166,7 @@ impl<'a> ExpressionInferrer<'a> {
         span: crate::util::span::Span,
     ) -> Result<()> {
         // 引用字段（&T / &mut T）：构造实参到引用的桥接归所有权层，B.2 不判
-        // （既有语料 Token(&mut Int) / PointView(&Point) 依赖该边界，见 09a B.2a 记录）。
+        // （既有语料 Token(&mut Int) / PointView(&Point) 依赖该边界，见提交信息）。
         if matches!(field_ty, MonoType::Ref { .. }) {
             return Ok(());
         }

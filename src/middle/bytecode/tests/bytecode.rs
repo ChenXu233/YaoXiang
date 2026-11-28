@@ -8,6 +8,7 @@
 //! - 解码保真：Ref / Struct 型不被塌缩（type_table 原样搬运，6.2.2）
 
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::middle::bytecode::file::BytecodeInstruction;
 use crate::middle::bytecode::opcode;
 use crate::middle::bytecode::{BytecodeInstr, BytecodeModule, Label, Reg};
@@ -38,6 +39,7 @@ fn build_and_decode_typed(
         return_type,
         instructions: instrs,
         local_count: 0,
+        upvalue_count: 0,
         local_names: HashMap::new(),
         debug_map: std::collections::HashMap::new(),
     };
@@ -49,6 +51,7 @@ fn build_and_decode_typed(
             functions: vec![func],
         },
         vtables: vec![],
+        globals: vec![],
         debug_section: None,
     };
     BytecodeModule::from(file)
@@ -57,7 +60,8 @@ fn build_and_decode_typed(
 /// Helper: Point 结构体类型（字段 x/y: i64）——解码保真测试夹具。
 fn point_struct_type() -> MonoType {
     MonoType::Struct(crate::frontend::core::sema::StructType {
-        name: "Point".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Point")))
+            .expect("type name must be bare and non-empty"),
         fields: vec![
             crate::frontend::core::types::mono::StructFieldInfo {
                 name: "x".to_string(),
@@ -457,10 +461,10 @@ const EXPECTED_UNENCODED: &[&str] = &[
     "RELEASE",
     // 越界检查：有解码 + 执行，ir_gen 不产出
     "BOUNDS_CHECK",
-    // 异常族（throw/try）：有解码 + 执行，ir_gen 不产出
+    // 异常族：只剩 THROW 有解码 + 执行，ir_gen 不产出（RFC-030 的
+    // assert-as-raise 前向预留，P10 S6 单列待裁决）。同族另外两个 opcode 值
+    // 已随 P10 S6 从词表回收（无生产者，回收理由见 opcode.rs 的回收注释）。
     "THROW",
-    "TRY_BEGIN",
-    "TRY_END",
     // 弱引用：有解码 + 执行
     "WEAK_NEW",
     "WEAK_UPGRADE",
@@ -468,8 +472,6 @@ const EXPECTED_UNENCODED: &[&str] = &[
     "STRING_EQUAL",
     // 运行时类型查询：有解码 + 执行
     "TYPE_OF",
-    // 多路分支：**无解码器**（唯一一个），已在解码哨兵白名单
-    "SWITCH",
     // 占位 opcode：仅在显示名表出现，非真实指令
     "LABEL",
     // 6.6.11 的**连带后果**（不是「预留路径」，不要照「将来占位」读）：IR 侧的
@@ -773,8 +775,10 @@ fn test_decode_preserves_ref_struct_generic_signature_types() {
 /// 编码器经 `to_reg` 产出寄存器号，上限 255（`operand.rs` 的
 /// register_overflow 检查），故**寄存器恒为 1 字节**；类型号/长度等
 /// 非寄存器字段才是 2 字节小端。
-/// 注：`BytecodeInstr::size()` 的注释（如 "dst(2)"）与实际编码不符，
-/// **不可**作为字节布局依据——曾据此实现导致全部字段错位。
+/// 注：`opcode.rs` 的 `OPCODE_INFO.size`（`BytecodeInstr::size()` 的固定部分）
+/// 不是字节布局依据——它与落盘字节数不是同一事实（见 `BytecodeInstr::size` 的
+/// 文档）。判据只能是 `translator.rs` 的 `translate_*`；曾据旧 size 表实现导致
+/// 全部字段错位。
 #[test]
 fn test_decode_places_fields_in_correct_positions() {
     // Arrange / Act / Assert：各指令的「解码 + 字段位置断言」见辅助函数
@@ -795,10 +799,9 @@ fn test_decode_places_fields_in_correct_positions() {
 /// `RC_NEW`(0x89) 即因此让弱引用功能静默失效（见 #D2）。兜底改为 panic 后，
 /// 遗漏会表现为运行到该指令才崩，本测试把它提前到测试期。
 ///
-/// **已知例外**：`SWITCH` 无编码器（`translator.rs` 不产出）、`ir_gen` 也不构造
-/// 对应的 `Instruction::Switch`——`match` 语句编译为 `I64Eq` + `JmpIfNot` 链
-/// （实测 dump 确认）。故它既无编码格式也无解码需求，列入白名单。
-/// 白名单外的任何遗漏都会让本测试失败。
+/// 无例外：RFC-039 D32 回收 `SWITCH`（0x06）后，词表里每个 opcode 都有解码分支。
+/// 历史上 `SWITCH` 既是唯一「有定义、无解码」的 opcode，也是唯一需要白名单的项——
+/// 白名单随它的回收一并删除，判据恢复为完整子集关系。
 #[test]
 fn test_all_opcodes_have_decode_branch() {
     // Arrange: 从源码读取 opcode 定义与 bytecode.rs 的解码分支
@@ -807,23 +810,298 @@ fn test_all_opcodes_have_decode_branch() {
     let defined = defined_opcode_names(opcode_src);
     let decoded = decoder_match_arm_opcodes(decoder_src);
 
-    // 已知死路径：无编码器亦无 IR 产出
-    const WHITELIST: &[&str] = &["SWITCH"];
-
-    // Act: 断言前者是后者的子集（白名单除外）。
-    let missing: Vec<&String> = defined
-        .iter()
-        .filter(|op| !decoded.contains(*op) && !WHITELIST.contains(&op.as_str()))
-        .collect();
+    // Act: 断言前者是后者的子集（无白名单：D32 回收 SWITCH 后不再有例外）。
+    let missing: Vec<&String> = defined.iter().filter(|op| !decoded.contains(*op)).collect();
 
     // Assert
     assert!(
         missing.is_empty(),
-        "以下 opcode 已定义但无解码分支（会落到 panic 兜底，应在 bytecode.rs 补分支或加入白名单）：{missing:?}\n\
+        "以下 opcode 已定义但无解码分支（会落到 panic 兜底，应在 mod.rs 的 From<BytecodeFile> 补分支）：{missing:?}\n\
          已定义 {} 个，有解码分支 {} 个",
         defined.len(),
         decoded.len()
     );
+}
+
+/// `OPCODE_INFO` 满覆盖对拍：每个 `pub const` opcode 恰好一项，固定长度逐项对齐。
+///
+/// 判据（RFC-039 F7/F8）：`BytecodeInstr::size()` 的固定部分只有 `opcode.rs` 的
+/// `OPCODE_INFO` 一处事实。本测试是「码 → 长度」这张表的**满覆盖**哨兵（不是抽样）：
+/// 表项数与常量数必须相等、每项的固定长度必须等于期望值。期望值按
+/// `BytecodeInstr::size()` 的固定部分人工核对（含 opcode 字节本身）。
+#[test]
+fn test_opcode_table_covers_every_constant_with_expected_size() {
+    // Arrange：常量声明面（与构建门禁同一解析口径）+ 人工核对的期望长度
+    let opcode_src = include_str!("../opcode.rs");
+    let defined = defined_opcode_names(opcode_src);
+    let expected: &[(&str, usize)] = &[
+        ("Nop", 1),
+        ("Return", 1),
+        ("ReturnValue", 3),
+        ("Jmp", 5),
+        ("JmpIf", 5),
+        ("JmpIfNot", 5),
+        ("Yield", 1),
+        ("Label", 5),
+        ("Spawn", 5),
+        ("SpawnFromList", 5),
+        ("Mov", 5),
+        ("LoadConst", 5),
+        ("LoadLocal", 4),
+        ("StoreLocal", 4),
+        ("LoadArg", 4),
+        ("Borrow", 6),
+        ("Release", 3),
+        ("LoadGlobal", 5),
+        ("StoreGlobal", 5),
+        ("I64Add", 7),
+        ("I64Sub", 7),
+        ("I64Mul", 7),
+        ("I64Div", 7),
+        ("I64Rem", 7),
+        ("I64And", 7),
+        ("I64Or", 7),
+        ("I64Xor", 7),
+        ("I64Shl", 7),
+        ("I64Sar", 7),
+        ("I64Shr", 7),
+        ("I64Neg", 5),
+        ("I64Not", 5),
+        ("I64Eq", 7),
+        ("I64Ne", 7),
+        ("I64Lt", 7),
+        ("I64Le", 7),
+        ("I64Gt", 7),
+        ("I64Ge", 7),
+        ("HeapAlloc", 4),
+        ("StackAlloc", 2),
+        ("Drop", 2),
+        ("GetField", 5),
+        ("SetField", 5),
+        ("LoadElement", 5),
+        ("StoreElement", 5),
+        ("CreateStruct", 7),
+        ("NewListWithCap", 5),
+        ("ArcNew", 3),
+        ("ArcClone", 3),
+        ("ArcDrop", 2),
+        ("WeakNew", 5),
+        ("WeakUpgrade", 5),
+        ("CallStatic", 5),
+        ("CallVirt", 5),
+        ("CallDyn", 5),
+        ("MakeClosure", 5),
+        ("LoadUpvalue", 4),
+        ("StoreUpvalue", 4),
+        ("CloseUpvalue", 3),
+        ("CallNative", 5),
+        ("NewDict", 7),
+        ("RcNew", 3),
+        ("NewTuple", 7),
+        ("NewArray", 6),
+        ("Contains", 4),
+        ("NewRange", 9),
+        ("StringLength", 5),
+        ("StringConcat", 5),
+        ("StringEqual", 5),
+        ("StringGetChar", 5),
+        ("StringFromInt", 5),
+        ("StringFromFloat", 5),
+        ("Throw", 3),
+        ("BoundsCheck", 5),
+        ("TypeCheck", 5),
+        ("Cast", 5),
+        ("TypeOf", 5),
+        ("CreateVariant", 11),
+        ("VariantTag", 7),
+        ("VariantPayload", 7),
+    ];
+
+    // Act
+    let table: Vec<(&str, u8, usize)> = opcode::OPCODE_INFO
+        .iter()
+        .map(|info| (info.name, info.code, info.size))
+        .collect();
+
+    // Assert 1：表项数 == 常量数（漏登记 / 多登记都在此红）
+    assert_eq!(
+        table.len(),
+        defined.len(),
+        "OPCODE_INFO 项数必须等于 opcode.rs 的 opcode 常量数（新增 opcode 必须同提交登记表项）：表里有 {:?}",
+        table.iter().map(|(name, _, _)| *name).collect::<Vec<_>>()
+    );
+    // Assert 2：期望清单与表一一对应（数量 + 双向名字比对，避免两侧同时漏同一项）
+    assert_eq!(
+        table.len(),
+        expected.len(),
+        "期望长度清单必须覆盖 OPCODE_INFO 的每一项：表 {} 项，期望 {} 项",
+        table.len(),
+        expected.len()
+    );
+    for (name, _) in expected {
+        assert!(
+            table.iter().any(|(table_name, _, _)| table_name == name),
+            "期望长度清单里的 {name} 在 OPCODE_INFO 里没有对应表项"
+        );
+    }
+    // Assert 3：每项固定长度与期望一致（长度是编码事实，改它必须给出理由）
+    for (name, code, size) in &table {
+        let want = expected
+            .iter()
+            .find(|(expected_name, _)| expected_name == name)
+            .map(|(_, want)| *want)
+            .unwrap_or_else(|| {
+                panic!("OPCODE_INFO 的 {name}（0x{code:02X}）不在期望长度清单里：新增 opcode 必须补期望值")
+            });
+        assert_eq!(
+            *size, want,
+            "opcode {name}（0x{code:02X}）的固定长度与期望不一致：表 {size}，期望 {want}"
+        );
+    }
+}
+
+/// `BytecodeInstr::size()` 的构造式：权威表固定长度 + 变长尾部，逐类抽样对拍。
+///
+/// 与 `test_opcode_table_covers_every_constant_with_expected_size` 互补：那条钉
+/// 「表值」，本条钉「表值确实是 `size()` 的固定部分」——每种变长尾部各取一例，
+/// 任何重复计数 / 漏计数都会红（期望值按 `size()` 的定义手算）。
+#[test]
+fn test_instruction_size_equals_table_plus_variable_tail() {
+    // Arrange：固定形态 + 每类变长尾部各一例
+    let cases: Vec<(BytecodeInstr, usize, &str)> = vec![
+        (BytecodeInstr::Nop, 1, "Nop 只有 opcode 字节"),
+        (
+            BytecodeInstr::ReturnValue { value: Reg(0) },
+            3,
+            "ReturnValue = 表 3（固定，无尾部）",
+        ),
+        (
+            BytecodeInstr::Throw { error: Reg(0) },
+            3,
+            "Throw = 表 3（固定，无尾部）",
+        ),
+        (
+            BytecodeInstr::CallStatic {
+                dst: None,
+                func: 7,
+                args: vec![Reg(0), Reg(1)],
+            },
+            9,
+            "CallStatic = 表 5 + 实参 2*2",
+        ),
+        (
+            BytecodeInstr::CallNative {
+                dst: None,
+                func_name: "puts".to_string(),
+                mechanism: String::new(),
+                lib: String::new(),
+                symbol: String::new(),
+                args: vec![Reg(0)],
+            },
+            11,
+            "CallNative 无 FFI 元数据 = 表 5 + 名 4 + 实参 2",
+        ),
+        (
+            BytecodeInstr::MakeClosure {
+                dst: Reg(0),
+                func: 1,
+                env: vec![Reg(1)],
+            },
+            7,
+            "MakeClosure = 表 5 + 环境 2",
+        ),
+        (
+            BytecodeInstr::CreateStruct {
+                dst: Reg(0),
+                type_name: "Pt".to_string(),
+                fields: vec![Reg(1)],
+            },
+            11,
+            "CreateStruct = 表 7 + 类型名 2 + 字段 2",
+        ),
+        (
+            BytecodeInstr::NewDict {
+                dst: Reg(0),
+                keys: vec![Reg(1)],
+                values: vec![Reg(2)],
+            },
+            11,
+            "NewDict = 表 7 + 键 4*1",
+        ),
+        (
+            BytecodeInstr::NewTuple {
+                dst: Reg(0),
+                items: vec![Reg(1), Reg(2)],
+            },
+            11,
+            "NewTuple = 表 7 + 元素 2*2",
+        ),
+        (
+            BytecodeInstr::SpawnFromList {
+                dst: Reg(0),
+                closures_list: Reg(1),
+                task_deps: vec![],
+                task_resources: vec![],
+            },
+            13,
+            "SpawnFromList 空表 = 表 5 + 两张条数前缀 4+4",
+        ),
+        (
+            BytecodeInstr::Spawn {
+                dst: Reg(0),
+                closures: vec![Reg(1)],
+                task_deps: vec![vec![1]],
+                task_resources: vec![vec!["ffi".to_string()]],
+            },
+            34,
+            "Spawn = 表 5 + 闭包 2 + 依赖表 4+8 + 资源表 4+11",
+        ),
+    ];
+
+    // Act / Assert：size() 必须等于「表值 + 变长尾部」
+    for (instr, want, why) in &cases {
+        assert_eq!(
+            instr.size(),
+            *want,
+            "size() 与「表值 + 变长尾部」不一致：{why}；指令 {instr:?}"
+        );
+    }
+}
+
+/// 「码 → 名字」「码 → 长度」两条查询都只读权威表，表外码不 panic。
+///
+/// 判据：`opcode_name` / `opcode_size` 若各自再写一份 match，这里会与表不一致；
+/// 0xA0/0xA1 已回收、0xFF 从未分配，两者都必须落 `Unknown` / `None`。
+#[test]
+fn test_opcode_name_and_size_read_from_authoritative_table() {
+    // Arrange / Act / Assert 1：表内每一项两条查询都回落到表值
+    for info in opcode::OPCODE_INFO {
+        assert_eq!(
+            opcode::opcode_name(info.code),
+            info.name,
+            "opcode_name(0x{:02X}) 必须等于表项名（名字的唯一来源是 OPCODE_INFO）",
+            info.code
+        );
+        assert_eq!(
+            opcode::opcode_size(info.code),
+            Some(info.size),
+            "opcode_size(0x{:02X}) 必须等于表项长度（长度的唯一来源是 OPCODE_INFO）",
+            info.code
+        );
+    }
+    // Assert 2：表外码（已回收 0xA0/0xA1 与从未分配 0xFF）不得回落到任何表项
+    for code in [0xA0u8, 0xA1, 0xFF] {
+        assert_eq!(
+            opcode::opcode_name(code),
+            "Unknown",
+            "表外码 0x{code:02X} 的转储名必须是 Unknown（不得 panic、不得借用别的表项）"
+        );
+        assert_eq!(
+            opcode::opcode_size(code),
+            None,
+            "表外码 0x{code:02X} 没有长度（不得回落到别的码）"
+        );
+    }
 }
 
 /// 未被往返测试覆盖的**解码布局**——补测（2026-09-19）。

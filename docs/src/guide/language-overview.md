@@ -139,9 +139,9 @@ grade = if score >= 90 { "A" } else if score >= 60 { "B" } else { "C" }   // "B"
 
 // match
 result = match value {
-    ok(v) => "success: {v}",
-    err(e) => "error: {e}",
-    _ => "unknown",
+    ok(v) -> "success: {v}",
+    err(e) -> "error: {e}",
+    _ -> "unknown",
 }
 
 // 循环
@@ -174,24 +174,24 @@ doubled = [x * 2 for x in nums]
 ## 模式匹配
 
 > **注意**：0.8.2 **尚未实现记录/结构体解构模式**（实测
-> `match s { circle(r) => ... }` 报 E0010），下面是目标语法，暂不可运行。
+> `match s { circle(r) -> ... }` 报 E0010），下面是目标语法，暂不可运行。
 
 <!-- docs-example: skip -->
 ```yaoxiang
 match shape {
-    circle(r) => pi * r * r,
-    rect(w, h) => w * h,
-    point => 0,
+    circle(r) -> pi * r * r,
+    rect(w, h) -> w * h,
+    point -> 0,
 }
 
 // 结构体/元组模式
 match p {
-    { x: 0, y: 0 } => "origin",
-    { x, y } => "({x}, {y})",
+    { x: 0, y: 0 } -> "origin",
+    { x, y } -> "({x}, {y})",
 }
 match t {
-    (0, 0) => "origin",
-    (x, y) => "({x}, {y})",
+    (0, 0) -> "origin",
+    (x, y) -> "({x}, {y})",
 }
 
 // 解构赋值
@@ -199,8 +199,8 @@ a, b = (1, 2)              // a=1, b=2
 
 // 卫表达式
 match age {
-    n if n >= 18 => true,
-    _ => false,
+    n if n >= 18 -> true,
+    _ -> false,
 }
 ```
 

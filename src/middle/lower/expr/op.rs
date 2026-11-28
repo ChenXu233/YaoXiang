@@ -4,6 +4,7 @@
 
 use crate::ast;
 use crate::ast::Expr;
+use crate::frontend::core::sema::MonoType;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::middle::lower::AstToIrGenerator;
 use crate::tlog;
@@ -83,13 +84,48 @@ impl AstToIrGenerator {
         // 特化说明：方法调用不产生单态化请求，`std.` 前缀函数按 mono
         // 保留规则以未特化原版存活（解释器类型擦除执行），与显式方法
         // 调用同一执行模型。
-        self.generate_expr_ir(expr, result_reg.clone(), instructions, constants)?;
+        // 接收者先落**值**：具名槽（`Operand::Local`）不携带类型事实，而四方法的结果
+        // 类型要从接收者类型解出。调用方给的是 Local 时算进临时值，结果仍写回原 dst。
+        let receiver_reg = match &result_reg {
+            Operand::Local(_) => self.next_temp_reg(),
+            _ => result_reg.clone(),
+        };
+        self.generate_expr_ir(expr, receiver_reg.clone(), instructions, constants)?;
         let span = *span;
 
-        // 接收者类型名 → 四个方法的目标名。
-        // 优先按 span 查 typecheck 记录的实现类型名（接收者是任意表达式时
-        // 这是唯一来处）；退回表达式类型推导（局部变量形态）。
-        let base_name = self.try_expr_impls.get(&span).cloned().or_else(|| {
+        // 接收者类型（Try impl 的 Self）：优先表达式静态类型，退回已生成的操作数
+        // 类型。`?` 的四方法结果类型从这里解出（协议签名见 src/std/result.yx /
+        // src/std/option.yx：success -> T、residual -> E（Option 为 Void）、
+        // from_error -> Self；is_failure -> Bool 与类型无关）。解不出就保持显式未知。
+        let receiver_ty = self
+            .get_expr_mono_type(expr)
+            .or_else(|| self.operand_known_type(&receiver_reg));
+        // Try 结算结果（实现名 + 两个载荷位）：typecheck 在同一个 `?` 节点上算过
+        // （`query_try_impl` 一次查询给出三样），这是**首选来源**——用户 Try 类型的
+        // 载荷位不在类型实参里（非泛型 sum 如 `Maybe`），IR 侧反推不出来。
+        let try_info = self.try_expr_impls.get(&span).cloned();
+        let (payload_ty, residual_ty) = match &try_info {
+            Some(info) => (Some(info.ok_ty.clone()), Some(info.err_ty.clone())),
+            None => {
+                use crate::frontend::core::types::MonoType;
+                let mut resolved = receiver_ty.clone();
+                while let Some(MonoType::Ref { inner, .. }) = resolved {
+                    resolved = Some(*inner);
+                }
+                match resolved {
+                    Some(MonoType::Generic { args, .. }) if !args.is_empty() => {
+                        (Some(args[0].clone()), args.get(1).cloned())
+                    }
+                    _ => (None, None),
+                }
+            }
+        };
+
+        // 接收者**类型身份** → 四个方法的目标名。
+        // 优先按 span 查 typecheck 记录的实现身份（接收者是任意表达式时这是
+        // 唯一来处；同一次结算还带两个载荷位，见上面 `try_info`）；退回表达式
+        // 类型推导（局部变量形态）。
+        let base_identity = try_info.map(|info| info.impl_identity).or_else(|| {
             self.get_expr_mono_type(expr).and_then(|ty| {
                 let mut ty = ty;
                 while let crate::frontend::core::types::MonoType::Ref { inner, .. } = ty {
@@ -97,28 +133,34 @@ impl AstToIrGenerator {
                 }
                 match ty {
                     crate::frontend::core::types::MonoType::Generic { name, .. } => Some(name),
-                    crate::frontend::core::types::MonoType::Struct(s) => Some(s.name.clone()),
-                    crate::frontend::core::types::MonoType::TypeRef(n) => Some(n.clone()),
+                    crate::frontend::core::types::MonoType::Struct(s) => Some(s.name),
+                    crate::frontend::core::types::MonoType::TypeRef(n) => Some(n),
                     _ => None,
                 }
             })
         });
-        let method_names = base_name.map(|base| {
+        let method_names = base_identity.map(|base| {
             use crate::frontend::core::sema::operator_interfaces::TRY_METHODS;
-            let qualified = self.registry.std_method_binding_qualified_map();
             // 名字集合的唯一真相源是 `TRY_METHODS`（typecheck 侧注册同表）；
             // 此处不再手抄一遍，否则改名时两边静默漂移。
+            // 用户类型按身份投影（多文件 `{模块}.{Type}.{method}`，单文件裸键）；
+            // std 已声明类型同样按身份投影——两者同一判据，不查「是不是 std」。
             let names: Vec<String> = TRY_METHODS
                 .iter()
                 .map(|m| {
-                    let key = format!("{}.{}", base, m);
-                    let std_qualified = qualified.get(&key).cloned().unwrap_or(key);
-                    // WBS 3.18.3 / issue #506：派发名同经 method_dispatch_name 单一
-                    // 判据——base 是定义侧裸类型名（#465 同族），接收者类型经导入面
-                    // （含别名）引入时按定义单元限定；std 已限定名与本单元类型
-                    // 原样返回。可达路径上该改写与 qualify_names 的终点一致
-                    // （已限定名经 resolve_call_target 原样通过），零漂移。
-                    self.method_dispatch_name(expr, &std_qualified)
+                    if base.module().is_empty() {
+                        self.registry
+                            .std_method_path(base.bare(), m)
+                            .map(|path| path.project())
+                            .unwrap_or_else(|| format!("{}.{}", base.bare(), m))
+                    } else {
+                        crate::frontend::core::types::identity::DefPath::method(
+                            base.module(),
+                            base.bare(),
+                            m,
+                        )
+                        .project()
+                    }
                 })
                 .collect();
             // TRY_METHODS 恒为四元（见 operator_interfaces.rs 定义）
@@ -147,7 +189,7 @@ impl AstToIrGenerator {
         instructions.push(call_method(
             &is_failure_name,
             f_reg.clone(),
-            result_reg.clone(),
+            receiver_reg.clone(),
         ));
         let fail_jmp_idx = instructions.len();
         instructions.push(Instruction::JmpIf {
@@ -160,7 +202,7 @@ impl AstToIrGenerator {
         instructions.push(call_method(
             &success_name,
             s_reg.clone(),
-            result_reg.clone(),
+            receiver_reg.clone(),
         ));
         instructions.push(Instruction::Load {
             dst: result_reg.clone(),
@@ -180,9 +222,17 @@ impl AstToIrGenerator {
             span: self.cur_span,
         };
         let e_reg = self.next_temp_reg();
-        instructions.push(call_method(&residual_name, e_reg.clone(), result_reg));
+        instructions.push(call_method(
+            &residual_name,
+            e_reg.clone(),
+            receiver_reg.clone(),
+        ));
         let err_reg = self.next_temp_reg();
-        instructions.push(call_method(&from_error_name, err_reg.clone(), e_reg));
+        instructions.push(call_method(
+            &from_error_name,
+            err_reg.clone(),
+            e_reg.clone(),
+        ));
         instructions.push(Instruction::Ret {
             value: Some(err_reg.clone()),
             span: self.cur_span,
@@ -192,6 +242,19 @@ impl AstToIrGenerator {
             target: end_target,
             span: self.cur_span,
         };
+        // 四方法的结果类型：is_failure 恒 Bool；success/`?` 值 = 成功载荷；
+        // residual = 失败载荷；from_error = 接收者类型（Self）。
+        self.note_value_type(&f_reg, MonoType::Bool);
+        if let Some(ty) = payload_ty {
+            self.note_value_type(&s_reg, ty.clone());
+            self.note_value_type(&result_reg, ty);
+        }
+        if let Some(ty) = residual_ty {
+            self.note_value_type(&e_reg, ty);
+        }
+        if let Some(ty) = receiver_ty {
+            self.note_value_type(&err_reg, ty);
+        }
         Ok(())
     }
 
@@ -226,10 +289,6 @@ impl AstToIrGenerator {
                     let inferred = self.get_expr_type_name(right);
                     if inferred != "<unknown>" {
                         self.local_var_types.insert(var_name.clone(), inferred);
-                    }
-                    // WBS 4.9.8 / issue #465：赋值的**写出**类型名（构造器形态）
-                    if let Some(written) = self.constructor_written_type_name(right) {
-                        self.note_local_written_type(var_name, &written);
                     }
 
                     // 统一走 Store — 消除 Var→Var 走 Move 的特殊情况
@@ -330,20 +389,12 @@ impl AstToIrGenerator {
 
                 // RFC-011b: 显式接口派发——`==`/`!=` 命中 Equal 实例化时
                 // 生成方法调用（接收者居首），`!=` 对结果取反
-                if let Some((type_name, method, negate)) =
-                    self.operator_dispatches.get(span).cloned()
-                {
-                    let short_name = format!("{}.{}", type_name, method);
-                    let func_name = if let Some(qualified) =
-                        self.registry.short_to_qualified_map().get(&short_name)
-                    {
-                        qualified.clone()
-                    } else {
-                        short_name
-                    };
-                    // WBS 4.9.8 修复轮 R1 / issue #465：同 Index 臂——接收者（左操作数）
-                    // 是导入类型时按定义单元限定派发名，本地类型行为不变。
-                    let dispatch_name = self.method_dispatch_name(left, &func_name);
+                if let Some(dispatch) = self.operator_dispatches.get(span).cloned() {
+                    let negate = dispatch.negate;
+                    // 派发调用的结果类型与 `dispatch_name` 同一结算点（sema 记录）。
+                    let result_ty = dispatch.result_type.clone();
+                    // 调用名即上游给出的名字（D-8）：限定已在方法身份里，这里不再查表
+                    let dispatch_name = dispatch.dispatch_name;
                     instructions.push(Instruction::Call {
                         dst: Some(result_reg.clone()),
                         func: Operand::Const(ConstValue::String(dispatch_name)),
@@ -351,6 +402,9 @@ impl AstToIrGenerator {
                         span: self.cur_span,
                         def: None,
                     });
+                    if let Some(ty) = result_ty {
+                        self.note_value_type(&result_reg, ty);
+                    }
                     if negate {
                         instructions.push(Instruction::Not {
                             dst: result_reg.clone(),

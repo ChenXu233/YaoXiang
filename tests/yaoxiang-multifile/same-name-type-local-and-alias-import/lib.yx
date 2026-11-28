@@ -1,0 +1,6 @@
+// lib.yx —— 被导入单元：与入口同名的另一种类型（方法语义 ×10）
+Temp: Type = { tag: Float }
+
+Temp.tag_of: (self: &Temp) -> Float = {
+    return self.tag * 10.0
+}

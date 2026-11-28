@@ -2,7 +2,7 @@ module
   fn main() -> Void
     locals_total=3
     values_total=5
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
     value v2: Generic { name: "String", args: [] } @block0
     value v3: Generic { name: "String", args: [] } @block0
@@ -10,8 +10,11 @@ module
     Load v2 <- string("comments_work")
     Load v3 <- string("comments_work")
     Eq v1 <- v2, v3
+    Drop v2
+    Drop v3
     Load v4 <- string("string literal")
     Call v0 <- string("std.assert.assert") [v1, v4] (def=d0)
+    Drop v4
     Ret v0
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

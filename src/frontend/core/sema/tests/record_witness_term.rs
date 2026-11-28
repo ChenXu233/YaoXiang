@@ -1,6 +1,6 @@
 //! 6.9.5-B.3 P0：类型级证据字段路径的解析 / 转换 / 谓词登记
 //!
-//! 规范锚：RFC-027 §14.5；SPEC §8.3.5；09a §P6 6.9.5-B.3 契约 §四（P0）与 §七（T01–T04）。
+//! 规范锚：RFC-027 §14.5；SPEC §8.3.5；提交信息）。
 //!
 //! P0 只覆盖**表示与登记**，不含 admission 语义（D2 裁决后另落）。每个判据都走真实
 //! lex → parse，或对真实解析产物直接驱动转换点；不构造第二套项表示。
@@ -17,6 +17,7 @@ use crate::frontend::core::sema::record_model::{
 use crate::frontend::core::sema::TypeCheckResult;
 use crate::frontend::core::types::const_data::ConstExpr;
 use crate::frontend::core::types::eval::const_eval::convert_expr_to_const_expr;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::mono::MonoType;
 use crate::util::span::Span;
 
@@ -193,7 +194,10 @@ fn test_predicate_body_field_path_registers_and_resolves() {
         .expect("Holds 必须登记为编译期谓词");
     assert_eq!(
         def.param_type,
-        MonoType::TypeRef("Box".to_string()),
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Box")))
+                .expect("type name must be bare and non-empty")
+        ),
         "谓词形参类型必须是 Box（记录类型）"
     );
     assert!(
@@ -207,8 +211,14 @@ fn test_predicate_body_field_path_registers_and_resolves() {
     );
 
     // Holds(b) 应用：代入后基名与实参同名（应用面规则在 D2 后落地）。
-    let resolved =
-        PredicateResolver::try_resolve(env, "Holds", &[MonoType::TypeRef("Box".to_string())]);
+    let resolved = PredicateResolver::try_resolve(
+        env,
+        "Holds",
+        &[MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Box")))
+                .expect("type name must be bare and non-empty"),
+        )],
+    );
     let Some(Ok(MonoType::Refined { base, constraint })) = resolved else {
         panic!("Holds(Box) 必须正格化为 Refined；实际: {resolved:?}");
     };
@@ -325,31 +335,70 @@ fn test_admission_predicates_direct_drive() {
     // Act + Assert：判定面只判模型+槽（不看 base 名）。
     assert!(witness_premise_admitted(
         models,
-        &refined(MonoType::TypeRef("Box".into()), path("b", "w"))
+        &refined(
+            MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Box")))
+                    .expect("type name must be bare and non-empty")
+            ),
+            path("b", "w")
+        )
     ));
     assert!(!witness_premise_admitted(
         models,
-        &refined(MonoType::TypeRef("Box".into()), path("b", "v"))
+        &refined(
+            MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Box")))
+                    .expect("type name must be bare and non-empty")
+            ),
+            path("b", "v")
+        )
     ));
     assert!(!witness_premise_admitted(
         models,
-        &refined(MonoType::TypeRef("Int".into()), path("b", "w"))
+        &refined(
+            MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Int")))
+                    .expect("type name must be bare and non-empty")
+            ),
+            path("b", "w")
+        )
     ));
     assert!(!witness_premise_admitted(
         models,
-        &refined(MonoType::TypeRef("Point".into()), path("p", "x"))
+        &refined(
+            MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Point")))
+                    .expect("type name must be bare and non-empty")
+            ),
+            path("p", "x")
+        )
     ));
     // 应用面：基名 == 实参名；非 NamedVar 基座一律 false。
     assert!(field_path_base_matches(
-        &refined(MonoType::TypeRef("Box".into()), path("zz", "w")),
+        &refined(
+            MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Box")))
+                    .expect("type name must be bare and non-empty")
+            ),
+            path("zz", "w")
+        ),
         "zz"
     ));
     assert!(!field_path_base_matches(
-        &refined(MonoType::TypeRef("Box".into()), path("bb", "w")),
+        &refined(
+            MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Box")))
+                    .expect("type name must be bare and non-empty")
+            ),
+            path("bb", "w")
+        ),
         "zz"
     ));
     let literal_base = refined(
-        MonoType::TypeRef("Box".into()),
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Box")))
+                .expect("type name must be bare and non-empty"),
+        ),
         ConstExpr::FieldPath {
             base: Box::new(ConstExpr::Lit(
                 crate::frontend::core::types::const_data::ConstValue::Int(3),
@@ -437,7 +486,10 @@ fn test_admission_short_circuits_before_smt() {
     let env = checker.env();
     let ctx = ProofContext::new(env);
     let refined = MonoType::Refined {
-        base: Box::new(MonoType::TypeRef("Box".into())),
+        base: Box::new(MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Box")))
+                .expect("type name must be bare and non-empty"),
+        )),
         constraint: ConstExpr::FieldPath {
             base: Box::new(ConstExpr::NamedVar("b".into())),
             field: "w".into(),

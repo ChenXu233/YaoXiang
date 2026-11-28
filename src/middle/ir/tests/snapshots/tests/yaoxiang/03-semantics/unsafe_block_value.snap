@@ -7,25 +7,25 @@ module
     slot[3] y : Int(64) @depth2
     locals_total=7
     values_total=20
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Generic { name: "String", args: [] } @block0
     value v5: Int(64) @block0
     value v6: Int(64) @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
     value v9: Int(64) @block0
     value v10: Int(64) @block0
     value v11: Generic { name: "String", args: [] } @block0
     value v12: TypeRef("?") @block0
-    value v13: TypeRef("?") @block0
+    value v13: Never @block0
     value v14: Bool @block0
     value v15: Int(64) @block0
     value v16: Int(64) @block0
     value v17: Generic { name: "String", args: [] } @block0
-    value v18: TypeRef("?") @block0
+    value v18: Void @block0
     value v19: Generic { name: "String", args: [] } @block0
     UnsafeBlockStart
     Load %0 <- int(42)
@@ -35,6 +35,7 @@ module
     Eq v1 <- v2, v3
     Load v4 <- string("unsafe { 42 } should yield 42")
     Call v0 <- string("std.assert.assert") [v1, v4] (def=d0)
+    Drop v4
     UnsafeBlockStart
     Load %1 <- int(1)
     Load v5 <- %1
@@ -47,6 +48,7 @@ module
     Eq v8 <- v9, v10
     Load v11 <- string("unsafe block tail expr should yield 42")
     Call v7 <- string("std.assert.assert") [v8, v11] (def=d0)
+    Drop v11
     UnsafeBlockStart
     Load %3 <- int(1)
     Drop %3
@@ -56,8 +58,10 @@ module
     Eq v14 <- v15, v16
     Load v17 <- string("return should penetrate unsafe block")
     Call v13 <- string("std.assert.assert") [v14, v17] (def=d0)
+    Drop v17
     Load v19 <- string("unsafe block value ok")
     Call v18 <- string("std.io.println") [v19] (def=d2)
+    Drop v19
     Drop %0
     Drop %2
     Ret v18

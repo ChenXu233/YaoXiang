@@ -3,5 +3,6 @@
 
 mod led;
 mod nud;
+mod operator_sources;
 mod precedence;
 mod precedence_inline;

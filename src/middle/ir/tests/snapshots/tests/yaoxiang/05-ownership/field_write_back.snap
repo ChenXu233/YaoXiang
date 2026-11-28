@@ -54,17 +54,17 @@ module
     values_total=58
     value v0: Int(64) @block0
     value v1: Int(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Void @block0
     value v3: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
-    value v6: TypeRef("?") @block0
+    value v6: Never @block0
     value v7: Bool @block0
     value v8: TypeRef("?") @block0
     value v9: Int(64) @block0
     value v10: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v11: Generic { name: "String", args: [] } @block0
-    value v12: TypeRef("?") @block0
+    value v12: Never @block0
     value v13: Bool @block0
     value v14: TypeRef("?") @block0
     value v15: Int(64) @block0
@@ -73,17 +73,17 @@ module
     value v18: Int(64) @block0
     value v19: Int(64) @block0
     value v20: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v21: TypeRef("?") @block0
+    value v21: Void @block0
     value v22: Ref { mutable: true, inner: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) } @block0
     value v23: Int(64) @block0
     value v24: Int(64) @block0
-    value v25: TypeRef("?") @block0
+    value v25: Never @block0
     value v26: Bool @block0
     value v27: TypeRef("?") @block0
     value v28: Int(64) @block0
     value v29: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v30: Generic { name: "String", args: [] } @block0
-    value v31: TypeRef("?") @block0
+    value v31: Never @block0
     value v32: Bool @block0
     value v33: TypeRef("?") @block0
     value v34: Int(64) @block0
@@ -94,7 +94,7 @@ module
     value v39: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v40: Ref { mutable: true, inner: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) } @block0
     value v41: Int(64) @block0
-    value v42: TypeRef("?") @block0
+    value v42: Never @block0
     value v43: Bool @block0
     value v44: TypeRef("?") @block0
     value v45: Int(64) @block0
@@ -104,7 +104,7 @@ module
     value v49: Int(64) @block0
     value v50: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v51: Int(64) @block0
-    value v52: TypeRef("?") @block0
+    value v52: Never @block0
     value v53: Bool @block0
     value v54: TypeRef("?") @block0
     value v55: Int(64) @block0
@@ -117,24 +117,30 @@ module
     Load v4 <- int(1)
     Load v5 <- int(1)
     Call v2 <- string("Point.shift") [v3, v4, v5] (def=d1)
+    Drop v3
     Drop %0
     Load v10 <- %0
     LoadField v8 <- v10.0
+    Drop v10
     Load v9 <- int(4)
     Eq v7 <- v8, v9
     Load v11 <- string("自动借用 shift 写回 x")
     Call v6 <- string("std.assert.assert") [v7, v11] (def=d2)
+    Drop v11
     Load v16 <- %0
     LoadField v14 <- v16.1
+    Drop v16
     Load v15 <- int(5)
     Eq v13 <- v14, v15
     Load v17 <- string("自动借用 shift 写回 y")
     Call v12 <- string("std.assert.assert") [v13, v17] (def=d2)
+    Drop v17
     Load v18 <- int(10)
     Load v19 <- int(20)
     Call %1 <- string("Point") [v18, v19] (def=d0)
     Load v20 <- %1
     Move %2 <- v20
+    Drop v20
     Load v22 <- %2
     Load v23 <- int(2)
     Load v24 <- int(3)
@@ -142,44 +148,54 @@ module
     Drop %1
     Load v29 <- %1
     LoadField v27 <- v29.0
+    Drop v29
     Load v28 <- int(12)
     Eq v26 <- v27, v28
     Load v30 <- string("令牌方法派发写回 x")
     Call v25 <- string("std.assert.assert") [v26, v30] (def=d2)
+    Drop v30
     Load v35 <- %1
     LoadField v33 <- v35.1
+    Drop v35
     Load v34 <- int(23)
     Eq v32 <- v33, v34
     Load v36 <- string("令牌方法派发写回 y")
     Call v31 <- string("std.assert.assert") [v32, v36] (def=d2)
+    Drop v36
     Load v37 <- int(1)
     Load v38 <- int(1)
     Call %3 <- string("Point") [v37, v38] (def=d0)
     Load v39 <- %3
     Move %4 <- v39
+    Drop v39
     Load v40 <- %4
     Load v41 <- int(100)
     StoreField v40.0 <- v41 (type=None, name=Some("x"))
     Drop %3
     Load v46 <- %3
     LoadField v44 <- v46.0
+    Drop v46
     Load v45 <- int(100)
     Eq v43 <- v44, v45
     Load v47 <- string("令牌字段写生效")
     Call v42 <- string("std.assert.assert") [v43, v47] (def=d2)
+    Drop v47
     Load v48 <- int(7)
     Load v49 <- int(8)
     Call %5 <- string("Point") [v48, v49] (def=d0)
     Load v50 <- %5
     Load v51 <- int(99)
     StoreField v50.1 <- v51 (type=None, name=Some("y"))
+    Drop v50
     Drop %5
     Load v56 <- %5
     LoadField v54 <- v56.1
+    Drop v56
     Load v55 <- int(99)
     Eq v53 <- v54, v55
     Load v57 <- string("普通字段写生效")
     Call v52 <- string("std.assert.assert") [v53, v57] (def=d2)
+    Drop v57
     Drop %0
     Drop %1
     Drop %3

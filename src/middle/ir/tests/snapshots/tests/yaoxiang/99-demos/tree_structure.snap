@@ -33,14 +33,14 @@ module
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     value v3: Struct(StructType { name: "Tree", fields: [("value", Int(64)), ("left", Int(64)), ("right", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v4: TypeRef("?") @block0
+    value v4: Never @block0
     value v5: Bool @block0
     value v6: Int(64) @block0
     value v7: Int(64) @block0
     value v8: Generic { name: "String", args: [] } @block0
-    value v9: TypeRef("?") @block0
+    value v9: Void @block0
     value v10: Int(64) @block0
-    value v11: TypeRef("?") @block0
+    value v11: Never @block0
     value v12: Bool @block0
     value v13: Generic { name: "String", args: [] } @block0
     Load v0 <- int(10)
@@ -49,17 +49,20 @@ module
     Call %0 <- string("Tree") [v0, v1, v2] (def=d0)
     Load v3 <- %0
     Call %1 <- string("sum_tree") [v3] (def=d1)
+    Drop v3
     Drop %0
     Load v6 <- %1
     Load v7 <- int(30)
     Eq v5 <- v6, v7
     Load v8 <- string("tree sum should be 30")
     Call v4 <- string("std.assert.assert") [v5, v8] (def=d2)
+    Drop v8
     Load v10 <- %1
     Call v9 <- string("std.io.println") [v10] (def=d3)
     Load v12 <- bool(true)
     Load v13 <- string("all passed")
     Call v11 <- string("std.assert.assert") [v12, v13] (def=d2)
+    Drop v13
     Drop %0
     Drop %1
     Ret v11

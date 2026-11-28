@@ -21,7 +21,6 @@ fn make_function(instrs: Vec<BytecodeInstr>) -> BytecodeFunction {
         upvalue_count: 0,
         instructions: instrs,
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     }
 }
@@ -67,11 +66,13 @@ fn new_array_roundtrip_file() -> crate::middle::bytecode::file::BytecodeFile {
                 return_type: crate::frontend::core::types::MonoType::Void,
                 instructions: vec![raw_new_array, raw_return],
                 local_count: 1,
+                upvalue_count: 0,
                 local_names: HashMap::new(),
                 debug_map: std::collections::HashMap::new(),
             }],
         },
         vtables: vec![],
+        globals: vec![],
         debug_section: None,
     }
 }
@@ -114,7 +115,6 @@ fn spawn_two_tasks_module() -> crate::middle::bytecode::BytecodeModule {
             BytecodeInstr::ReturnValue { value: Reg(0) },
         ],
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     };
 
@@ -134,7 +134,6 @@ fn spawn_two_tasks_module() -> crate::middle::bytecode::BytecodeModule {
             BytecodeInstr::ReturnValue { value: Reg(0) },
         ],
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     };
 
@@ -178,7 +177,6 @@ fn spawn_two_tasks_module() -> crate::middle::bytecode::BytecodeModule {
             BytecodeInstr::ReturnValue { value: Reg(2) },
         ],
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     };
 

@@ -1,11 +1,11 @@
 // 04-concurrency/test_destructure.yx
-// 覆盖: 元组解构赋值语法
-// 验证: `a, b = (1, 2)` 和 `(a, b) = (1, 2)` 两种形式
+// 覆盖: 元组解构赋值语法（SPEC syntax.md §3.2.1：只接受括号式）
+// 验证: `(a, b) = (1, 2)` 括号式解构；裸形态 `a, b = e` 已取消（解析层 E0012）
 
 use std.assert
 main: () -> Void = {
-    // Non-paren form: a, b = (1, 2)
-    a, b = (1, 2)
+    // Parenthesized form only: (a, b) = (1, 2)
+    (a, b) = (1, 2)
     assert.assert(a == 1)
     assert.assert(b == 2);
 
@@ -15,7 +15,7 @@ main: () -> Void = {
     assert.assert(d == 4);
 
     // Three-element destructuring
-    x, y, z = (10, 20, 30)
+    (x, y, z) = (10, 20, 30)
     assert.assert(x == 10)
     assert.assert(y == 20)
     assert.assert(z == 30);

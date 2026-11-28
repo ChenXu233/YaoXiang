@@ -20,6 +20,7 @@ use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::Span;
 
 use crate::ast::{Block, Expr, Module, Stmt, StmtKind};
+use crate::frontend::core::types::identity::DefPath;
 
 /// 死代码分析器
 pub struct DeadCodeAnalyzer {
@@ -32,16 +33,22 @@ pub struct DeadCodeAnalyzer {
     exempt_pub: HashSet<String>,
     /// Lib 的跨文件引用池（同上；`FileRole::Script` 不接池——改进 3）
     cross_file_refs: HashSet<String>,
-    /// 被重载决议**命中**的方法定义标记 `(限定名去掉 #k 的基名, 声明序)`：
+    /// 本单元的**模块键**（WBS 4.9.10 D-4）：方法定义身份的前缀。
+    /// 与 `program.units[i].key` 同一份——driver 在喂标记前设置。
+    unit_key: String,
+    /// 被重载决议**命中**的方法身份标记 `(方法身份, 声明序)`：
     /// 由 driver 从 D20 决议产物（`overload_resolutions`，RFC-039 D20 / WBS 4.5.2）
-    /// 解析后传入——分析器**不认识 IR 名**，只收这个二元组（IR 名↔定义的配对
-    /// 留在 L1；分层：L2 不新增对 ir_gen 命名实现的依赖）
-    resolved_methods: HashSet<(String, usize)>,
-    /// 出现过 D20 决议条目的**名字组**（基名，全局；WBS 4.9.7 / issue #464）：
-    /// 这些组的方法级消费由决议逐候选给出 ⇒ 池的**名字级**豁免
+    /// 经投影索引换回 [DefPath] 后传入——名字→身份的换算在 driver 侧一次完成
+    /// （WBS 4.9.10 D-8），分析器只按**身份**比较，不再按名字字符串比较
+    resolved_methods: HashSet<(DefPath, usize)>,
+    /// 出现过 D20 决议条目的**名字组**（[DefPath] 的组形态：无模块归属、只剩
+    /// `{owner}.{name}`，即投影与 `SymbolDef::name` 同形；全局；WBS 4.9.7 /
+    /// issue #464）：这些组的方法级消费由决议逐候选给出 ⇒ 池的**名字级**豁免
     /// （`RefPool::field_names` 全局平铺）对它们不成立，判定不因同名兄弟的
-    /// 跨文件同名引用而放宽（宁漏报方向仍保留给无决议记录的组）
-    resolved_groups: HashSet<String>,
+    /// 跨文件同名引用而放宽（宁漏报方向仍保留给无决议记录的组）。
+    /// 组级**有意**不带模块：同名类型分属两单元时，一处的决议也让另一处停用
+    /// 名字级豁免——豁免是名字口径的，停用它也必须按名字口径。
+    resolved_groups: HashSet<DefPath>,
     /// 被**算子派发**命中的方法名组（`Type.method` 基名，全局；WBS 3.20.3 /
     /// issue #505）：`u[0]` / `u == t` 在 typecheck 侧的具名决议是
     /// `OperatorDispatch { type_name, method }`（独立于 D20 重载决议的义务
@@ -220,6 +227,7 @@ impl DeadCodeAnalyzer {
             all_defs: Vec::new(),
             exempt_pub: HashSet::new(),
             cross_file_refs: HashSet::new(),
+            unit_key: String::new(),
             resolved_methods: HashSet::new(),
             resolved_groups: HashSet::new(),
             operator_dispatched: HashSet::new(),
@@ -251,7 +259,7 @@ impl DeadCodeAnalyzer {
     /// 名字未出现在任何标记里时（调用点歧义 / 未经决议路径）回落短名共判（宁漏报）。
     pub fn set_resolved_methods(
         &mut self,
-        marks: HashSet<(String, usize)>,
+        marks: HashSet<(DefPath, usize)>,
     ) {
         self.resolved_methods = marks;
     }
@@ -259,9 +267,18 @@ impl DeadCodeAnalyzer {
     /// 设置「出现过决议条目的名字组」（全局集合；WBS 4.9.7 / issue #464）
     pub fn set_resolved_groups(
         &mut self,
-        groups: HashSet<String>,
+        groups: HashSet<DefPath>,
     ) {
         self.resolved_groups = groups;
+    }
+
+    /// 设置本单元模块键（D-4）：方法定义身份
+    /// `{模块键}.{Type}.{method}` 的前缀。
+    pub fn set_unit_key(
+        &mut self,
+        unit_key: String,
+    ) {
+        self.unit_key = unit_key;
     }
 
     /// 设置「被算子派发命中的方法名组」（`Type.method` 基名，全局集合；
@@ -282,7 +299,39 @@ impl DeadCodeAnalyzer {
         &self,
         name: &str,
     ) -> bool {
-        self.resolved_groups.contains(name)
+        Self::method_group(name).is_some_and(|group| self.resolved_groups.contains(&group))
+    }
+
+    /// 方法定义名 `{Type}.{method}` → **名字组**路径（无模块归属，投影与
+    /// `SymbolDef::name` 同形）。定义名是**本文件声明处**写出的两段式名字
+    /// （`Point.render`），在此按段读出 owner/method——不是对任何限定名的反解。
+    fn method_group(def_name: &str) -> Option<DefPath> {
+        let (owner, method) = Self::declared_method_segments(def_name)?;
+        Some(DefPath::method("", owner, method))
+    }
+
+    /// 方法定义名 → **方法身份**（D-2：用户类型一律模块限定；模块键是本单元键）。
+    fn method_identity(
+        &self,
+        def_name: &str,
+    ) -> Option<DefPath> {
+        let (owner, method) = Self::declared_method_segments(def_name)?;
+        Some(DefPath::method(&self.unit_key, owner, method))
+    }
+
+    /// **声明域**两段名的唯一拆分点：`{Type}.{method}`。
+    ///
+    /// 入参是 AST 声明处写出的名字（`Point.render`），不是身份串；一旦归属段
+    /// 自己带点就说明身份投影回流进了声明域——debug 构建直接炸出调用点（D64
+    /// §2.5：身份不得从名字串反解）。声明名的类型名是标识符，故正常的两个
+    /// 字段各不含点。
+    fn declared_method_segments(def_name: &str) -> Option<(&str, &str)> {
+        let (owner, method) = def_name.rsplit_once('.')?;
+        debug_assert!(
+            !owner.contains('.') && !method.is_empty(),
+            "方法定义名必须是声明域两段名（Type.method），收到含点的归属段：{def_name}"
+        );
+        Some((owner, method))
     }
 
     /// 收集入口点和符号定义（合并处理以减少代码重复）
@@ -814,7 +863,9 @@ impl DeadCodeAnalyzer {
                         if self.operator_dispatched.contains(&def.name) {
                             true
                         } else if self.method_group_has_marks(&def.name) {
-                            self.resolved_methods.contains(&(def.name.clone(), this))
+                            self.method_identity(&def.name).is_some_and(|identity| {
+                                self.resolved_methods.contains(&(identity, this))
+                            })
                         } else {
                             let short = def.name.rsplit('.').next().unwrap_or(&def.name);
                             ast_references.contains(short)
@@ -872,7 +923,10 @@ impl DeadCodeAnalyzer {
             if marked_group {
                 // 逐候选：决议命中**本单元这条定义** ⇒ 活；未命中 ⇒ 判死
                 // （WBS 4.9.7 / #464：跨单元同名同序不被兄弟的调用豁免）
-                if self.resolved_methods.contains(&(name.clone(), this_decl)) {
+                if self
+                    .method_identity(name)
+                    .is_some_and(|identity| self.resolved_methods.contains(&(identity, this_decl)))
+                {
                     continue;
                 }
             } else if Self::is_reachable(name, def, reachable) {

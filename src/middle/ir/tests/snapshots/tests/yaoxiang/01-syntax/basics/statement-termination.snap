@@ -7,9 +7,9 @@ module
     locals_total=5
     values_total=4
     value v0: TypeRef("?") @block0
-    value v1: TypeVar(TypeVar(48)) @block0
-    value v2: TypeVar(TypeVar(48)) @block0
-    value v3: TypeVar(TypeVar(49)) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
+    value v3: Int(64) @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
     Load v2 <- %0
@@ -30,21 +30,21 @@ module
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
-    value v4: TypeRef("?") @block0
+    value v4: Never @block0
     value v5: Bool @block0
     value v6: Int(64) @block0
     value v7: Int(64) @block0
     value v8: Generic { name: "String", args: [] } @block0
     value v9: Int(64) @block0
     value v10: Int(64) @block0
-    value v11: TypeRef("?") @block0
+    value v11: Never @block0
     value v12: Bool @block0
     value v13: Int(64) @block0
     value v14: Int(64) @block0
     value v15: Generic { name: "String", args: [] } @block0
-    value v16: TypeRef("?") @block0
+    value v16: Void @block0
     value v17: Int(64) @block0
-    value v18: TypeRef("?") @block0
+    value v18: Never @block0
     value v19: Bool @block0
     value v20: Bool @block0
     value v21: Int(64) @block0
@@ -52,21 +52,21 @@ module
     value v23: Int(64) @block0
     value v24: Int(64) @block0
     value v25: Generic { name: "String", args: [] } @block0
-    value v26: TypeRef("?") @block0
+    value v26: Void @block0
     value v27: Int(64) @block0
-    value v28: TypeRef("?") @block0
+    value v28: Generic { name: "Vec", args: [Int(64)] } @block0
     value v29: Int(64) @block0
     value v30: Int(64) @block0
     value v31: Int(64) @block0
     value v32: Int(64) @block0
     value v33: Int(64) @block0
     value v34: Int(64) @block0
-    value v35: TypeRef("?") @block0
+    value v35: Void @block0
     value v36: Int(64) @block0
     value v37: Int(64) @block0
     value v38: Int(64) @block0
     value v39: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v40: TypeRef("?") @block0
+    value v40: Never @block0
     value v41: Bool @block0
     value v42: Int(64) @block0
     value v43: Int(64) @block0

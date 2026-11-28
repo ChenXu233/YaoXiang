@@ -3,10 +3,9 @@
 //! Substitution: bind, insert, get, contains_var, merge, len, is_empty, bound_vars
 //! Substituter: substitute 经过所有容器类型 (Struct, Tuple, Dict, Set, Enum, Range, Arc, Weak, Union, Intersection, AssocType, Fn, Option, Result)
 
-use crate::frontend::core::types::mono::StructFieldInfo;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::substitute::contains_type_vars;
-use crate::frontend::core::types::substitute::rebind_nominal_refs;
-use crate::frontend::core::types::{MonoType, StructType, Substituter, Substitution, TypeVar};
+use crate::frontend::core::types::{MonoType, Substituter, Substitution, TypeVar};
 use std::collections::HashMap;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -134,232 +133,57 @@ fn test_substitute_generic_params_matching() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 名义引用改写（WBS 3.24.3 / #504 病史锚的承重判据，单元级）
+
 // ─────────────────────────────────────────────────────────────────────────────
-//
-// `rebind_nominal_refs` 是导入面签名改绑的唯一实现：判据 = 改写 `TypeRef`
-// 引用体与 `Struct` 接口实现名（名义名位，t3 F3）；`Generic` 头部 /
-// `Struct` 记录名不动——它们是构造器与记录的身份，改写会改变诊断渲染与
-// 记录查表键。端到端用例（tests/integration/multifile.rs 的 #504 锚组）
-// 区分不了「改对了名字」与「把头部也改了」，故判据落在函数本身。
+// 类型身份解析（RFC-039 D64：平路径 → (module, 定义名)）
+// ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
-fn test_rebind_nominal_refs_renames_fn_params_and_return() {
-    // Arrange — 导入函数签名（参数位 + 返回位）携带定义单元裸名
-    let mut rebinds = HashMap::new();
-    rebinds.insert("Temp".to_string(), "TempB".to_string());
-    let signature = MonoType::Fn {
-        params: vec![MonoType::Ref {
-            mutable: false,
-            inner: Box::new(MonoType::TypeRef("Temp".to_string())),
-        }],
-        return_type: Box::new(MonoType::TypeRef("Temp".to_string())),
+fn test_resolve_nominal_identities_promotes_flat_names_through_resolver() {
+    // Arrange — 注解形态的平路径名义引用；解析器给出 std.result.Result
+    let ty = MonoType::Fn {
+        params: vec![MonoType::TypeRef(
+            Nominal::flat("Result").expect("flat name"),
+        )],
+        return_type: Box::new(MonoType::TypeRef(Nominal::flat("T").expect("flat name"))),
     };
+    let identity = Nominal::item("std.result", "Result").expect("identity");
 
     // Act
-    let rebound = rebind_nominal_refs(&signature, &rebinds);
+    let resolved =
+        crate::frontend::core::types::substitute::resolve_nominal_identities(&ty, &|written| {
+            (written == "Result").then(|| identity.clone())
+        });
 
-    // Assert — 参数位的借用内层与返回位都改绑到本地名
-    let MonoType::Fn {
-        params,
-        return_type,
-    } = &rebound
-    else {
-        panic!("rebind must preserve Fn shape, got {rebound:?}");
-    };
+    // Assert — 命中名升格为身份，未命中名保持平路径（类型参数不是身份）
     assert!(
-        matches!(return_type.as_ref(), MonoType::TypeRef(n) if n == "TempB"),
-        "return-side nominal ref should be rebound to the local name"
-    );
-    let MonoType::Ref { inner, .. } = &params[0] else {
-        panic!("rebind must preserve Ref shape, got {rebound:?}");
-    };
-    assert!(
-        matches!(inner.as_ref(), MonoType::TypeRef(n) if n == "TempB"),
-        "borrow-inner nominal ref should be rebound to the local name"
-    );
-}
-
-#[test]
-fn test_rebind_nominal_refs_keeps_generic_head_and_struct_name() {
-    // Arrange — 头部/记录名是身份面（不随导入改名），实参位/字段位是引用面
-    let mut rebinds = HashMap::new();
-    rebinds.insert("Temp".to_string(), "TempB".to_string());
-    let holder = MonoType::Struct(StructType {
-        name: "Holder".to_string(),
-        fields: vec![StructFieldInfo {
-            name: "item".to_string(),
-            ty: MonoType::Generic {
-                name: "List".to_string(),
-                args: vec![MonoType::TypeRef("Temp".to_string())],
-            },
-            quantity: None,
-            is_mut: false,
-            has_default: false,
-        }],
-        methods: HashMap::new(),
-        interfaces: vec![],
-    });
-
-    // Act
-    let rebound = rebind_nominal_refs(&holder, &rebinds);
-
-    // Assert
-    let MonoType::Struct(s) = &rebound else {
-        panic!("rebind must preserve Struct shape, got {rebound:?}");
-    };
-    assert_eq!(
-        s.name, "Holder",
-        "record name is the record identity and must not be rebound"
-    );
-    let MonoType::Generic { name, args } = &s.fields[0].ty else {
-        panic!("rebind must preserve Generic shape, got {rebound:?}");
-    };
-    assert_eq!(
-        name, "List",
-        "generic head is the constructor identity and must not be rebound"
+        matches!(&resolved, MonoType::Fn { params, .. }
+            if params[0] == MonoType::TypeRef(identity)),
+        "resolver hit must carry module-qualified identity: {resolved:?}"
     );
     assert!(
-        matches!(args[0], MonoType::TypeRef(ref n) if n == "TempB"),
-        "generic args are nominal-ref positions and must be rebound"
+        matches!(&resolved, MonoType::Fn { return_type, .. }
+            if **return_type == MonoType::TypeRef(Nominal::flat("T").expect("flat name"))),
+        "type parameters must stay flat: {resolved:?}"
     );
 }
 
 #[test]
-fn test_rebind_nominal_refs_empty_map_is_identity() {
-    // Arrange — 无类型导入的 use（整体导入/native）不改绑
-    let ty = MonoType::TypeRef("Temp".to_string());
+fn test_resolve_nominal_identities_keeps_existing_identity() {
+    // Arrange — 已经带模块的身份；解析器对同名给出另一个模块（诱导覆盖）
+    let existing = Nominal::item("a", "Result").expect("identity");
+    let ty = MonoType::TypeRef(existing.clone());
 
     // Act
-    let rebound = rebind_nominal_refs(&ty, &HashMap::new());
+    let resolved =
+        crate::frontend::core::types::substitute::resolve_nominal_identities(&ty, &|_| {
+            Nominal::item("std.result", "Result")
+        });
 
-    // Assert
+    // Assert — 幂等：既有身份不得被解析器改写（否则 a.Result 在 std 可见面被猜成 std.result）
     assert_eq!(
-        rebound, ty,
-        "empty rebind table must be a structural identity"
-    );
-}
-
-#[test]
-fn test_rebind_nominal_refs_unknown_names_pass_through() {
-    // Arrange — 表外的裸名（未导入的类型/类型参数名）不改写
-    let mut rebinds = HashMap::new();
-    rebinds.insert("Temp".to_string(), "TempB".to_string());
-    let ty = MonoType::TypeRef("A".to_string());
-
-    // Act
-    let rebound = rebind_nominal_refs(&ty, &rebinds);
-
-    // Assert
-    assert!(
-        matches!(&rebound, MonoType::TypeRef(n) if n == "A"),
-        "names outside the rebind table must pass through unchanged"
-    );
-}
-
-#[test]
-fn test_rebind_nominal_refs_keeps_generic_head_in_rebind_table() {
-    // 3.24.3 t3 F2 补牙：头部名在改绑表**内**的形态。此前守卫钉的 Generic
-    // 头名 List 在表外，「按表中介改写头部」的变异对它不可见（M2x 实测表内
-    // 名形态能红）。头部是构造器身份——即使名字命中改绑表也不得改写，
-    // 改绑只触 TypeRef 引用体（实参位）。
-    // Arrange — 头名 List 与引用体 Temp 同表
-    let mut rebinds = HashMap::new();
-    rebinds.insert("Temp".to_string(), "TempB".to_string());
-    rebinds.insert("List".to_string(), "ListB".to_string());
-    let holder = MonoType::Generic {
-        name: "List".to_string(),
-        args: vec![MonoType::TypeRef("Temp".to_string())],
-    };
-
-    // Act
-    let rebound = rebind_nominal_refs(&holder, &rebinds);
-
-    // Assert
-    let MonoType::Generic { name, args } = &rebound else {
-        panic!("rebind must preserve Generic shape, got {rebound:?}");
-    };
-    assert_eq!(
-        name, "List",
-        "generic head must not be rebound even when the head name is in the rebind table"
-    );
-    assert!(
-        matches!(args[0], MonoType::TypeRef(ref n) if n == "TempB"),
-        "generic args are nominal-ref positions and must be rebound"
-    );
-}
-
-#[test]
-fn test_rebind_nominal_refs_leaves_solver_and_primitive_variants_untouched() {
-    // 3.24.3 t3 F1 的语义面钉：无名义引用位的变体在非空改绑表下原样克隆。
-    // 枚举名与 TypeVar 编号是身份面（判等键），即便名字/形态撞上表键也
-    // 不得改写——改写会静默改掉判等身份。
-    // Arrange — 表键 Temp；枚举名取同一名字制造最大诱导
-    let mut rebinds = HashMap::new();
-    rebinds.insert("Temp".to_string(), "TempB".to_string());
-    let enum_ty = MonoType::Enum(crate::frontend::core::types::EnumType {
-        name: "Temp".to_string(),
-        variants: vec!["A".to_string(), "Temp".to_string()],
-    });
-    let tv = MonoType::TypeVar(TypeVar::new(3));
-    let int_ty = MonoType::Int(64);
-
-    // Act
-    let rebound_enum = rebind_nominal_refs(&enum_ty, &rebinds);
-    let rebound_tv = rebind_nominal_refs(&tv, &rebinds);
-    let rebound_int = rebind_nominal_refs(&int_ty, &rebinds);
-
-    // Assert
-    assert_eq!(
-        rebound_enum, enum_ty,
-        "enum name/variant strings are identity faces and must not be rebound"
-    );
-    assert_eq!(
-        rebound_tv, tv,
-        "type vars are solver-managed identities and must not be touched"
-    );
-    assert_eq!(
-        rebound_int, int_ty,
-        "primitives carry no nominal refs and must clone through"
-    );
-}
-
-#[test]
-fn test_rebind_nominal_refs_rebinds_struct_interfaces() {
-    // 3.24.3 t3 F3：接口实现名是名义名位（语义与 TypeRef 引用体同）——
-    // 别名导入接口后，实现类型的接口名按本地名同源。不改绑则
-    // Struct-vs-TypeRef 判等臂拿定义单元裸名与本地名判异 ⇒ E1002 误拒。
-    // 记录名是身份面，不动。
-    // Arrange — 实现类型 { v: Float, Temp }，接口 Temp 别名为 TempB
-    let mut rebinds = HashMap::new();
-    rebinds.insert("Temp".to_string(), "TempB".to_string());
-    let widget = MonoType::Struct(StructType {
-        name: "Widget".to_string(),
-        fields: vec![StructFieldInfo {
-            name: "v".to_string(),
-            ty: MonoType::Float(64),
-            quantity: None,
-            is_mut: false,
-            has_default: false,
-        }],
-        methods: HashMap::new(),
-        interfaces: vec!["Temp".to_string()],
-    });
-
-    // Act
-    let rebound = rebind_nominal_refs(&widget, &rebinds);
-
-    // Assert
-    let MonoType::Struct(s) = &rebound else {
-        panic!("rebind must preserve Struct shape, got {rebound:?}");
-    };
-    assert_eq!(
-        s.name, "Widget",
-        "record name is the record identity and must not be rebound"
-    );
-    assert_eq!(
-        s.interfaces,
-        vec!["TempB".to_string()],
-        "interface impl names are nominal-ref positions and must be rebound"
+        resolved,
+        MonoType::TypeRef(existing),
+        "identity must be idempotent under the resolver"
     );
 }

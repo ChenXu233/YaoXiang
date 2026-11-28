@@ -98,8 +98,10 @@ impl TypeChecker {
             // 其余字段类型（Array/Vec/记录）静默返回，不引入新诊断。
             if proposition.is_none() && matches!(&field.ty, AstType::Generic { .. }) {
                 let mut field_diags = Vec::new();
-                let _ = self
-                    .resolve_type_annotation(&MonoType::from(field.ty.clone()), &mut field_diags);
+                let _ = self.resolve_type_annotation(
+                    &self.mono_from_annotation(&field.ty),
+                    &mut field_diags,
+                );
                 for diagnostic in field_diags {
                     self.add_error(diagnostic);
                 }
@@ -172,7 +174,7 @@ impl TypeChecker {
                 .iter()
                 .find(|admission| admission.field == index)
                 .map(|admission| admission.proposition.base.clone())
-                .unwrap_or_else(|| MonoType::from(field.ty.clone()));
+                .unwrap_or_else(|| self.mono_from_annotation(&field.ty));
             model.fields.push(StructFieldInfo {
                 name: field.name.clone(),
                 ty: value_ty,

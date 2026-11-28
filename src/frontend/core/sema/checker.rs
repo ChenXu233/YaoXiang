@@ -30,8 +30,10 @@ use super::types::TypeCheckResult;
 use super::Diagnostic;
 use super::{add_builtin_types, add_native_function_types, add_std_traits};
 use crate::frontend::core::spawn;
+use crate::frontend::core::types::identity::Nominal;
 use crate::util::diagnostic::DiagnosticBuilder;
 use crate::util::diagnostic::ErrorCodeDefinition;
+use crate::util::plan_id::PlanId;
 
 /// 类型检查器
 ///
@@ -87,6 +89,14 @@ pub struct TypeChecker {
     /// RFC-011a §3: 已声明方法签名 (类型名, 方法名) -> 签名。
     /// 同签名重复声明 = 覆盖 → E1100；不同签名 = 重载 → 放行。
     declared_methods: HashMap<(String, String), MonoType>,
+    /// 7c.3：方法声明身份（声明语句 PlanId）→ 混编 IR 名。
+    ///
+    /// typecheck 的**唯一权威定义名映射**：与重载候选的 IR 名在同一次登记
+    ///（`add_method_overload_with_params`）算出，随 `TypeCheckResult` 交给
+    /// IR 生成只读消费。键取声明语句的 PlanId（AST 结构身份，D20 同款）——
+    /// `DefId` 在 lowering 尾部 `assign_defs` 才分配，typecheck 侧不存在；
+    /// 按定义遍历序二次推导（旧 `method_def_ordinals` 计数器）已删。
+    method_def_ir_names: HashMap<PlanId, String>,
     /// #321 W1003: 导入的本地名 → use 语句位置（pass2 use elaboration 登记，
     /// 供模块尾统一判定未使用导入；重复登记由发射处去重）。
     imported_names: Vec<(String, crate::util::span::Span)>,
@@ -111,19 +121,6 @@ pub struct TypeChecker {
     /// （单文件传自身；多文件传全集，过包含方向安全）。三个入口**不带
     /// 默认值**：漏接即编译错误，不存在默认空集的静默路径。
     type_level_namespace: super::probe::TypeLevelNamespace,
-    /// 类型导入改绑表（3.24.3 t3 F4）：**本单元**全部 use 语句的类型导入
-    ///（`ExportKind::Type`），按**来源模块路径**分域（`path → (定义名 → 本地名)`）。
-    ///
-    /// 判据面与消费方（#504 签名面 + F3 类型载荷面）：
-    /// ① `process_use_stmt`（经 body_checker 注入）——签名裸名改绑，域取被导
-    ///    入模块，任一条 use 的导入点都能改绑（分离两条 use 的声明序不再受限）；
-    /// ② `register_use_export`——类型载荷里的名义引用（字段 `TypeRef` 与接口
-    ///    实现名）按来源模块域改绑到本地名。
-    /// 分域判据：跨单元同名类型（b.Temp / c.Temp 各自别名）互不串扰——签名
-    /// 裸名只按其定义单元的域改绑，否则跨单元同名判等被误判同型（守卫锚
-    /// `cross_unit_same_named_type_alias_imports_stay_distinct`）。
-    /// 同定义名重复导入由 pass3 的 E5006/E5008 拦截，域内首登记为准（冲突安全）。
-    import_type_rebinds: HashMap<String, HashMap<String, String>>,
 }
 
 /// 调用点形参名表的**条目**（E1113 的槽位判据，6.9.2-B；issue #538）。
@@ -286,9 +283,7 @@ impl TypeChecker {
         // 它区分 `Array(Int)` 与 `Array(Float)`；无参数时退到类型注解自身。
         // 注意：不能用 `{:?}` 格式化 `Type`——它含 `Span`，同一签名在不同
         // 位置会得到不同字符串。用 `MonoType::type_name()` 取纯类型名。
-        let type_name_of = |t: &crate::ast::Type| {
-            crate::frontend::core::types::MonoType::from(t.clone()).type_name()
-        };
+        let type_name_of = |t: &crate::ast::Type| self.mono_from_annotation(t).type_name();
         let signature = type_annotation
             .as_ref()
             .map(crate::ast::Type::fn_params_flat)
@@ -373,13 +368,13 @@ impl TypeChecker {
             type_definition_bodies: HashMap::new(),
             pending_interface_instantiations: Vec::new(),
             declared_methods: HashMap::new(),
+            method_def_ir_names: HashMap::new(),
             imported_names: Vec::new(),
             import_watch: HashMap::new(),
             import_used: HashSet::new(),
             early_value_bindings: HashMap::new(),
             declared_top_fns: HashMap::new(),
             type_level_namespace: super::probe::TypeLevelNamespace::default(),
-            import_type_rebinds: HashMap::new(),
         }
     }
 
@@ -418,10 +413,16 @@ impl TypeChecker {
                 .map(crate::frontend::core::types::TypeVar::new)
                 .collect();
             let body = MonoType::Generic {
-                name: name.to_string(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+                    .expect("type name must be bare and non-empty"),
                 args: params
                     .iter()
-                    .map(|p| MonoType::TypeRef(p.to_string()))
+                    .map(|p| {
+                        MonoType::TypeRef(
+                            Nominal::flat(AsRef::<str>::as_ref(&(p)))
+                                .expect("type name must be bare and non-empty"),
+                        )
+                    })
                     .collect(),
             };
             let def = GenericTypeDef {
@@ -631,8 +632,9 @@ impl TypeChecker {
         >,
     ) {
         self.type_level_namespace = namespace.clone();
-        // 3.24.3 t3 F4：改绑表先于语句遍历成形（含 pass2 的 use 注册臂）。
-        self.collect_import_type_rebinds(module);
+        // 导入面先成形（WBS 4.9.10 D-5）：pass2 的方法登记要按它定身份，
+        // 漏建会让签名收集把本单元类型的方法落进无模块键位（静默错配）。
+        self.env.install_import_face(module);
         // H1：先补种本单元谓词表，使 pass1 的记录模型分类看到内联命题体
         //（`Pos(v)` → `v > 0`），而不是 `Call{Pos,[v]}`。
         for (name, def) in predicate_defs {
@@ -748,43 +750,6 @@ impl TypeChecker {
         self.flush_pending_body_bindings();
     }
 
-    /// 类型导入改绑表的单元级预收集（3.24.3 t3 F4）：扫**全部** use 语句的
-    /// 类型导入对，按来源模块路径分域。
-    ///
-    /// 两条驱动（`check_module_impl` 与 `collect_signatures`）的语句遍历开始
-    /// 前各调一次——改绑表先于任何导入注册/绑定成形，签名与类型载荷的裸名在
-    /// 任一条 use 的处理点都取到全域（`use b.{make_b}` 先、`use b.{Temp as
-    /// TempB}` 后同样改绑）。域内首登记为准；同定义名重复导入由 pass3 的
-    /// E5006/E5008 拦截（冲突安全）。
-    fn collect_import_type_rebinds(
-        &mut self,
-        module: &Module,
-    ) {
-        self.import_type_rebinds.clear();
-        for stmt in &module.items {
-            let crate::ast::StmtKind::Use {
-                path,
-                items: Some(items),
-                item_aliases,
-                ..
-            } = &stmt.kind
-            else {
-                continue;
-            };
-            // 与 pass2 的 use 臂同一解析源（`module_registry.get(path)`）：
-            // 预收集看不到的模块，注册面同样不注册，两面天然一致。
-            let Some(m) = self.env.module_registry.get(path).cloned() else {
-                continue;
-            };
-            let locals = inference::statements::use_item_locals(items, item_aliases);
-            let pairs = inference::statements::type_rebind_pairs(items, &locals, &m);
-            let domain = self.import_type_rebinds.entry(path.clone()).or_default();
-            for (definition, local) in pairs {
-                domain.entry(definition).or_insert(local);
-            }
-        }
-    }
-
     /// 构建并安装函数体检查器（check_module_impl 与 #397 导出面收割共用）。
     ///
     /// 除检查器本体的各张表注入外，同步三样东西：
@@ -820,17 +785,14 @@ impl TypeChecker {
         if let Some(vendor_root) = self.vendor_root.clone() {
             body_checker.set_vendor_root(vendor_root);
         }
-        // 3.24.3 t3 F4：单元级类型导入改绑表（按来源模块分域）随构造注入，
-        // 消费点 `process_use_stmt`（模块级与函数体级 use 同一入口）。
-        body_checker.set_import_type_rebinds(self.import_type_rebinds.clone());
         // 设置泛型类型定义模板表
         body_checker.set_generic_type_defs(self.env.generic_type_defs.clone());
-        // 设置方法绑定表
+        // 方法身份的解析表（D-5）：表达式推断器的唯一身份入口
+        body_checker.set_import_face(self.env.import_face.clone());
+        // 设置方法绑定表与方法重载候选表（键都是方法身份，D-1/D-2）
         body_checker.set_method_bindings(self.env.method_bindings.clone());
-        body_checker.method_overloads = self.env.method_overloads.clone();
-        body_checker.method_overload_ir_names = self.env.method_overload_ir_names.clone();
-        // #452：形参名表同源注入——漏一处会让决议段静默退回「不按名匹配」
-        body_checker.method_overload_param_names = self.env.method_overload_param_names.clone();
+        // #452：候选组连声明期形参名一起注入——漏一处会让决议段静默退回「不按名匹配」
+        body_checker.set_method_overloads(self.env.method_overloads.clone());
         // RFC-011b: 接口实现登记表（finalize_interface_instantiations 已落表）
         body_checker.set_interface_impl_registry(self.env.interface_impl_registry.clone());
         body_checker.set_sum_types(self.env.sum_types.clone());
@@ -839,6 +801,7 @@ impl TypeChecker {
         // 不再在此剥成 `MonoType` 体——那样判等还得另造一张同内容表。
         let type_defs: HashMap<String, PolyType> = self.env.types.clone();
         body_checker.set_type_defs(type_defs);
+        body_checker.set_type_identity_index(self.env.type_identity_index().clone());
         // 双表分工（3.20.8 收单点，3.20.9 起来源换声明级——#522）：
         //
         // 1. `proof_fn_bases`——证明函数基类型表（RFC-027 Phase 2.5）：
@@ -1036,9 +999,9 @@ impl TypeChecker {
         module: &Module,
         collect_all: bool,
     ) -> TypeCheckResult {
-        // 3.24.3 t3 F4：改绑表先于任何遍成形（pass2 的 use 注册臂与 pass3 的
-        // 导入绑定都消费它——分离两条 use 的类型导入同样可达）。
-        self.collect_import_type_rebinds(module);
+        // 导入面先成形（WBS 4.9.10 D-5 / L3-1b）：三遍里的方法键与类型身份
+        // 都按它解析。
+        self.env.install_import_face(module);
 
         // 第零遍：登记编译期谓词定义（#377-3）。
         // 必须先于 pass1/pass2（签名与类型定义的精化标注要能解析到谓词体），
@@ -1409,6 +1372,12 @@ impl TypeChecker {
         } else {
             HashMap::new()
         };
+        // 调用点结果类型（RFC-039 D20：调用点 `PlanId` 键控；ir_gen 按同一身份回查）。
+        // 收敛在导出点做一次：记录点存原样推断结果（`dict.new()` 一类要等使用点才收敛）。
+        let expr_result_types = match self.body_checker.as_ref() {
+            Some(bc) => bc.finalize_expr_result_types(),
+            None => HashMap::new(),
+        };
 
         // #321 W1003：未使用导入警告（Warning 级，不阻断编译，经 warnings 通道流出）
         let import_warnings = self.collect_unused_import_warnings(module);
@@ -1455,6 +1424,7 @@ impl TypeChecker {
             existential_coercions,
             try_expr_impls,
             match_scrutinee_types,
+            expr_result_types,
             overload_resolutions:
                 crate::frontend::core::sema::types::OverloadResolutions::from_entries(
                     self.body_checker
@@ -1465,6 +1435,8 @@ impl TypeChecker {
             operator_dispatches,
             implementation_proofs: self.env.implementation_proofs.clone(),
             interface_impl_registry: self.env.interface_impl_registry.clone(),
+            type_identity_index: self.env.type_identity_index().clone(),
+            type_identity_by_local_key: self.env.type_identity_by_local_key().clone(),
             sum_types: self.env.sum_types.clone(),
             sum_type_param_names: self
                 .env
@@ -1474,6 +1446,7 @@ impl TypeChecker {
                 .map(|(name, d)| (name.clone(), d.type_param_names.clone()))
                 .collect(),
             module_namespaces: std::mem::take(&mut self.module_namespaces),
+            method_def_ir_names: std::mem::take(&mut self.method_def_ir_names),
             record_models: self.env.record_models.clone(),
             warnings,
         }
@@ -1528,6 +1501,8 @@ impl TypeChecker {
                 self.dependent_type_env.clone(),
                 trait_table,
             );
+            // 方法身份的解析表（D-5）：与主入口同一张表
+            body_checker.set_import_face(self.env.import_face.clone());
             // 设置 native 函数签名表
             body_checker.set_native_signatures(self.env.native_signatures.clone());
             // #387：native arity 区间表随签名表同源传递
@@ -1541,10 +1516,6 @@ impl TypeChecker {
             body_checker.set_module_registry(self.env.module_registry.clone());
             // #396：模块别名集合——模块成员缺失报 E1043 而非 E1042
             body_checker.set_module_aliases(self.env.module_aliases.clone());
-            // 3.24.3 t3 F4：与 `init_body_checker` 同源注入单元级类型导入
-            // 改绑表——漏一处会让该入口下 `use` 退回「本条 use 覆盖」，
-            // 分离两条 use 的签名改绑静默失灵。
-            body_checker.set_import_type_rebinds(self.import_type_rebinds.clone());
             self.body_checker = Some(body_checker);
         }
         self.body_checker.as_mut().unwrap()
@@ -1744,7 +1715,7 @@ impl TypeChecker {
                                     .iter()
                                     .map(|p| {
                                         p.ty.as_ref()
-                                            .map(|t| MonoType::from(t.clone()))
+                                            .map(|t| self.mono_from_annotation(&t.clone()))
                                             .unwrap_or_else(|| self.env.solver().new_var())
                                     })
                                     .collect(),
@@ -1859,10 +1830,10 @@ impl TypeChecker {
                     {
                         let pts: Vec<MonoType> = param_tys
                             .iter()
-                            .filter_map(|p| p.ty.clone())
-                            .map(MonoType::from)
+                            .filter_map(|p| p.ty.as_ref())
+                            .map(|t| self.mono_from_annotation(t))
                             .collect();
-                        (pts, MonoType::from(*return_type.clone()))
+                        (pts, self.mono_from_annotation(&return_type.clone()))
                     } else {
                         // method_type 不是 Fn 类型，回退到 type_annotation 或 params
                         if let Some(type_ann) = type_annotation {
@@ -1873,16 +1844,16 @@ impl TypeChecker {
                             {
                                 let pts: Vec<MonoType> = param_tys
                                     .iter()
-                                    .filter_map(|p| p.ty.clone())
-                                    .map(MonoType::from)
+                                    .filter_map(|p| p.ty.as_ref())
+                                    .map(|t| self.mono_from_annotation(t))
                                     .collect();
-                                (pts, MonoType::from(*return_type.clone()))
+                                (pts, self.mono_from_annotation(&return_type.clone()))
                             } else {
                                 let pts: Vec<MonoType> = params
                                     .iter()
                                     .map(|p| {
                                         p.ty.as_ref()
-                                            .map(|t| MonoType::from(t.clone()))
+                                            .map(|t| self.mono_from_annotation(&t.clone()))
                                             .unwrap_or_else(|| self.env.solver().new_var())
                                     })
                                     .collect();
@@ -1893,7 +1864,7 @@ impl TypeChecker {
                                 .iter()
                                 .map(|p| {
                                     p.ty.as_ref()
-                                        .map(|t| MonoType::from(t.clone()))
+                                        .map(|t| self.mono_from_annotation(&t.clone()))
                                         .unwrap_or_else(|| self.env.solver().new_var())
                                 })
                                 .collect();
@@ -1908,16 +1879,16 @@ impl TypeChecker {
                     {
                         let pts: Vec<MonoType> = param_tys
                             .iter()
-                            .filter_map(|p| p.ty.clone())
-                            .map(MonoType::from)
+                            .filter_map(|p| p.ty.as_ref())
+                            .map(|t| self.mono_from_annotation(t))
                             .collect();
-                        (pts, MonoType::from(*return_type.clone()))
+                        (pts, self.mono_from_annotation(&return_type.clone()))
                     } else {
                         let pts: Vec<MonoType> = params
                             .iter()
                             .map(|p| {
                                 p.ty.as_ref()
-                                    .map(|t| MonoType::from(t.clone()))
+                                    .map(|t| self.mono_from_annotation(&t.clone()))
                                     .unwrap_or_else(|| self.env.solver().new_var())
                             })
                             .collect();
@@ -1928,7 +1899,7 @@ impl TypeChecker {
                         .iter()
                         .map(|p| {
                             p.ty.as_ref()
-                                .map(|t| MonoType::from(t.clone()))
+                                .map(|t| self.mono_from_annotation(&t.clone()))
                                 .unwrap_or_else(|| self.env.solver().new_var())
                         })
                         .collect();
@@ -2074,15 +2045,22 @@ impl TypeChecker {
                         })
                         .unwrap_or_default();
                     if !const_binders.is_empty() && !call_site_names.is_empty() {
-                        self.declared_call_site_params
-                            .entry(format!("{}.{}", tn, name))
-                            .or_insert(CallSiteSlots {
-                                names: call_site_names,
-                                const_params: const_binders
-                                    .iter()
-                                    .map(|b| b.name.clone())
-                                    .collect(),
-                            });
+                        // 键 = 方法身份的**投影**（`DefPath::project` 是唯一拼接实现）
+                        let key = self
+                            .env
+                            .resolve_method_key(tn, &name)
+                            .map(|key| key.project());
+                        if let Some(key) = key {
+                            self.declared_call_site_params
+                                .entry(key)
+                                .or_insert(CallSiteSlots {
+                                    names: call_site_names,
+                                    const_params: const_binders
+                                        .iter()
+                                        .map(|b| b.name.clone())
+                                        .collect(),
+                                });
+                        }
                     }
                     let key = (tn.to_string(), name.clone());
                     if let Some(prev) = self.declared_methods.get(&key) {
@@ -2101,11 +2079,19 @@ impl TypeChecker {
                     // #452 连形参名一并登记——命名实参入决议要靠它（登记期的
                     // 声明序形参名是本阶段唯一可信来源，调用点再无 AST 可查）。
                     if let Some(tn) = type_name.as_deref() {
-                        let okey = format!("{}.{}", tn, name);
                         let param_names: Vec<String> =
                             signature.iter().map(|p| p.name.clone()).collect();
-                        self.env
-                            .add_method_overload_with_params(&okey, fn_ty.clone(), param_names);
+                        // 键由 env 单点解析（D-5）；返回值是该身份在 IR 函数表里的名字（D-8）
+                        let registered = self.env.add_method_overload_with_params(
+                            tn,
+                            &name,
+                            fn_ty.clone(),
+                            param_names,
+                        );
+                        if let Some(ir_name) = registered {
+                            // 定义身份（声明语句 PlanId）→ IR 最终函数名，唯一权威来源。
+                            self.method_def_ir_names.insert(stmt.plan_id, ir_name);
+                        }
                     }
                 } else {
                     // 如果函数有 const 泛型参数，存进 PolyType.const_binders
@@ -2178,17 +2164,10 @@ impl TypeChecker {
                                         &export.name,
                                         export,
                                         false,
-                                        path,
                                         stmt.span,
                                     );
                                 }
-                                self.register_use_export(
-                                    module_alias,
-                                    export,
-                                    true,
-                                    path,
-                                    stmt.span,
-                                );
+                                self.register_use_export(module_alias, export, true, stmt.span);
                             }
                         }
                         // use path as alias → 整个模块用别名注册
@@ -2214,13 +2193,10 @@ impl TypeChecker {
                                             &export.name,
                                             export,
                                             false,
-                                            path,
                                             stmt.span,
                                         );
                                     }
-                                    self.register_use_export(
-                                        alias_name, export, true, path, stmt.span,
-                                    );
+                                    self.register_use_export(alias_name, export, true, stmt.span);
                                 }
                             }
                         }
@@ -2254,11 +2230,11 @@ impl TypeChecker {
                                     None => self.record_import_name(&item.name, stmt.span),
                                 }
                                 match local_name {
-                                    Some(local) => self
-                                        .register_use_export(local, export, true, path, stmt.span),
-                                    None => self.register_use_export(
-                                        &item.name, export, false, path, stmt.span,
-                                    ),
+                                    Some(local) => {
+                                        self.register_use_export(local, export, true, stmt.span)
+                                    }
+                                    None => self
+                                        .register_use_export(&item.name, export, false, stmt.span),
                                 }
                             }
                         }
@@ -2382,7 +2358,7 @@ impl TypeChecker {
         }
         // 类型：显式标注优先；否则从字面量初始化推断一个保守类型
         let ty = match type_annotation {
-            Some(t) => MonoType::from(t.clone()),
+            Some(t) => self.mono_from_annotation(&t.clone()),
             None => match value.as_deref() {
                 Some(Expr::Lit(lit, _)) => match lit {
                     crate::frontend::core::lexer::tokens::Literal::Int(_) => MonoType::Int(64),
@@ -2550,7 +2526,7 @@ impl TypeChecker {
             let args: Vec<MonoType> = inst
                 .args
                 .iter()
-                .map(|a| MonoType::from(a.clone()))
+                .map(|a| self.mono_from_annotation(&a.clone()))
                 .collect();
             let _ = self.check_interface_instantiation(
                 &inst.impl_type,
@@ -2635,8 +2611,10 @@ impl TypeChecker {
                 else {
                     continue;
                 };
-                let mono_args: Vec<MonoType> =
-                    ast_args.iter().map(|a| MonoType::from(a.clone())).collect();
+                let mono_args: Vec<MonoType> = ast_args
+                    .iter()
+                    .map(|a| self.mono_from_annotation(&a.clone()))
+                    .collect();
                 // 尽力收集成员名（接口模板体的函数字段名）；完整性检查
                 // 仍由定义方 finalize 负责，分发查询只匹配 impl_type + args
                 let methods = self
@@ -2887,7 +2865,7 @@ impl TypeChecker {
         for item in &body {
             match item {
                 TypeBodyItem::Field(f) => {
-                    let ty = MonoType::from(f.ty.clone());
+                    let ty = self.mono_from_annotation(&f.ty.clone());
                     let ty = TypeEnvironment::replace_type_params(&ty, &param_names, args);
                     if !matches!(ty, MonoType::Fn { .. }) {
                         // RFC-011a §1: 接口成员必须是方法（函数类型字段）
@@ -2914,7 +2892,7 @@ impl TypeChecker {
                     let nested: Vec<MonoType> = nested_args
                         .iter()
                         .map(|a| {
-                            let m = MonoType::from(a.clone());
+                            let m = self.mono_from_annotation(&a.clone());
                             TypeEnvironment::replace_type_params(&m, &param_names, args)
                         })
                         .collect();
@@ -2949,18 +2927,36 @@ impl TypeChecker {
                 MonoType::TypeRef(n) => Some(n.clone()),
                 MonoType::Generic { name, .. } => Some(name.clone()),
                 // 内建标量经 from_builtin_name 物化（Add(Int,..) 的 Int → Int(64)）
-                MonoType::Int(_) => Some("Int".to_string()),
-                MonoType::Float(_) => Some("Float".to_string()),
-                MonoType::Bool => Some("Bool".to_string()),
-                MonoType::Char => Some("Char".to_string()),
-                MonoType::Void => Some("Void".to_string()),
+                MonoType::Int(_) => Some(
+                    Nominal::flat(AsRef::<str>::as_ref(&("Int")))
+                        .expect("type name must be bare and non-empty"),
+                ),
+                MonoType::Float(_) => Some(
+                    Nominal::flat(AsRef::<str>::as_ref(&("Float")))
+                        .expect("type name must be bare and non-empty"),
+                ),
+                MonoType::Bool => Some(
+                    Nominal::flat(AsRef::<str>::as_ref(&("Bool")))
+                        .expect("type name must be bare and non-empty"),
+                ),
+                MonoType::Char => Some(
+                    Nominal::flat(AsRef::<str>::as_ref(&("Char")))
+                        .expect("type name must be bare and non-empty"),
+                ),
+                MonoType::Void => Some(
+                    Nominal::flat(AsRef::<str>::as_ref(&("Void")))
+                        .expect("type name must be bare and non-empty"),
+                ),
                 _ => None,
             });
-            if self_head.as_deref() != Some(impl_type) {
-                let shown = self_head.unwrap_or_else(|| "?".to_string());
+            if self_head.as_ref().map(|n| n.bare()) != Some(impl_type) {
+                let shown = self_head.unwrap_or_else(|| {
+                    Nominal::flat(AsRef::<str>::as_ref(&("?")))
+                        .expect("type name must be bare and non-empty")
+                });
                 self.add_error(
                     ErrorCodeDefinition::interface_impl_outside_defining_module(
-                        &shown,
+                        shown.bare(),
                         interface_name,
                     )
                     .at(span)
@@ -2996,11 +2992,11 @@ impl TypeChecker {
         // 时任一匹配即可；method_bindings 单值表会互相覆盖，不可用。
         let mut methods: Vec<String> = Vec::new();
         for (member, expected) in &members {
-            let overload_key = format!("{}.{}", impl_type, member);
+            // 键由 env 单点解析（D-5）：接口成员是方法身份，不是拼出来的字符串
             let candidates = self
                 .env
-                .get_method_overloads(&overload_key)
-                .cloned()
+                .resolve_method_key(impl_type, member)
+                .and_then(|key| self.env.get_method_overloads(&key).cloned())
                 .unwrap_or_default();
             if candidates.is_empty() {
                 self.add_error(
@@ -3071,8 +3067,24 @@ impl TypeChecker {
         if let Some(poly) = poly {
             if let MonoType::Struct(s) = &poly.body {
                 let mut s = s.clone();
-                if !s.interfaces.iter().any(|i| i == interface_name) {
-                    s.interfaces.push(interface_name.to_string());
+                // 接口名是名义名位（D64）：与注解里的接口写法同一解析器升格为身份
+                // （本单元声明的接口 = 本单元模块键；native 接口/幻名保持平路径）。
+                // 只压平路径会让 Animal(Dog) 的实现面与 a: Animal 的注解面分属
+                // 两种编码，结构化子型/存在类型成员判定判异（E1101）。
+                let iface_identity = self
+                    .env
+                    .import_face
+                    .type_identity(
+                        crate::frontend::core::sema::import_face::WrittenTypeName::from_ast(
+                            interface_name,
+                        ),
+                    )
+                    .unwrap_or_else(|| {
+                        Nominal::flat(AsRef::<str>::as_ref(&(interface_name)))
+                            .expect("type name must be bare and non-empty")
+                    });
+                if !s.interfaces.iter().any(|i| i == &iface_identity) {
+                    s.interfaces.push(iface_identity);
                     let updated = PolyType {
                         type_binders: poly.type_binders.clone(),
                         const_binders: poly.const_binders.clone(),
@@ -3114,9 +3126,13 @@ impl TypeChecker {
             // RFC-011b: 绑定形态同样进重载候选表（接口完整性检查按候选集匹配）。
             // #452：外部绑定的形参名在 typecheck 侧拿不到（被绑函数只留签名、
             // 不留名字），留空 = 调用点不按名匹配（不冒充「名字已核对」）。
-            let okey = format!("{}.{}", type_name, method_name);
-            self.env
-                .add_method_overload_with_params(&okey, method_ty, Vec::new());
+            // 外部绑定不生成方法体 IR，没有定义身份可登记——只维护调用侧候选表。
+            let _ = self.env.add_method_overload_with_params(
+                type_name,
+                method_name,
+                method_ty,
+                Vec::new(),
+            );
         }
     }
 
@@ -3197,8 +3213,12 @@ impl TypeChecker {
         if const_params.is_empty() {
             return;
         }
+        // 键 = 方法身份的投影（与 `add_method_binding` 同一解析入口）
+        let Some(key) = self.env.resolve_method_key(type_name, method_name) else {
+            return;
+        };
         self.declared_call_site_params
-            .entry(format!("{}.{}", type_name, method_name))
+            .entry(key.project())
             .or_insert(CallSiteSlots {
                 names,
                 const_params,
@@ -3239,7 +3259,7 @@ impl TypeChecker {
             let field_ty = self.export_register_type(export);
             // 命名空间成员不是构造参数：旧表示用**空**默认值向量表达（required=0，
             // 任意实参数被接受）。单列无法表达长度不匹配，故逐字段写 `has_default`
-            // 以保持旧 arity 行为（零行为；见 09a §P6 6.9.5-B.1a 的报告 §R8）。
+            // 以保持旧 arity 行为（零行为；见提交信息的报告）。
             fields.push(crate::frontend::core::types::mono::StructFieldInfo {
                 name: export.name.clone(),
                 ty: field_ty,
@@ -3249,7 +3269,8 @@ impl TypeChecker {
             });
         }
         let module_ty = MonoType::Struct(crate::frontend::core::types::mono::StructType {
-            name: module_alias.to_string(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&(module_alias)))
+                .expect("type name must be bare and non-empty"),
             fields,
             methods: HashMap::new(),
             interfaces: vec![],
@@ -3261,14 +3282,11 @@ impl TypeChecker {
 
     /// 注册单个导出
     /// - `use_alias`: 是否使用别名模式，为 true 时注册名为 prefix，否则为 export.name
-    /// - `module_path`: 导出所属模块路径（use 语句首段路径）——3.24.3 t3 F3 的
-    ///   类型载荷改绑按它取本单元类型导入域（跨单元同名类型互不串扰）
     fn register_use_export(
         &mut self,
         prefix: &str,
         export: &crate::frontend::module::Export,
         use_alias: bool,
-        module_path: &str,
         span: crate::util::span::Span,
     ) {
         let register_name = if use_alias {
@@ -3306,7 +3324,8 @@ impl TypeChecker {
                     }
                 }
                 let module_ty = MonoType::Struct(crate::frontend::core::types::mono::StructType {
-                    name: export.name.clone(),
+                    name: Nominal::flat(AsRef::<str>::as_ref(&(export.name.clone())))
+                        .expect("type name must be bare and non-empty"),
                     fields,
                     methods: HashMap::new(),
                     interfaces: vec![],
@@ -3316,13 +3335,7 @@ impl TypeChecker {
                 self.env.module_aliases.insert(register_name.clone());
                 self.env.add_var(register_name, PolyType::mono(module_ty));
                 for sub_export in &payload_type_exports {
-                    self.register_use_export(
-                        &sub_export.name,
-                        sub_export,
-                        false,
-                        &sub_module_path,
-                        span,
-                    );
+                    self.register_use_export(&sub_export.name, sub_export, false, span);
                 }
             }
             crate::frontend::module::ExportKind::Type => {
@@ -3348,18 +3361,6 @@ impl TypeChecker {
                         crate::frontend::core::sema::record_model::apply_quantities(ty, Some(model))
                     }
                     None => ty,
-                };
-                // 3.24.3 t3 F3：类型载荷里的名义名位（字段 `TypeRef` 与接口实现
-                // 名）按**来源模块**的类型导入域改绑到本地名——与签名面（#504，
-                // `import_binding`）同一语义。不改绑则 Struct-vs-TypeRef 判等臂
-                // （`s.interfaces.contains` 等）拿定义单元裸名与本地名判异，别名
-                // 导入的合法程序被误拒（E1002）。记录名/构造器名是身份面，
-                // `rebind_nominal_refs` 不触碰。
-                let ty = match self.import_type_rebinds.get(module_path) {
-                    Some(domain) if !domain.is_empty() => {
-                        crate::frontend::core::types::substitute::rebind_nominal_refs(&ty, domain)
-                    }
-                    _ => ty,
                 };
                 let poly = PolyType::mono(ty);
                 self.env.add_type(register_name.clone(), poly.clone());
@@ -3669,12 +3670,26 @@ impl TypeChecker {
             }
         }
 
-        let poly = PolyType::mono(MonoType::from(definition.clone()));
-        // Inject the type name into StructType if it's missing (plain Type::Struct has no name)
+        let poly = PolyType::mono(self.mono_from_annotation(&definition.clone()));
+        // 定义侧身份注入（RFC-039 D64）：本单元声明的类型名带 own_module 身份
+        // （多文件 = 单元键，单文件 = 空串/平路径，与 ImportFace::build 同开关）。
+        // 名义头是**定义侧**的唯一身份来源：Struct/Enum 记录名、以及泛型模板
+        // 的头部都在这里定格，引用侧（注解/构造器/变体/运算符）经导入面解析到
+        // 同一身份——两侧从同一个事实派生，不按名重绑。
+        let own_module = if self.env.qualify_methods {
+            self.env.unit_key.clone()
+        } else {
+            String::new()
+        };
+        // 仅把**平路径**升格为身份：`Type::NamedStruct` 等已带名字的形态保留
+        // 原样（匿名引用位由导入面解析，见 resolve_nominal_identities 的幂等口径）。
+        let identity = Nominal::from_def_path(
+            &crate::frontend::core::types::identity::DefPath::item(&own_module, name),
+        );
         let poly = PolyType::mono(match &poly.body {
-            MonoType::Struct(s) if s.name.is_empty() => {
+            MonoType::Struct(s) if s.name.bare().is_empty() || s.name.module().is_empty() => {
                 MonoType::Struct(crate::frontend::core::types::mono::StructType {
-                    name: name.to_string(),
+                    name: identity.clone().unwrap_or_else(|| s.name.clone()),
                     fields: s.fields.clone(),
                     methods: s.methods.clone(),
                     interfaces: s.interfaces.clone(),
@@ -3716,9 +3731,11 @@ impl TypeChecker {
                                 params: params
                                     .iter()
                                     .filter_map(|p| p.ty.as_ref())
-                                    .map(|t| MonoType::from(t.clone()))
+                                    .map(|t| self.mono_from_annotation(&t.clone()))
                                     .collect(),
-                                return_type: Box::new(MonoType::from((**return_type).clone())),
+                                return_type: Box::new(
+                                    self.mono_from_annotation(&(**return_type).clone()),
+                                ),
                             };
                             if let Some(positions) =
                                 self.normalize_binding_positions(positions, params.len(), span)
@@ -3755,7 +3772,7 @@ impl TypeChecker {
                 let mut refined_diags = Vec::new();
                 let param_types: Vec<MonoType> = signature
                     .iter()
-                    .filter_map(|p| p.ty.as_ref().map(|t| MonoType::from(t.clone())))
+                    .filter_map(|p| p.ty.as_ref().map(|t| self.mono_from_annotation(&t.clone())))
                     .map(|ty| self.resolve_type_annotation(&ty, &mut refined_diags))
                     .collect();
                 self.env.errors.extend_errors(refined_diags);
@@ -3811,8 +3828,10 @@ impl TypeChecker {
                                     },
                                 );
                             } else if self_is_own_shape {
-                                let mono_args: Vec<MonoType> =
-                                    args.iter().map(|a| MonoType::from(a.clone())).collect();
+                                let mono_args: Vec<MonoType> = args
+                                    .iter()
+                                    .map(|a| self.mono_from_annotation(&a.clone()))
+                                    .collect();
                                 let methods = Self::interface_template_methods(head, &self.env);
                                 self.env.add_interface_impl(
                                     head,
@@ -3917,7 +3936,7 @@ impl TypeChecker {
         self.auto_derive_traits(name, definition, derive_model.as_ref());
 
         // RFC-010: 记录式和类型判定（全有或全无，见「变体构造（权威定义）」节）
-        if let Some(variants) = detect_sum_type(name, &param_names, definition) {
+        if let Some(variants) = self.detect_sum_type(name, &param_names, definition) {
             self.env.sum_types.insert(name.to_string(), variants);
             // 和类型的泛型模板 body 归一化为 Generic 自身形态：值表示是
             // tagged union，不是函数字段 Struct——保留定义体会让注解实例化
@@ -3925,11 +3944,21 @@ impl TypeChecker {
             // 冲突（坑⑦，预置登记时代同一约定）。非泛型和类型无模板，跳过。
             if let Some(def) = self.env.generic_type_defs.get_mut(name) {
                 def.poly.body = MonoType::Generic {
-                    name: name.to_string(),
+                    // 身份与定义侧同一事实（D64）：模板头是**注解实例化**的来源，
+                    // 平路径头会让 `Result(T, E)` 注解与变体构造产物分属两种身份。
+                    name: identity.clone().unwrap_or_else(|| {
+                        Nominal::flat(AsRef::<str>::as_ref(&(name)))
+                            .expect("type name must be bare and non-empty")
+                    }),
                     args: def
                         .type_param_names
                         .iter()
-                        .map(|p| MonoType::TypeRef(p.clone()))
+                        .map(|p| {
+                            MonoType::TypeRef(
+                                Nominal::flat(AsRef::<str>::as_ref(&(p.clone())))
+                                    .expect("type name must be bare and non-empty"),
+                            )
+                        })
                         .collect(),
                 };
             }
@@ -3937,75 +3966,82 @@ impl TypeChecker {
     }
 }
 
-/// RFC-010 记录式和类型判定：字段全为函数且返回自身 → 变体定义表（声明序）。
-/// 全有或全无——存在绑定项即不判定；任一字段返回非自身 → 普通记录（零诊断）。
-fn detect_sum_type(
-    name: &str,
-    param_names: &[String],
-    definition: &crate::ast::Type,
-) -> Option<Vec<super::environment::SumVariantDef>> {
-    use crate::ast::{Type, TypeBodyItem};
-    let body = match definition {
-        Type::Struct { body } => body,
-        _ => return None,
-    };
-    let mut fields = Vec::new();
-    for item in body {
-        match item {
-            TypeBodyItem::Field(f) => fields.push(f),
-            // 方法绑定 = 携带行为的普通记录，不判定
-            TypeBodyItem::Binding(_) => return None,
-            _ => {}
+impl TypeChecker {
+    /// RFC-010 记录式和类型判定：字段全为函数且返回自身 → 变体定义表（声明序）。
+    /// 全有或全无——存在绑定项即不判定；任一字段返回非自身 → 普通记录（零诊断）。
+    ///
+    /// 变体载荷类型经**唯一有上下文的入口**（TypeChecker::mono_from_annotation）
+    /// 转换（L3-1b）：载荷里的名义引用与注解/构造器同一身份；MonoType::from 的
+    /// 平路径只服务无上下文的点，不得在这里当第二套转换。
+    fn detect_sum_type(
+        &self,
+        name: &str,
+        param_names: &[String],
+        definition: &crate::ast::Type,
+    ) -> Option<Vec<super::environment::SumVariantDef>> {
+        use crate::ast::{Type, TypeBodyItem};
+        let body = match definition {
+            Type::Struct { body } => body,
+            _ => return None,
+        };
+        let mut fields = Vec::new();
+        for item in body {
+            match item {
+                TypeBodyItem::Field(f) => fields.push(f),
+                // 方法绑定 = 携带行为的普通记录，不判定
+                TypeBodyItem::Binding(_) => return None,
+                _ => {}
+            }
         }
-    }
-    if fields.is_empty() {
-        return None;
-    }
-    // ast 名字提取（只认裸名；形参引用在声明处即裸名）
-    fn head_name(t: &Type) -> Option<&str> {
-        match t {
-            Type::Name { name, .. } => Some(name),
-            _ => None,
+        if fields.is_empty() {
+            return None;
         }
-    }
-    // 「返回自身」：return 的实参名字序列与形参表一致
-    let returns_self = |ret: &Type| -> bool {
-        let params_match = |args: &[Type]| -> bool {
-            args.len() == param_names.len()
-                && args
+        // ast 名字提取（只认裸名；形参引用在声明处即裸名）
+        fn head_name(t: &Type) -> Option<&str> {
+            match t {
+                Type::Name { name, .. } => Some(name),
+                _ => None,
+            }
+        }
+        // 「返回自身」：return 的实参名字序列与形参表一致
+        let returns_self = |ret: &Type| -> bool {
+            let params_match = |args: &[Type]| -> bool {
+                args.len() == param_names.len()
+                    && args
+                        .iter()
+                        .zip(param_names.iter())
+                        .all(|(a, p)| head_name(a) == Some(p.as_str()))
+            };
+            match ret {
+                Type::Generic { name: n, args, .. } => n == name && params_match(args),
+                // 非泛型：`Color` 或 `Self`
+                Type::Name { name: n, .. } => param_names.is_empty() && (n == name || n == "Self"),
+                _ => false,
+            }
+        };
+        let mut variants = Vec::new();
+        for f in fields {
+            let Type::Fn {
+                params,
+                return_type,
+            } = &f.ty
+            else {
+                return None;
+            };
+            if !returns_self(return_type) {
+                return None;
+            }
+            variants.push(super::environment::SumVariantDef {
+                name: f.name.clone(),
+                params: params
                     .iter()
-                    .zip(param_names.iter())
-                    .all(|(a, p)| head_name(a) == Some(p.as_str()))
-        };
-        match ret {
-            Type::Generic { name: n, args, .. } => n == name && params_match(args),
-            // 非泛型：`Color` 或 `Self`
-            Type::Name { name: n, .. } => param_names.is_empty() && (n == name || n == "Self"),
-            _ => false,
+                    .filter_map(|p| p.ty.clone())
+                    .map(|t| self.mono_from_annotation(&t))
+                    .collect(),
+            });
         }
-    };
-    let mut variants = Vec::new();
-    for f in fields {
-        let Type::Fn {
-            params,
-            return_type,
-        } = &f.ty
-        else {
-            return None;
-        };
-        if !returns_self(return_type) {
-            return None;
-        }
-        variants.push(super::environment::SumVariantDef {
-            name: f.name.clone(),
-            params: params
-                .iter()
-                .filter_map(|p| p.ty.clone())
-                .map(MonoType::from)
-                .collect(),
-        });
+        Some(variants)
     }
-    Some(variants)
 }
 
 /// 处理类型体中的类型表达式项，收集 const 约束到对应的 const binder。
@@ -4273,14 +4309,14 @@ impl TypeChecker {
         let MonoType::Generic { name, args, .. } = ty else {
             return;
         };
-        let Some(model) = self.env.record_models.get(name) else {
+        let Some(model) = self.env.record_model_by_nominal(name) else {
             return;
         };
         let actuals: Vec<Option<String>> = args
             .iter()
             .map(|arg| match arg {
-                MonoType::TypeRef(actual) => Some(actual.clone()),
-                MonoType::Generic { name, .. } => Some(name.clone()),
+                MonoType::TypeRef(actual) => Some(actual.bare().to_string()),
+                MonoType::Generic { name, .. } => Some(name.bare().to_string()),
                 _ => None,
             })
             .collect();
@@ -4303,6 +4339,14 @@ impl TypeChecker {
     ///
     /// Generic("Positive", [arg]) -> 尝试 PredicateResolver::try_resolve
     /// 如果不是已知的编译期谓词，检查是否是证明函数
+    /// 唯一有上下文的类型转换入口（L3-1b1a）：委托 ImportFace 单点实现。
+    pub fn mono_from_annotation(
+        &self,
+        ty: &crate::ast::Type,
+    ) -> MonoType {
+        self.env.import_face.mono_from_annotation(ty)
+    }
+
     fn resolve_type_annotation(
         &self,
         ty: &MonoType,
@@ -4326,7 +4370,7 @@ impl TypeChecker {
                 // 归档到 `Refined` 的收益：`resolves_type_name` 不必再特判，
                 // 且下游已有「`Refined` 取 `base` 做 unify」的成熟路径
                 // （inference/statements.rs），无需新机制。
-                if is_builtin_predicate_name(name) {
+                if is_builtin_predicate_name(name.bare()) {
                     if args.len() != 1 {
                         // 元数不对：二元形态（`Terminates(fn_ty, m)`）尚未实现
                         // （见 RFC-027a D1 park），多余实参不得静默忽略。
@@ -4367,17 +4411,17 @@ impl TypeChecker {
                     };
                 }
                 // 尝试原有 PredicateResolver（三值结果，#263）
-                match PredicateResolver::try_resolve(&self.env, name, args) {
+                match PredicateResolver::try_resolve(&self.env, name.bare(), args) {
                     Some(Ok(refined)) => return refined,
                     Some(Err(err)) => {
                         // #263：已注册谓词非法用法——汇入诊断，绝不静默放行
-                        diags.push(Self::refined_usage_diagnostic(name, &err));
+                        diags.push(Self::refined_usage_diagnostic(name.bare(), &err));
                         return ty.clone();
                     }
                     None => {} // 不是谓词——继续证明函数路径
                 }
                 // Phase 2.5: 检查是否是证明函数（源码定义的返回 Type 的函数）
-                match self.lookup_proof_fn_base_type(name, args) {
+                match self.lookup_proof_fn_base_type(name.bare(), args) {
                     Some(Ok(base)) => {
                         // 将参数转换为 ConstExpr
                         let const_args: Option<Vec<ConstExpr>> = args
@@ -4387,7 +4431,7 @@ impl TypeChecker {
                         match const_args {
                             Some(const_args) => {
                                 let constraint = ConstExpr::Call {
-                                    func: name.clone(),
+                                    func: name.bare().to_string(),
                                     args: const_args,
                                 };
                                 MonoType::Refined {
@@ -4397,15 +4441,16 @@ impl TypeChecker {
                             }
                             None => {
                                 // #263：证明函数实参形态不可转换——约束无法生成，汇入诊断（E1092）
-                                diags
-                                    .push(ErrorCodeDefinition::refined_arg_not_const(name).build());
+                                diags.push(
+                                    ErrorCodeDefinition::refined_arg_not_const(name.bare()).build(),
+                                );
                                 ty.clone()
                             }
                         }
                     }
                     Some(Err(err)) => {
                         // #263：证明函数实参个数不匹配——汇入诊断（E1093）
-                        diags.push(Self::refined_usage_diagnostic(name, &err));
+                        diags.push(Self::refined_usage_diagnostic(name.bare(), &err));
                         ty.clone()
                     }
                     None => ty.clone(), // 非证明函数——保持原样
@@ -4547,7 +4592,7 @@ impl TypeChecker {
             // 字面量值
             MonoType::Literal { value, .. } => Some(ConstExpr::Lit(value.clone())),
             // 变量引用
-            MonoType::TypeRef(name) => Some(ConstExpr::NamedVar(name.clone())),
+            MonoType::TypeRef(name) => Some(ConstExpr::NamedVar(name.clone().bare().to_string())),
             // 递归处理 Generic 中的参数
             MonoType::Generic { name: _, args } if args.len() == 1 => {
                 self.mono_type_to_const_expr(&args[0])
@@ -4604,7 +4649,7 @@ impl TypeChecker {
                 ..
             } => {
                 if let Expr::Var(name, _) = target.as_ref() {
-                    let mono_ty = MonoType::from(type_ann.clone());
+                    let mono_ty = self.mono_from_annotation(&type_ann.clone());
                     let resolved = self.resolve_type_annotation(&mono_ty, &mut sink);
                     if matches!(resolved, MonoType::Refined { .. }) {
                         names.insert(name.clone());

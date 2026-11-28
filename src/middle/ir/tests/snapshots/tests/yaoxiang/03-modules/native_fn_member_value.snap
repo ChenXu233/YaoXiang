@@ -10,22 +10,28 @@ module
     value v2: Fn { params: [TypeRef("Any")], return_type: Void } @block0
     value v3: Generic { name: "String", args: [] } @block0
     value v4: Fn { params: [Ref { mutable: false, inner: Generic { name: "String", args: [] } }], return_type: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } } @block0
-    value v5: TypeRef("?") @block0
-    value v6: TypeRef("?") @block0
+    value v5: Never @block0
+    value v6: Bool @block0
     value v7: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v8: Generic { name: "String", args: [] } @block0
     Load %0 <- nativefn(std.io.println)
     Load v1 <- string("member hello")
     Load v2 <- %0
     CallDyn v0 <- v2 [v1]
+    Drop v1
+    Drop v2
     MakeClosure %1 <- std.json.parse env=[] (def=d0)
     Load v3 <- string("true")
     Load v4 <- %1
     CallDyn %2 <- v4 [v3]
+    Drop v3
+    Drop v4
     Load v7 <- %2
     Call v6 <- string("std.result.is_ok") [v7] (def=d1)
+    Drop v7
     Load v8 <- string("json.parse as member value parses true")
     Call v5 <- string("std.assert.assert") [v6, v8] (def=d2)
+    Drop v8
     Drop %0
     Drop %1
     Drop %2

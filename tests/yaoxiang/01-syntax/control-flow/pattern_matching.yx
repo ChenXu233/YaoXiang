@@ -5,37 +5,37 @@
 main: () -> Void = {
     // 匹配第一个 arm
     r1 = match 1 {
-        1 => "one",
-        2 => "two",
-        _ => "other"
+        1 -> "one",
+        2 -> "two",
+        _ -> "other"
     }
 
     // 匹配第二个 arm
     r2 = match 2 {
-        1 => "one",
-        2 => "two",
-        _ => "other"
+        1 -> "one",
+        2 -> "two",
+        _ -> "other"
     }
 
     // 匹配通配符
     r3 = match 99 {
-        1 => "one",
-        2 => "two",
-        _ => "other"
+        1 -> "one",
+        2 -> "two",
+        _ -> "other"
     }
 
     // match 返回整数
     r4 = match 42 {
-        10 => 100,
-        42 => 420,
-        _ => 0
+        10 -> 100,
+        42 -> 420,
+        _ -> 0
     }
 
     // 字符串 match
     r5 = match "hello" {
-        "world" => "a",
-        "hello" => "b",
-        _ => "c"
+        "world" -> "a",
+        "hello" -> "b",
+        _ -> "c"
     }
 }
 

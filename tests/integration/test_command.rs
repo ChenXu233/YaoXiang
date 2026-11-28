@@ -954,7 +954,7 @@ main = () => {
 /// `[tool.test]` 解析失败（patterns 写成字符串而非列表）⇒ 显式报错 + 非零
 /// 退出（消息含配置路径与 toml 行号列号，RFC-015 §向后兼容性
 /// 015-configuration-system.md:282），不再静默回退默认发现面——红态实测
-/// （2026-10-31；红绿实录见 issue #520 与 09a 收口实录 3.23.2 节）：同夹具
+/// （2026-10-31；红绿实录见 issue #520 与 任务 3.23.2 的提交信息）：同夹具
 /// 输出 `No tests found.` 且退出 0，my_tests/ 下的测试静默失踪。
 #[test]
 fn test_test_command_broken_tool_test_config_fails_with_config_error() {

@@ -1,0 +1,22 @@
+// rfc004-binding-same-unit-named-args/main.yx
+// 覆盖: RFC-004 方法绑定形态（Temp.bump = bump[0]，**同单元**）+ 命名/位置实参
+// 验证: 绑定路径下 t.bump(k = 2.0) 与 t.bump(2.0) 同为 3.0 + 2.0 = 5.0
+//       （P0 形态 8c/8d：同单元命名=位置=5.0；跨单元绑定今天 E6006，不在本夹具）
+// 状态: ✅ 可运行（run 退出码 0）
+use std.assert
+
+Temp: Type = { v: Float }
+
+bump: (self: &Temp, k: Float) -> Float = (self, k) => {
+    return self.v + k
+}
+
+Temp.bump = bump[0]
+
+main = () => {
+    t = Temp(3.0)
+    by_name = t.bump(k = 2.0)
+    by_position = t.bump(2.0)
+    assert.assert(by_name == 5.0, "RFC-004 同单元绑定的命名实参应求值 3.0 + 2.0 = 5.0")
+    assert.assert(by_position == 5.0, "RFC-004 同单元绑定的位置实参应与命名同值 5.0")
+}

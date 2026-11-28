@@ -78,9 +78,9 @@ fn test_range_pattern_compiles_to_closed_ge_le_chain() {
     // Arrange — issue #405 夹具形态：Int scrutinee + 范围臂 + 字面量臂 + 通配兜底
     let source = r#"
 grade = match 85 {
-    80..89 => 1,
-    90 => 2,
-    _ => 0,
+    80..89 -> 1,
+    90 -> 2,
+    _ -> 0,
 }
 print(grade)
 "#;
@@ -109,8 +109,8 @@ fn test_range_pattern_negative_bounds_compile_to_negative_constants() {
     // Arrange — 负端点（parser 归一化为负 Int 常量）
     let source = r#"
 r = match -5 {
-    -5..-1 => 1,
-    _ => 0,
+    -5..-1 -> 1,
+    _ -> 0,
 }
 print(r)
 "#;

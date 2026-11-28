@@ -19,6 +19,7 @@ use crate::frontend::core::types::MonoType;
 use crate::util::diagnostic::Diagnostic;
 
 use super::environment::TypeEnvironment;
+use crate::frontend::core::types::identity::Nominal;
 use crate::util::diagnostic::ErrorCodeDefinition;
 
 /// 解析函数签名字符串为 MonoType
@@ -386,7 +387,13 @@ fn parse_param_with_name(
 
     // 变参：...args
     if param.starts_with("...") {
-        return Ok((MonoType::TypeRef("Any".to_string()), String::new()));
+        return Ok((
+            MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Any")))
+                    .expect("type name must be bare and non-empty"),
+            ),
+            String::new(),
+        ));
     }
 
     // 找到顶层的冒号（在括号/尖括号外面的第一个冒号）
@@ -473,7 +480,12 @@ fn parse_type_str_with_generics(
     }
 
     // 处理泛型类型实参：List(T)（SPEC §4.1 唯一语法）
-    let any = || MonoType::TypeRef("Any".to_string());
+    let any = || {
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Any")))
+                .expect("type name must be bare and non-empty"),
+        )
+    };
     if let Some(open_pos) = type_str.find('(') {
         let base = type_str[..open_pos].trim();
         if !base.is_empty() && type_str.ends_with(')') {
@@ -486,7 +498,10 @@ fn parse_type_str_with_generics(
                 return Ok(MonoType::Generic {
                     // #403：与注解同一落点判据——native 签名串里的 `List(...)`
                     // 同样落 `Vec` 面（单源 `MonoType::source_container_face`）。
-                    name: MonoType::source_container_face(base),
+                    name: Nominal::flat(AsRef::<str>::as_ref(
+                        &(MonoType::source_container_face(base)),
+                    ))
+                    .expect("type name must be bare and non-empty"),
                     args,
                 });
             }
@@ -496,7 +511,10 @@ fn parse_type_str_with_generics(
     // 检查是否是泛型参数引用
     if generic_params.iter().any(|gp| gp == type_str) {
         // 泛型参数 → TypeRef 占位，由 bind_generic_vars 绑到共享类型变量
-        return Ok(MonoType::TypeRef(type_str.to_string()));
+        return Ok(MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&(type_str)))
+                .expect("type name must be bare and non-empty"),
+        ));
     }
 
     // #391：容器类型是泛型类型构造器（SPEC type-system §4.1.1），裸名不是
@@ -532,11 +550,15 @@ fn parse_type_str_with_generics(
         "Char" => MonoType::Char,
         "String" => MonoType::make_string(),
         "Bytes" => MonoType::Generic {
-            name: "Bytes".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Bytes")))
+                .expect("type name must be bare and non-empty"),
             args: vec![],
         },
         "Any" => any(),
-        _ => MonoType::TypeRef(type_str.to_string()),
+        _ => MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&(type_str)))
+                .expect("type name must be bare and non-empty"),
+        ),
     };
     Ok(ty)
 }

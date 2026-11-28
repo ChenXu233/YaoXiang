@@ -20,7 +20,7 @@
 //! 证明前两条（索引、执行值）在旧口径下已经成立——「翻译结果语义不变」的对照证据。
 
 use super::driver::{make_script_project, run_multi};
-use crate::frontend::module::symbol::DefId;
+use crate::frontend::core::types::identity::DefId;
 use crate::middle::ir::ir::{ConstValue, Instruction, ModuleIR, Operand};
 
 /// 跑合并 IR 的 codegen + 解释器，返回 (全部全局槽位值, 执行错误)。
@@ -49,12 +49,11 @@ fn init_calls(module: &ModuleIR) -> Vec<(String, Option<DefId>)> {
         .init
         .iter()
         .filter_map(|i| match i {
-            Instruction::Call { func, def, .. } | Instruction::TailCall { func, def, .. } => {
-                match func {
-                    Operand::Const(ConstValue::String(n)) => Some((n.clone(), *def)),
-                    _ => None,
-                }
-            }
+            Instruction::Call {
+                func: Operand::Const(ConstValue::String(n)),
+                def,
+                ..
+            } => Some((n.clone(), *def)),
             _ => None,
         })
         .collect()

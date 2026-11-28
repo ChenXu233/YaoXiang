@@ -9,7 +9,8 @@
 //! - `stmt.rs` / `loops.rs`：语句与循环族（7.0.2）；
 //! - `globals.rs` / `module_ir.rs` / `const_eval.rs`：全局定义、模块装配与常量求值族（7.0.2）；
 //! - `curry.rs`：柯里化族（7.0.3）；
-//! - `expr/`：表达式 lowering（入口/总派发 + 按方法簇分的子模块，7.0.3）。
+//! - `expr/`：表达式 lowering（入口/总派发 + 按方法簇分的子模块，7.0.3）；
+//! - `synth.rs`：L3/L4 唯一 AST 合成边界与显式闭包环境（7c.1）。
 //!
 //! 结构体字段与方法的可见性（`pub(super)` / `pub(in crate::lower)` /
 //! `pub(in crate::middle)`）是跨文件拆分的机械需要：这些字段与方法原先私有于单个
@@ -23,8 +24,10 @@ mod loops;
 mod module_ir;
 mod query;
 mod regalloc;
+mod release;
 mod scope;
 mod stmt;
+mod synth;
 
 #[cfg(test)]
 mod tests;
@@ -32,23 +35,29 @@ mod tests;
 use crate::frontend::core::sema::layers::ownership::ReleasePlan;
 use crate::frontend::core::sema::types::OverloadResolutions;
 use crate::frontend::core::sema::{MonoType, TypeCheckResult};
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::middle::ir::ir::{ConstValue, FrameId, FunctionIR, Instruction, LocalSlot, Operand};
+use crate::middle::ir::ir::{ConstValue, FrameId, FunctionIR, Instruction, LocalSlot};
 use crate::util::diagnostic::Diagnostic;
+use crate::util::plan_id::PlanId;
 use crate::util::span::Span;
 use std::collections::HashMap;
 
+/// 词法绑定的运行时位置。
+#[derive(Debug, Clone, Copy)]
+pub(super) enum BindingLocation {
+    Local(usize),
+    Upvalue(usize),
+}
+
 /// 符号表条目
+///
+/// 与 WBS 4.9.8 时代的差别：本条目**不再**记录「绑定时写出的类型名」
+/// （`written_type`，F1 退役）。名字属于哪个单元由 typecheck 的 `ImportFace`
+/// 判定（D-5/D-6：绑定身份 + 导入面），IR 生成侧不再持有该信息的副本。
 #[derive(Debug, Clone)]
 pub(super) struct SymbolEntry {
-    local_idx: usize,
-    /// 该变量绑定时**写出**的类型名（`x: TempB = ..` 的注解原文，或构造器调用
-    /// `TempB(..)` / `ns.Temp(..)` 写出的名字）。WBS 4.9.8 / issue #465：
-    /// `MonoType` 对导入类型只留**定义侧裸名**，两单元的同名类型分不出来；
-    /// 「这个名字是从哪个单元带进来的」在本单元唯一有据的是 `use` 面
-    /// （[`AstToIrGenerator::imported_type_owner`]）——故把写出名留在符号表里，
-    /// 方法派发时据此归因到定义单元。
-    written_type: Option<String>,
+    location: BindingLocation,
 }
 
 /// AST 到 IR 的生成器
@@ -71,19 +80,24 @@ pub struct AstToIrGenerator {
     pub(super) temp_high_water: usize,
     /// 局部变量类型追踪（用于错误消息中显示实际类型）
     pub(super) local_var_types: HashMap<String, String>,
-    /// 顶层绑定**写出**的类型名（Script 形态的 `t = Temp(1.0)` 是全局槽位，
-    /// 与块内局部变量走同一条派发归因链——WBS 4.9.8 / issue #465）。
-    /// 键 = 本文件的绑定名（不含模块限定）。
-    pub(super) global_written_types: HashMap<String, String>,
+
     /// FFI 库绑定
     pub(super) ffi_libs: Vec<crate::middle::ir::ir::FfiLibBinding>,
     /// FFI 绑定 — 不透明类型或外部函数
     pub(super) ffi_bindings: Vec<crate::middle::ir::ir::FfiBinding>,
     /// 下一个库 ID
     pub(super) next_lib_id: usize,
-    /// 结构体定义映射（类型名 -> 字段列表）
-    /// 用于构造器调用时填充默认值
+    /// 结构体定义映射（写名/裸名 -> 字段列表）——构造器默认值、绑定重排、
+    /// AST 模式名等「只有写名」的查询用它。
     pub(super) struct_definitions: HashMap<String, Vec<crate::ast::StructField>>,
+    /// 结构体定义的**身份视图**（派生缓存）：Nominal → 字段列表。
+    ///
+    /// 与 [Self::struct_definitions] 同笔写入（唯一写入口
+    /// [Self::register_struct_definition]），内容逐字段相同、键多一层身份——
+    /// 不是第二权威。类型身份已知的查询（字段索引）走这张表，同一编译集里的
+    /// 同名类型（a.T / b.T）因此不再落到同一条目上（D64）。
+    pub(super) struct_definitions_by_identity:
+        HashMap<crate::frontend::core::types::identity::Nominal, Vec<crate::ast::StructField>>,
     /// RFC-010 和类型的类型参数名（载荷类型替换用，见 sum_type_variants）
     pub(super) sum_type_param_names: HashMap<String, Vec<String>>,
     /// 本模块声明的**全部**类型名（含泛型类型定义）。
@@ -178,14 +192,6 @@ pub struct AstToIrGenerator {
     /// [`ReleasePlan::consume`] 取条目（取即记账），故计划本体同时携带
     /// 「产出」与「已消费」两侧事实：结算（义务账本 W1090）读的是同一份账。
     pub(super) release_plan: ReleasePlan,
-    /// 待捕获的环境变量（由 spawn for 等设置，供下一个 Expr::Lambda 使用）
-    /// 在生成闭包函数体时，这些变量的当前寄存器值会被捕获到闭包环境中。
-    pub(super) pending_env_vars: Vec<Operand>,
-    /// #254：待捕获变量名（与 pending_env_vars 一一对应，供闭包体 Var 解析）
-    pub(super) pending_env_names: Vec<String>,
-    /// #254：当前闭包体的捕获表（变量名 → env 槽位索引）。
-    /// 生成闭包体期间设置，闭包体内 Var 命中则生成 LoadUpvalue。
-    pub(super) closure_captures: HashMap<String, usize>,
     /// RFC-029 #243：用户模块命名空间变量（别名 → 模块限定键）。
     /// 由 `use lib` / `use lib as l` 等整体导入填充，使 `lib.helper()` 在 IR 生成
     /// 阶段被识别为命名空间调用并解析为限定名 `lib.helper`（与 `qualify_module_ir`
@@ -209,21 +215,39 @@ pub struct AstToIrGenerator {
     /// generate_expr_ir 入口查表命中 → 值生成后包 CreateVariant。
     pub(super) existential_wraps: HashMap<Span, String>,
 
-    /// RFC-011b: 运算符派发点（span → 接收者类型名, 方法名, 取反）。
+    /// RFC-011b: 运算符派发点（span → typecheck 的派发记录）。
     /// `==`/`!=` 命中显式 Equal 实例化时，原生比较指令替换为方法调用。
-    pub(super) operator_dispatches: HashMap<Span, (String, String, bool)>,
-    /// RFC-011b：`?` 表达式的 Try 实现类型名（span 键控）
-    pub(super) try_expr_impls: HashMap<Span, String>,
+    ///
+    /// 记录里带 **IR 最终函数名**（D-8 的 `dispatch_name`）——调用名由 typecheck
+    /// 按接收者身份定死，本生成器直接消费，不再按短名二次查表（那等于按名字
+    /// 猜单元：同名类型分属两单元时谁先注册谁赢，静默错值）。
+    pub(super) operator_dispatches:
+        HashMap<Span, crate::frontend::core::sema::operator_interfaces::OperatorDispatch>,
+    /// RFC-011b：`?` 表达式的 Try 结算结果（span 键控）：实现**类型身份** +
+    /// 成功载荷 + 残余载荷，三样同出 sema 的 `query_try_impl` 一次结算。
+    pub(super) try_expr_impls:
+        HashMap<Span, crate::frontend::core::sema::operator_interfaces::TryExprInfo>,
     /// RFC-011a §3：方法级重载决议（**调用点 PlanId** 键控 → 混编 IR 名；
     /// RFC-039 D20 / WBS 4.5.2）。消费经 `OverloadResolutions::get`（命中即
     /// 记账），故本字段携带决议表本体（含消费台账），结算读的是同一份账。
     pub(super) overload_resolutions: OverloadResolutions,
-    /// 方法定义序（key → 已生成定义数）：混编名的定义侧计数
-    pub(super) method_def_ordinals: HashMap<String, usize>,
+    /// 方法定义身份（声明语句 PlanId）→ 混编 IR 名（RFC-011a §3 / WBS 7c.3）。
+    ///
+    /// typecheck 在登记重载候选的同一处产出（唯一权威来源）；本生成器**只读**
+    /// 消费——按定义遍历序二次推导的可变计数器已删。
+    pub(super) method_def_ir_names: HashMap<PlanId, String>,
 
     /// RFC-010: 和类型变体名表（类型名 → 变体名列表，声明序）。
     /// 变体构造调用（形态检测命中）据此取变体序号。
     pub(super) sum_type_variants: HashMap<String, Vec<(String, Vec<MonoType>)>>,
+    /// 和类型变体的**身份视图**（派生缓存）：Nominal → 变体表。
+    ///
+    /// 来源与 [Self::sum_type_variants] 同一份 `TypeCheckResult`：本地键经
+    /// [`crate::frontend::core::sema::types::TypeCheckResult::type_identity_index`]
+    /// 反查身份后同笔登记，不是第二权威。按类型身份匹配变体序（match/模式）
+    /// 走这张表，同名和类型不再串味（D64）。
+    pub(super) sum_variants_by_identity:
+        HashMap<crate::frontend::core::types::identity::Nominal, Vec<(String, Vec<MonoType>)>>,
     /// RFC-011a §6.2: 编译期类型收集——接口 → 实现类型列表（ImplementationProof
     /// 按类型名定序），变体分发与包装定序共用。
     pub(super) interface_variants: HashMap<String, Vec<String>>,
@@ -257,19 +281,19 @@ pub struct AstToIrGenerator {
     ///
     /// 每个函数体独立从 0 起算（`values` 表索引 = ValueId，必须稠密）；
     /// `NestedBodyGuard` 保存/还原它，三处语句级回收**不触碰**它
-    /// （09a §P7 7b.2 契约 §二 第 5 条）。
+    /// （提交信息）。
     pub(super) next_value: u32,
     /// 当前函数体的值表（`ValueId` 顺序；`take_body_values` 取走）。
     pub(super) cur_values: Vec<crate::middle::ir::ir::ValueInfo>,
     /// 当前函数体的值钉子（7b.4）：`(值, 具名槽)`——模式绑定复用值槽时登记，
-    /// 由分配器把该值固定落在该具名槽上（09a §P7 7b.4 契约 §二 C）。
+    /// 由分配器把该值固定落在该具名槽上（提交信息）。
     pub(super) cur_pins: Vec<(crate::middle::ir::ir::ValueId, usize)>,
     /// 当前基本块 label（7b.2 单块恒 0；多块随 7b.3 引入）。
     pub(super) cur_block_label: usize,
     /// 是否处于「有值表的函数体」生成期：`NestedBodyGuard` 里为 true，
     /// 模块 init / 顶层语句（`ModuleIR.init`，没有值表）为 false。
     /// false 时 `next_temp_reg` 退化为旧的 `Local` 槽分配，保证 init 序列
-    /// 与其 codegen 路径零变化（09a §P7 7b.2 契约 §二 第 1 条）。
+    /// 与其 codegen 路径零变化（提交信息）。
     pub(super) value_mode: bool,
 }
 
@@ -335,11 +359,11 @@ impl AstToIrGenerator {
             next_temp: 0,
             temp_high_water: 0,
             local_var_types: HashMap::new(),
-            global_written_types: HashMap::new(),
             ffi_libs: Vec::new(),
             ffi_bindings: Vec::new(),
             next_lib_id: 0,
             struct_definitions: HashMap::new(),
+            struct_definitions_by_identity: HashMap::new(),
 
             declared_type_names: std::collections::HashSet::new(),
             declared_fn_names: std::collections::HashSet::new(),
@@ -358,9 +382,6 @@ impl AstToIrGenerator {
             constraint_var_concrete_types: HashMap::new(),
             anon_function_irs: Vec::new(),
             release_plan: type_result.release_plan.clone(),
-            pending_env_vars: Vec::new(),
-            pending_env_names: Vec::new(),
-            closure_captures: HashMap::new(),
             user_namespaces: HashMap::new(),
             use_aliases: HashMap::new(),
             registry,
@@ -374,15 +395,15 @@ impl AstToIrGenerator {
             operator_dispatches: type_result
                 .operator_dispatches
                 .iter()
-                .map(|d| (d.span, (d.type_name.clone(), d.method.clone(), d.negate)))
+                .map(|dispatch| (dispatch.span, dispatch.clone()))
                 .collect(),
             try_expr_impls: type_result
                 .try_expr_impls
                 .iter()
-                .map(|(span, name)| (*span, name.clone()))
+                .map(|(span, identity)| (*span, identity.clone()))
                 .collect(),
             overload_resolutions: type_result.overload_resolutions.clone(),
-            method_def_ordinals: HashMap::new(),
+            method_def_ir_names: type_result.method_def_ir_names.clone(),
             sum_type_variants: type_result
                 .sum_types
                 .iter()
@@ -395,6 +416,37 @@ impl AstToIrGenerator {
                     )
                 })
                 .collect(),
+            // 同一份 sum_types 的身份视图：本地键 → 身份查 typecheck 同笔携带的
+            // **正向**映射（别名与定义名都有条目）；不切名字、不猜模块。
+            sum_variants_by_identity: {
+                let mut by_identity = HashMap::new();
+                for (local, variants) in &type_result.sum_types {
+                    // 身份来源：模块化身份走正向映射；**平坦名**（单文件/内建/幻名）
+                    // 不参与身份（映射只收带模块身份）——其身份就是本地键的平路径，
+                    // 与 local_type_key 同口径。
+                    let identity = match type_result.type_identity_by_local_key.get(local) {
+                        Some(identity) => identity.clone(),
+                        None => {
+                            let Some(flat) = Nominal::flat(local) else {
+                                debug_assert!(
+                                    false,
+                                    "和类型本地键 '{local}' 既无身份条目、也不是平坦名"
+                                );
+                                continue;
+                            };
+                            flat
+                        }
+                    };
+                    // 一身份多本地键（别名 + 定义名双登记）：变体表同源，首个为准。
+                    by_identity.entry(identity).or_insert_with(|| {
+                        variants
+                            .iter()
+                            .map(|v| (v.name.clone(), v.params.clone()))
+                            .collect::<Vec<(String, Vec<MonoType>)>>()
+                    });
+                }
+                by_identity
+            },
             sum_type_param_names: type_result
                 .sum_type_param_names
                 .iter()
@@ -441,6 +493,84 @@ impl AstToIrGenerator {
         self.script_mode = script_mode;
         self
     }
+
+    /// 登记类型定义的结构体字段（**唯一写入口**）。
+    ///
+    /// 两张视图同笔写：裸名表服务「只有写名」的查询（构造器默认值、绑定重排、
+    /// AST 模式名），身份表服务「身份已知」的查询（字段索引）——同一份字段
+    /// 内容、键多一层身份，不是第二权威（D64 §2.5 执行口径）。
+    pub(super) fn register_struct_definition(
+        &mut self,
+        identity: Nominal,
+        fields: Vec<crate::ast::StructField>,
+    ) {
+        debug_assert!(
+            !identity.bare().is_empty(),
+            "结构体定义必须有非空类型名（匿名结构不进这张表）"
+        );
+        // 先写身份视图（权威读者），再写裸名视图（写名兼容视图）——两笔同源，
+        // 任何新增写入都必须经本函数，绕写会让身份视图与裸名视图分叉。
+        self.struct_definitions_by_identity
+            .insert(identity.clone(), fields.clone());
+        self.struct_definitions
+            .insert(identity.bare().to_string(), fields);
+    }
+
+    /// 名义头的统一取法：TypeRef/Struct/Enum/Generic 四形态 + Ref 穿透。
+    ///
+    /// 身份只在 MonoType 的名义面上，字符串里没有身份——凡需要身份的查询都
+    /// 从这里取，不切名字（D64 §2.5 执行口径）。
+    pub(super) fn mono_nominal(ty: &MonoType) -> Option<&Nominal> {
+        match ty {
+            MonoType::TypeRef(n) => Some(n),
+            MonoType::Struct(s) => Some(&s.name),
+            MonoType::Enum(e) => Some(&e.name),
+            MonoType::Generic { name, .. } => Some(name),
+            MonoType::Ref { inner, .. } => Self::mono_nominal(inner),
+            _ => None,
+        }
+    }
+
+    /// 按身份取结构体字段表（身份视图；命中的就是该定义自己的字段序）。
+    pub(super) fn struct_fields_by_identity(
+        &self,
+        identity: &Nominal,
+    ) -> Option<&Vec<crate::ast::StructField>> {
+        self.struct_definitions_by_identity.get(identity)
+    }
+
+    /// 写名（本地键）→ 类型身份：构造调用在「无调用点结果类型表」的树上用它取
+    /// 字段表。
+    ///
+    /// 来源是 typecheck 在 [`crate::frontend::core::sema::TypeCheckResult`] 里
+    /// **同笔携带**的正向映射（`type_identity_by_local_key`，扫 `env.types` 产出，
+    /// 别名与定义名两个写名都有条目）；不遍历索引按 value 反查、不用写名猜模块。
+    pub(super) fn identity_for_written(
+        &self,
+        written: &str,
+    ) -> Option<Nominal> {
+        self.type_result
+            .as_ref()?
+            .type_identity_by_local_key
+            .get(written)
+            .cloned()
+    }
+
+    /// 按身份取和类型变体表；平路径身份（单文件/本地键同名）才回退本地键。
+    /// 带模块的身份**不得**回退裸名——那正是同名串味（D64）。
+    pub(super) fn sum_variants_for(
+        &self,
+        identity: &Nominal,
+    ) -> Option<&Vec<(String, Vec<MonoType>)>> {
+        if let Some(variants) = self.sum_variants_by_identity.get(identity) {
+            return Some(variants);
+        }
+        if identity.module().is_empty() {
+            self.sum_type_variants.get(identity.bare())
+        } else {
+            None
+        }
+    }
 }
 
 /// 这是编译器流程中的关键入口点：
@@ -469,7 +599,9 @@ pub fn generate_ir(
 pub fn generate_ir_with_context(
     ast: &crate::ast::Module,
     result: &crate::frontend::core::sema::TypeCheckResult,
-    cross_file_types: &[&crate::ast::Module],
+    // 跨文件类型上下文：(单元键, AST)。键与 typecheck 的模块键同一份，
+    // 身份登记因此与 typecheck 写的身份逐字相同（D64；空串 = 无模块键形态）。
+    cross_file_types: &[(&str, &crate::ast::Module)],
     global_layout: &[(String, usize)],
     // 本文件顶层绑定的槽位起始号（编排器分配，保证各文件区间不相交）
     global_slot_base: usize,

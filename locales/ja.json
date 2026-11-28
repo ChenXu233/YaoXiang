@@ -139,6 +139,8 @@
     "example": "x = 1 @ 2;",
     "error_output": "error[E0011]: 予期しないトークン\n --> example.yx:1:7\n  |\n1 | x = 1 @ 2;\n  |       ^ 予期しないトークン '@'"
   },
+  "E0011.branch_arrow.message": "=> は -> にしてください（match の分岐矢印は ->、=> は lambda 専用です）",
+  "E0011.branch_arrow.help": "match の分岐矢印を '->' に変えてください。'->' が分岐矢印で、'=>' は lambda 専用です",
   "E0012": {
     "title": "無効な構文",
     "message": "式または文に構文エラーがあります",

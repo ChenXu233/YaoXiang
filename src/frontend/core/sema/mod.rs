@@ -7,6 +7,8 @@
 //! - RFC-004/010/011 支撑
 
 use crate::ast::Module;
+use crate::frontend::core::types::identity::DefPath;
+use crate::frontend::core::types::identity::Nominal;
 
 // ============ 子模块声明 ============
 
@@ -24,6 +26,9 @@ pub mod semantic_db;
 
 // 类型环境
 pub mod environment;
+
+// 导入面（WBS 4.9.10 D-5）：类型名 → 提供模块的唯一来源
+pub mod import_face;
 
 // RFC-011b: 运算符接口与实现登记表
 pub mod operator_interfaces;
@@ -160,7 +165,10 @@ pub fn add_builtin_types(env: &mut environment::TypeEnvironment) {
     for resource_type in &["FilePath", "HttpUrl", "DBUrl", "Console"] {
         env.types.insert(
             resource_type.to_string(),
-            PolyType::mono(MonoType::TypeRef(resource_type.to_string())),
+            PolyType::mono(MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&(resource_type)))
+                    .expect("type name must be bare and non-empty"),
+            )),
         );
     }
 }
@@ -180,10 +188,21 @@ pub fn add_native_function_types(
     use crate::frontend::module::ExportKind;
 
     let registry = ModuleRegistry::with_std();
+    // std **已声明**类型名 → 模块键（D64）：native 签名串里的 `Result(T, E)` /
+    // `Json` / `Spanned` 必须与注解侧解析到同一身份，否则「按规范写的调用」
+    // 会在 unify 处被判异（std 声明类型在单文件也带模块身份）。幻名
+    // （File / Error）与类型族不在此表，保持平路径。
+    let std_declared = registry.std_type_origins();
+    let resolve_std_identity = |written: &str| -> Option<Nominal> {
+        std_declared
+            .iter()
+            .find(|(name, _)| name == written)
+            .and_then(|(name, module)| Nominal::item(module, name))
+    };
 
     // 遍历所有 std 子模块，自动注册导出的函数
     for submodule_name in registry.std_submodule_names() {
-        let module_path = format!("std.{}", submodule_name);
+        let module_path = DefPath::item("std", &submodule_name).project();
         if let Some(module) = registry.get(&module_path) {
             for export in module.exports.values() {
                 // 使用签名字符串解析出正确的函数类型
@@ -195,7 +214,11 @@ pub fn add_native_function_types(
                             // 注册进 native_signatures，劫持消费者调用点（std.test 首次行使暴露）
                             continue;
                         }
-                        signature::parse_signature(&export.signature, env)?
+                        let parsed = signature::parse_signature(&export.signature, env)?;
+                        crate::frontend::core::types::substitute::resolve_nominal_identities(
+                            &parsed,
+                            &resolve_std_identity,
+                        )
                     }
                     _ => continue,
                 };
@@ -263,7 +286,8 @@ pub fn add_native_function_types(
     env.add_var(
         "Native".to_string(),
         PolyType::mono(MonoType::Struct(crate::frontend::core::types::StructType {
-            name: "Native".to_string(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Native")))
+                .expect("type name must be bare and non-empty"),
             fields: vec![
                 crate::frontend::core::types::mono::StructFieldInfo {
                     name: "c".to_string(),

@@ -1,25 +1,51 @@
 # CNB（备份仓库）侧的全部镜像逻辑。
 #
-# 两条方向，触发方式按「有没有事件可用」分别选：
+# 三个方向，触发方式按「事件可不可信」分别选：
 #  1) CNB 上 open 的合并请求（多数由 NPC 发起）-> GitHub 的 cnb/pr-<编号> 分支与 PR。
-#     新建 / 重开 / 源分支推送都是 CNB 自己的事件，用 pull_request.target 即刻镜像。
-#     GitHub 侧的合并与关闭由 .github/workflows/cnb-sync.yml 按需戳 api_trigger 回关。
-#  2) GitHub 主仓库的 dev/main 与全部 tag -> CNB。GitHub 的 push 由
+#     pull_request.target 属可信事件，直接镜像。GitHub 侧合并/关闭由
+#     .github/workflows/cnb-sync.yml 按需戳 api_trigger 回关。
+#     PR 事件的配置取自**目标分支**的 .cnb.yml（CNB 文档「代码版本选择」），所以
+#     目标 dev 与目标 main 的 PR 要各挂一份 pull_request.target：NPC 默认以默认分支
+#     main 为 base，只写 dev 会漏掉这一半，这些 PR 只能等每日兜底（最长晚 24 小时）。
+#  2) CNB 上 open 的 Issue -> GitHub 同名 Issue。
+#     issue.open 事件直接镜像（与 PR 的 pull_request.target 同构）。
+#     GitHub 上对应 Issue 关闭后由 .github/workflows/cnb-sync.yml 戳 api_trigger 回关 CNB。
+#  3) GitHub 主仓库的 dev/main 与全部 tag -> CNB。GitHub 的 push 由
 #     .github/workflows/cnb-sync.yml 按需戳 api_trigger 增量回灌。
 #
-# 两个方向的按需通知都经 api_trigger 这一个入口，用构建变量 MIRROR_SCOPE 区分：
-#  - repos：只回灌主干（GitHub push 触发）
-#  - prs  ：只处理 PR 镜像与回关（GitHub 上镜像 PR 被合并/关闭触发）
-#  - 空   ：页面手动点运行时两个方向都跑
+# 三个方向的按需通知都经 api_trigger 这一个入口，用构建变量 MIRROR_SCOPE 区分：
+#  - repos  ：只回灌主干（GitHub push 触发）
+#  - prs    ：只处理 PR 镜像与回关（GitHub 上镜像 PR 被合并/关闭触发）
+#  - issues ：只处理 Issue 镜像与回关（GitHub 上镜像 Issue 关闭触发）
+#  - 空     ：页面手动点运行时三个方向都跑
 #
 # 定时只作兜底，按天一次：防 GitHub Actions 被禁用、CNB_TOKEN 轮换遗漏等导致
 # 按需链路整体失效。日常同步不靠它，故不必更频繁。
 #
 # GitHub 凭据放在密钥仓库 ChenXu233/secrets 的 yaoxiang-pr-sync.yml（GH_USER / GH_TOKEN）。
-# pull_request.target 属可信事件（代码版本取自目标分支、不做触发者权限检查），可以引用密钥；
-# pull_request / pull_request.comment 等不可信事件不在此列。
+# 可信事件（pull_request.target / api_trigger / crontab）可直接引用密钥；
+# issue.open 属不可信事件，密钥文件需声明 allow_events 含 issue.open 才能被它引用
+# （密钥持有人在 ChenXu233/secrets 侧一次性配置，不在本仓库内）。
 #
 # 镜像任务只做 git 与 curl，不吃 CPU：显式声明 cpus: 1，否则默认按 8 核计费。
+
+# issue.* 事件按平台要求挂靠在顶层 $ 下。
+# issue.open 直接镜像，与 dev 下的 pull_request.target 同构；脚本来自默认分支受控代码，
+# 触发者传进来的标题/正文由脚本用 jq --arg 转义，不进 shell，不构成注入面。
+$:
+  # 只监听创建：本脚本回关 CNB Issue 时会触发 issue.close，若监听它会再次进入镜像，
+  # 造成无意义的连带构建。关闭方向以 GitHub 为准（GitHub issues.closed -> 回关 CNB），
+  # 与 PR 镜像「GitHub 侧合并/关闭为准」一致。
+  issue.open:
+    - name: mirror-issue-on-open
+      runner:
+        cpus: 1
+      imports:
+        - https://cnb.cool/ChenXu233/secrets/-/blob/main/yaoxiang-pr-sync.yml
+      stages:
+        - name: mirror-issues
+          script: bash .cnb/scripts/mirror-issues.sh
+
 dev:
   # 事件驱动：PR 新建 / 重开 / 源分支有新提交 -> 立刻镜像这一条。
   pull_request.target:
@@ -32,7 +58,7 @@ dev:
         - name: mirror-prs
           script: bash .cnb/scripts/mirror-prs.sh
 
-  # 兜底：按天一次，两个方向各跑一遍。幂等——已在 GitHub 合并的会回关 CNB PR，
+  # 兜底：按天一次，三个方向各跑一遍。幂等——已在 GitHub 合并/关闭的会回关 CNB，
   # 无新提交的直接跳过，GitHub 主干无变化则 push 报 everything up-to-date。
   "crontab: 17 3 * * *":
     - name: daily-mirror
@@ -45,10 +71,12 @@ dev:
           script: bash .cnb/scripts/mirror-repos.sh
         - name: mirror-prs
           script: bash .cnb/scripts/mirror-prs.sh
+        - name: mirror-issues
+          script: bash .cnb/scripts/mirror-issues.sh
 
   # api_trigger：GitHub Actions 经 OpenAPI 戳这里做按需镜像（StartBuild，
   # event=api_trigger，构建变量 MIRROR_SCOPE 指定方向）。页面手动运行不带
-  # MIRROR_SCOPE，则两个方向都跑。
+  # MIRROR_SCOPE，则三个方向都跑。
   api_trigger:
     - name: on-demand-mirror
       runner:
@@ -68,3 +96,23 @@ dev:
               prs|all)  bash .cnb/scripts/mirror-prs.sh ;;
               *)        echo "本轮跳过 PR 镜像（scope=${MIRROR_SCOPE}）" ;;
             esac
+        - name: mirror-issues
+          script: |
+            case "${MIRROR_SCOPE:-all}" in
+              issues|all) bash .cnb/scripts/mirror-issues.sh ;;
+              *)          echo "本轮跳过 Issue 镜像（scope=${MIRROR_SCOPE}）" ;;
+            esac
+
+# 目标 main 的合并请求：同样即时镜像。
+# CNB 按**目标分支**取 PR 事件的配置，main 上没有这一段时，打向 main 的 PR 不产生
+# 任何构建——只能等每日兜底，最长晚 24 小时。与 dev 段的差别只在触发条件，阶段相同。
+main:
+  pull_request.target:
+    - name: mirror-pr-on-event-main
+      runner:
+        cpus: 1
+      imports:
+        - https://cnb.cool/ChenXu233/secrets/-/blob/main/yaoxiang-pr-sync.yml
+      stages:
+        - name: mirror-prs
+          script: bash .cnb/scripts/mirror-prs.sh

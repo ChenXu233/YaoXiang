@@ -14,57 +14,57 @@ module
     values_total=66
     value v0: Int(64) @block0
     value v1: Int(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Never @block0
     value v3: Bool @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
     value v6: Generic { name: "String", args: [] } @block0
     value v7: Int(64) @block0
     value v8: Int(64) @block0
-    value v9: TypeRef("?") @block0
+    value v9: Never @block0
     value v10: Bool @block0
     value v11: Int(64) @block0
     value v12: Int(64) @block0
     value v13: Generic { name: "String", args: [] } @block0
     value v14: Int(64) @block0
     value v15: Int(64) @block0
-    value v16: TypeRef("?") @block0
+    value v16: Never @block0
     value v17: Bool @block0
     value v18: Int(64) @block0
     value v19: Int(64) @block0
     value v20: Generic { name: "String", args: [] } @block0
     value v21: Int(64) @block0
     value v22: Int(64) @block0
-    value v23: TypeRef("?") @block0
+    value v23: Never @block0
     value v24: Bool @block0
     value v25: Int(64) @block0
     value v26: Int(64) @block0
     value v27: Generic { name: "String", args: [] } @block0
     value v28: Int(64) @block0
     value v29: Int(64) @block0
-    value v30: TypeRef("?") @block0
+    value v30: Never @block0
     value v31: Bool @block0
     value v32: Int(64) @block0
     value v33: Int(64) @block0
     value v34: Generic { name: "String", args: [] } @block0
     value v35: Int(64) @block0
     value v36: Int(64) @block0
-    value v37: TypeRef("?") @block0
+    value v37: Never @block0
     value v38: Bool @block0
     value v39: Generic { name: "String", args: [] } @block0
     value v40: Int(64) @block0
     value v41: Int(64) @block0
-    value v42: TypeRef("?") @block0
+    value v42: Never @block0
     value v43: Bool @block0
     value v44: Generic { name: "String", args: [] } @block0
     value v45: Int(64) @block0
     value v46: Int(64) @block0
-    value v47: TypeRef("?") @block0
+    value v47: Never @block0
     value v48: Bool @block0
     value v49: Generic { name: "String", args: [] } @block0
     value v50: Int(64) @block0
     value v51: Int(64) @block0
-    value v52: TypeRef("?") @block0
+    value v52: Never @block0
     value v53: Bool @block0
     value v54: Generic { name: "String", args: [] } @block0
     value v55: Int(64) @block0
@@ -73,7 +73,7 @@ module
     value v58: Int(64) @block0
     value v59: Int(64) @block0
     value v60: Int(64) @block0
-    value v61: TypeRef("?") @block0
+    value v61: Never @block0
     value v62: Bool @block0
     value v63: Int(64) @block0
     value v64: Int(64) @block0
@@ -86,6 +86,7 @@ module
     Eq v3 <- v4, v5
     Load v6 <- string("10 + 20 == 30")
     Call v2 <- string("std.assert.assert") [v3, v6] (def=d0)
+    Drop v6
     Load v7 <- int(100)
     Load v8 <- int(30)
     Sub %1 <- v7, v8
@@ -94,6 +95,7 @@ module
     Eq v10 <- v11, v12
     Load v13 <- string("100 - 30 == 70")
     Call v9 <- string("std.assert.assert") [v10, v13] (def=d0)
+    Drop v13
     Load v14 <- int(6)
     Load v15 <- int(7)
     Mul %2 <- v14, v15
@@ -102,6 +104,7 @@ module
     Eq v17 <- v18, v19
     Load v20 <- string("6 * 7 == 42")
     Call v16 <- string("std.assert.assert") [v17, v20] (def=d0)
+    Drop v20
     Load v21 <- int(42)
     Load v22 <- int(2)
     Div %3 <- v21, v22
@@ -110,6 +113,7 @@ module
     Eq v24 <- v25, v26
     Load v27 <- string("42 / 2 == 21")
     Call v23 <- string("std.assert.assert") [v24, v27] (def=d0)
+    Drop v27
     Load v28 <- int(10)
     Load v29 <- int(3)
     Mod %4 <- v28, v29
@@ -118,30 +122,35 @@ module
     Eq v31 <- v32, v33
     Load v34 <- string("10 % 3 == 1")
     Call v30 <- string("std.assert.assert") [v31, v34] (def=d0)
+    Drop v34
     Load v35 <- int(5)
     Load v36 <- int(3)
     Gt %5 <- v35, v36
     Load v38 <- %5
     Load v39 <- string("5 > 3")
     Call v37 <- string("std.assert.assert") [v38, v39] (def=d0)
+    Drop v39
     Load v40 <- int(3)
     Load v41 <- int(5)
     Lt %6 <- v40, v41
     Load v43 <- %6
     Load v44 <- string("3 < 5")
     Call v42 <- string("std.assert.assert") [v43, v44] (def=d0)
+    Drop v44
     Load v45 <- int(42)
     Load v46 <- int(42)
     Eq %7 <- v45, v46
     Load v48 <- %7
     Load v49 <- string("42 == 42")
     Call v47 <- string("std.assert.assert") [v48, v49] (def=d0)
+    Drop v49
     Load v50 <- int(42)
     Load v51 <- int(0)
     Ne %8 <- v50, v51
     Load v53 <- %8
     Load v54 <- string("42 != 0")
     Call v52 <- string("std.assert.assert") [v53, v54] (def=d0)
+    Drop v54
     Load v59 <- int(10)
     Load v60 <- int(20)
     Add v57 <- v59, v60
@@ -154,6 +163,7 @@ module
     Eq v62 <- v63, v64
     Load v65 <- string("(10+20)*2-5 == 55")
     Call v61 <- string("std.assert.assert") [v62, v65] (def=d0)
+    Drop v65
     Drop %0
     Drop %1
     Drop %2

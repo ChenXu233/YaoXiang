@@ -2,46 +2,50 @@ module
   fn main() -> Void
     locals_total=3
     values_total=20
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
-    value v2: TypeRef("?") @block0
+    value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Generic { name: "String", args: [] } @block0
-    value v5: TypeRef("?") @block0
+    value v5: Never @block0
     value v6: Bool @block0
-    value v7: TypeRef("?") @block0
+    value v7: Int(64) @block0
     value v8: Int(64) @block0
     value v9: Generic { name: "String", args: [] } @block0
-    value v10: TypeRef("?") @block0
+    value v10: Never @block0
     value v11: Bool @block0
-    value v12: TypeRef("?") @block0
+    value v12: Int(64) @block0
     value v13: Int(64) @block0
     value v14: Generic { name: "String", args: [] } @block0
-    value v15: TypeRef("?") @block0
+    value v15: Never @block0
     value v16: Bool @block0
-    value v17: TypeRef("?") @block0
-    value v18: TypeRef("?") @block0
+    value v17: Int(64) @block0
+    value v18: Int(64) @block0
     value v19: Generic { name: "String", args: [] } @block0
     Call v2 <- string("std.time.now") [] (def=d0)
     Load v3 <- int(0)
     Gt v1 <- v2, v3
     Load v4 <- string("now > 0")
     Call v0 <- string("std.assert.assert") [v1, v4] (def=d1)
+    Drop v4
     Call v7 <- string("std.time.timestamp") [] (def=d2)
     Load v8 <- int(0)
     Gt v6 <- v7, v8
     Load v9 <- string("timestamp > 0")
     Call v5 <- string("std.assert.assert") [v6, v9] (def=d1)
+    Drop v9
     Call v12 <- string("std.time.timestamp_ms") [] (def=d3)
     Load v13 <- int(0)
     Gt v11 <- v12, v13
     Load v14 <- string("timestamp_ms > 0")
     Call v10 <- string("std.assert.assert") [v11, v14] (def=d1)
+    Drop v14
     Call v17 <- string("std.time.timestamp_ms") [] (def=d3)
     Call v18 <- string("std.time.timestamp") [] (def=d2)
     Ge v16 <- v17, v18
     Load v19 <- string("ms >= s")
     Call v15 <- string("std.assert.assert") [v16, v19] (def=d1)
+    Drop v19
     Ret v15
   init (locals=0)
     Call %0 <- string("main") [] (def=d4)

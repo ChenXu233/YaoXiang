@@ -4,7 +4,7 @@ module
   fn Vec3.add(Ref { mutable: false, inner: TypeRef("Vec3") }, Ref { mutable: false, inner: TypeRef("Vec3") }) -> TypeRef("Vec3")
     locals_total=7
     values_total=16
-    value v0: TypeRef("Vec3") @block0
+    value v0: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Add"] }) @block0
     value v1: TypeRef("?") @block0
     value v2: TypeRef("?") @block0
     value v3: TypeRef("?") @block0
@@ -44,12 +44,14 @@ module
     slot[1] b : Int(64) @depth1
     locals_total=5
     values_total=3
-    value v0: TypeRef("?") @block0
+    value v0: TypeRef("T") @block0
     value v1: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Add"] }) @block0
     value v2: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Add"] }) @block0
     Load v1 <- %0
     Load v2 <- %1
     Call v0 <- string("T.add") [v1, v2] (def=_)
+    Drop v1
+    Drop v2
     Ret v0
   fn main() -> Void
     slot[0] i : Int(64) @depth1
@@ -60,7 +62,7 @@ module
     values_total=21
     value v0: Int(64) @block0
     value v1: Int(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Never @block0
     value v3: Bool @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
@@ -73,7 +75,7 @@ module
     value v12: Float(64) @block0
     value v13: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Add"] }) @block0
     value v14: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Add"] }) @block0
-    value v15: TypeRef("?") @block0
+    value v15: Never @block0
     value v16: Bool @block0
     value v17: TypeRef("?") @block0
     value v18: Float(64) @block0
@@ -87,6 +89,7 @@ module
     Eq v3 <- v4, v5
     Load v6 <- string("constrained generic over Int")
     Call v2 <- string("std.assert.assert") [v3, v6] (def=d2)
+    Drop v6
     Load v7 <- float(4607182418800017408)
     Load v8 <- float(4611686018427387904)
     Load v9 <- float(4613937818241073152)
@@ -98,12 +101,16 @@ module
     Load v13 <- %1
     Load v14 <- %2
     Call %3 <- string("sum") [v13, v14] (def=d1)
+    Drop v13
+    Drop v14
     Load v19 <- %3
     LoadField v17 <- v19.0
+    Drop v19
     Load v18 <- float(4617315517961601024)
     Eq v16 <- v17, v18
     Load v20 <- string("constrained generic over Vec3")
     Call v15 <- string("std.assert.assert") [v16, v20] (def=d2)
+    Drop v20
     Drop %1
     Drop %2
     Drop %0

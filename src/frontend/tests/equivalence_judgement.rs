@@ -12,8 +12,7 @@ use crate::frontend::compiler::Compiler;
 /// δ 别名（`Five: Type = 5`）在**调用实参位**与字面量类型 `int64::5` 相遇。
 ///
 /// 声明位不参与：`Array(Int, Five)` 作变量注解时，容器由 `check_var_stmt_inner` 的
-/// 元素槽/长度槽阶梯定型，容器本身不比 unify，故本形态必须落在实参位（见 09a §P6
-/// 6.9.3d 的探针结论）。
+/// 元素槽/长度槽阶梯定型，容器本身不比 unify，故本形态必须落在实参位（探针结论见任务 6.9.3d 的提交信息）。
 const ALIAS_ACTUAL_ARG: &str = concat!(
     "Five: Type = 5\n",
     "\n",

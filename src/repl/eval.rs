@@ -366,13 +366,10 @@ impl Evaluator {
                 continue;
             }
 
-            let type_str = if (global.type_id as usize) < module.type_table.len() {
-                format!("{:?}", module.type_table[global.type_id as usize])
-            } else {
-                "unknown".to_string()
-            };
-
-            self.context.define_variable(global.name.clone(), type_str);
+            // 全局类型与函数签名同载体（MonoType）：直接展示，
+            // 不再把类型号当 type_table 下标（那是两套编号，撞上就报错类型）。
+            self.context
+                .define_variable(global.name.clone(), format!("{:?}", global.ty));
         }
     }
 

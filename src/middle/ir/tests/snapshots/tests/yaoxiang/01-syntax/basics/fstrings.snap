@@ -22,57 +22,57 @@ module
     values_total=121
     value v0: Generic { name: "String", args: [] } @block0
     value v1: Generic { name: "String", args: [] } @block0
-    value v2: TypeRef("?") @block0
+    value v2: Never @block0
     value v3: Bool @block0
     value v4: Generic { name: "String", args: [] } @block0
     value v5: Generic { name: "String", args: [] } @block0
     value v6: Generic { name: "String", args: [] } @block0
     value v7: Int(64) @block0
     value v8: Generic { name: "String", args: [] } @block0
-    value v9: TypeRef("?") @block0
+    value v9: Never @block0
     value v10: Bool @block0
     value v11: Generic { name: "String", args: [] } @block0
     value v12: Generic { name: "String", args: [] } @block0
     value v13: Generic { name: "String", args: [] } @block0
-    value v14: TypeRef("?") @block0
+    value v14: Never @block0
     value v15: Bool @block0
     value v16: Generic { name: "String", args: [] } @block0
     value v17: Generic { name: "String", args: [] } @block0
     value v18: Generic { name: "String", args: [] } @block0
-    value v19: TypeRef("?") @block0
+    value v19: Never @block0
     value v20: Bool @block0
     value v21: Generic { name: "String", args: [] } @block0
     value v22: Generic { name: "String", args: [] } @block0
     value v23: Generic { name: "String", args: [] } @block0
     value v24: Int(64) @block0
     value v25: Generic { name: "String", args: [] } @block0
-    value v26: TypeRef("?") @block0
+    value v26: Never @block0
     value v27: Bool @block0
     value v28: Generic { name: "String", args: [] } @block0
     value v29: Generic { name: "String", args: [] } @block0
     value v30: Generic { name: "String", args: [] } @block0
     value v31: Int(64) @block0
     value v32: Generic { name: "String", args: [] } @block0
-    value v33: TypeRef("?") @block0
+    value v33: Never @block0
     value v34: Bool @block0
     value v35: Generic { name: "String", args: [] } @block0
     value v36: Generic { name: "String", args: [] } @block0
     value v37: Generic { name: "String", args: [] } @block0
-    value v38: TypeRef("?") @block0
+    value v38: Never @block0
     value v39: Bool @block0
     value v40: Generic { name: "String", args: [] } @block0
     value v41: Generic { name: "String", args: [] } @block0
     value v42: Generic { name: "String", args: [] } @block0
     value v43: Int(64) @block0
     value v44: Generic { name: "String", args: [] } @block0
-    value v45: TypeRef("?") @block0
+    value v45: Never @block0
     value v46: Bool @block0
     value v47: Generic { name: "String", args: [] } @block0
     value v48: Generic { name: "String", args: [] } @block0
     value v49: Generic { name: "String", args: [] } @block0
     value v50: Float(64) @block0
     value v51: Generic { name: "String", args: [] } @block0
-    value v52: TypeRef("?") @block0
+    value v52: Never @block0
     value v53: Bool @block0
     value v54: Generic { name: "String", args: [] } @block0
     value v55: Generic { name: "String", args: [] } @block0
@@ -80,63 +80,63 @@ module
     value v57: Int(64) @block0
     value v58: Int(64) @block0
     value v59: Generic { name: "String", args: [] } @block0
-    value v60: TypeRef("?") @block0
+    value v60: Never @block0
     value v61: Bool @block0
     value v62: Generic { name: "String", args: [] } @block0
     value v63: Generic { name: "String", args: [] } @block0
     value v64: Generic { name: "String", args: [] } @block0
     value v65: Int(64) @block0
     value v66: Generic { name: "String", args: [] } @block0
-    value v67: TypeRef("?") @block0
+    value v67: Never @block0
     value v68: Bool @block0
     value v69: Generic { name: "String", args: [] } @block0
     value v70: Generic { name: "String", args: [] } @block0
     value v71: Generic { name: "String", args: [] } @block0
-    value v72: TypeRef("?") @block0
+    value v72: Never @block0
     value v73: Bool @block0
-    value v74: TypeRef("?") @block0
+    value v74: Generic { name: "String", args: [] } @block0
     value v75: Generic { name: "String", args: [] } @block0
     value v76: Int(64) @block0
     value v77: Generic { name: "String", args: [] } @block0
     value v78: Generic { name: "String", args: [] } @block0
-    value v79: TypeRef("?") @block0
+    value v79: Never @block0
     value v80: Bool @block0
-    value v81: TypeRef("?") @block0
+    value v81: Generic { name: "String", args: [] } @block0
     value v82: Generic { name: "String", args: [] } @block0
     value v83: Int(64) @block0
     value v84: Generic { name: "String", args: [] } @block0
     value v85: Generic { name: "String", args: [] } @block0
-    value v86: TypeRef("?") @block0
+    value v86: Never @block0
     value v87: Bool @block0
-    value v88: TypeRef("?") @block0
+    value v88: Generic { name: "String", args: [] } @block0
     value v89: Generic { name: "String", args: [] } @block0
     value v90: Int(64) @block0
     value v91: Generic { name: "String", args: [] } @block0
     value v92: Generic { name: "String", args: [] } @block0
-    value v93: TypeRef("?") @block0
+    value v93: Never @block0
     value v94: Bool @block0
-    value v95: TypeRef("?") @block0
+    value v95: Generic { name: "String", args: [] } @block0
     value v96: Generic { name: "String", args: [] } @block0
     value v97: Int(64) @block0
     value v98: Generic { name: "String", args: [] } @block0
     value v99: Generic { name: "String", args: [] } @block0
-    value v100: TypeRef("?") @block0
+    value v100: Never @block0
     value v101: Bool @block0
-    value v102: TypeRef("?") @block0
+    value v102: Generic { name: "String", args: [] } @block0
     value v103: Generic { name: "String", args: [] } @block0
     value v104: Float(64) @block0
     value v105: Generic { name: "String", args: [] } @block0
     value v106: Generic { name: "String", args: [] } @block0
-    value v107: TypeRef("?") @block0
+    value v107: Never @block0
     value v108: Bool @block0
-    value v109: TypeRef("?") @block0
+    value v109: Generic { name: "String", args: [] } @block0
     value v110: Generic { name: "String", args: [] } @block0
     value v111: Generic { name: "String", args: [] } @block0
     value v112: Generic { name: "String", args: [] } @block0
     value v113: Generic { name: "String", args: [] } @block0
-    value v114: TypeRef("?") @block0
+    value v114: Never @block0
     value v115: Bool @block0
-    value v116: TypeRef("?") @block0
+    value v116: Generic { name: "String", args: [] } @block0
     value v117: Generic { name: "String", args: [] } @block0
     value v118: Generic { name: "String", args: [] } @block0
     value v119: Generic { name: "String", args: [] } @block0
@@ -145,141 +145,213 @@ module
     Load v0 <- %0
     Load v1 <- string("hello {0}")
     Call %1 <- string("std.string.format") [v1, v0] (def=d0)
+    Drop v0
+    Drop v1
     Load v4 <- %1
     Load v5 <- string("hello world")
     Eq v3 <- v4, v5
+    Drop v4
+    Drop v5
     Load v6 <- string("f-string name == world")
     Call v2 <- string("std.assert.assert") [v3, v6] (def=d1)
+    Drop v6
     Load %2 <- int(42)
     Load v7 <- %2
     Load v8 <- string("value: {0}")
     Call %3 <- string("std.string.format") [v8, v7] (def=d0)
+    Drop v8
     Load v11 <- %3
     Load v12 <- string("value: 42")
     Eq v10 <- v11, v12
+    Drop v11
+    Drop v12
     Load v13 <- string("f-string x == 42")
     Call v9 <- string("std.assert.assert") [v10, v13] (def=d1)
+    Drop v13
     Load %4 <- string("{literal}")
     Load v16 <- %4
     Load v17 <- string("{literal}")
     Eq v15 <- v16, v17
+    Drop v16
+    Drop v17
     Load v18 <- string("{{literal}} renders literal braces")
     Call v14 <- string("std.assert.assert") [v15, v18] (def=d1)
+    Drop v18
     Load %5 <- string("a{b}c")
     Load v21 <- %5
     Load v22 <- string("a{b}c")
     Eq v20 <- v21, v22
+    Drop v21
+    Drop v22
     Load v23 <- string("a{{b}}c == a{b}c")
     Call v19 <- string("std.assert.assert") [v20, v23] (def=d1)
+    Drop v23
     Load v24 <- %2
     Load v25 <- string("{{{0}}}")
     Call %6 <- string("std.string.format") [v25, v24] (def=d0)
+    Drop v25
     Load v28 <- %6
     Load v29 <- string("{42}")
     Eq v27 <- v28, v29
+    Drop v28
+    Drop v29
     Load v30 <- string("f\"{{{x}}}\" == {42}")
     Call v26 <- string("std.assert.assert") [v27, v30] (def=d1)
+    Drop v30
     Load v31 <- %2
     Load v32 <- string("[{0}] [{{y}}]")
     Call %7 <- string("std.string.format") [v32, v31] (def=d0)
+    Drop v32
     Load v35 <- %7
     Load v36 <- string("[42] [{y}]")
     Eq v34 <- v35, v36
+    Drop v35
+    Drop v36
     Load v37 <- string("escaped braces survive next to interpolation")
     Call v33 <- string("std.assert.assert") [v34, v37] (def=d1)
+    Drop v37
     Load %8 <- string("line1\nline2")
     Load v40 <- %8
     Load v41 <- string("line1\nline2")
     Eq v39 <- v40, v41
+    Drop v40
+    Drop v41
     Load v42 <- string("multiline f-string keeps newline")
     Call v38 <- string("std.assert.assert") [v39, v42] (def=d1)
+    Drop v42
     Load v43 <- %2
     Load v44 <- string("{{literal}}\n{0}")
     Call %9 <- string("std.string.format") [v44, v43] (def=d0)
+    Drop v44
     Load v47 <- %9
     Load v48 <- string("{literal}\n42")
     Eq v46 <- v47, v48
+    Drop v47
+    Drop v48
     Load v49 <- string("multiline f-string brace escape")
     Call v45 <- string("std.assert.assert") [v46, v49] (def=d1)
+    Drop v49
     Load %10 <- float(4614256650576692846)
     Load v50 <- %10
     Load v51 <- string("Pi: {0:.2f}")
     Call %11 <- string("std.string.format") [v51, v50] (def=d0)
+    Drop v51
     Load v54 <- %11
     Load v55 <- string("Pi: 3.14")
     Eq v53 <- v54, v55
+    Drop v54
+    Drop v55
     Load v56 <- string("format spec .2f")
     Call v52 <- string("std.assert.assert") [v53, v56] (def=d1)
+    Drop v56
     Load v57 <- int(5)
     Neg %12 <- v57
     Load v58 <- %12
     Load v59 <- string("|{0:5d}|")
     Call %13 <- string("std.string.format") [v59, v58] (def=d0)
+    Drop v59
     Load v62 <- %13
     Load v63 <- string("|   -5|")
     Eq v61 <- v62, v63
+    Drop v62
+    Drop v63
     Load v64 <- string("width 5 right-align")
     Call v60 <- string("std.assert.assert") [v61, v64] (def=d1)
+    Drop v64
     Load v65 <- %12
     Load v66 <- string("{0:05d}")
     Call %14 <- string("std.string.format") [v66, v65] (def=d0)
+    Drop v66
     Load v69 <- %14
     Load v70 <- string("-0005")
     Eq v68 <- v69, v70
+    Drop v69
+    Drop v70
     Load v71 <- string("zero flag keeps sign left")
     Call v67 <- string("std.assert.assert") [v68, v71] (def=d1)
+    Drop v71
     Load %15 <- int(255)
     Load v76 <- %15
     Load v77 <- string("{0:x}")
     Call v74 <- string("std.string.format") [v77, v76] (def=d0)
+    Drop v77
     Load v75 <- string("ff")
+    Drop v74
+    Drop v75
     Eq v73 <- v74, v75
     Load v78 <- string("hex presentation")
     Call v72 <- string("std.assert.assert") [v73, v78] (def=d1)
+    Drop v78
     Load v83 <- %15
     Load v84 <- string("{0:#x}")
     Call v81 <- string("std.string.format") [v84, v83] (def=d0)
+    Drop v84
     Load v82 <- string("0xff")
+    Drop v81
+    Drop v82
     Eq v80 <- v81, v82
     Load v85 <- string("alt form hex prefix")
     Call v79 <- string("std.assert.assert") [v80, v85] (def=d1)
+    Drop v85
     Load v90 <- %15
     Load v91 <- string("{0:b}")
     Call v88 <- string("std.string.format") [v91, v90] (def=d0)
+    Drop v91
     Load v89 <- string("11111111")
+    Drop v88
+    Drop v89
     Eq v87 <- v88, v89
     Load v92 <- string("binary presentation")
     Call v86 <- string("std.assert.assert") [v87, v92] (def=d1)
+    Drop v92
     Load v97 <- %15
     Load v98 <- string("{0:o}")
     Call v95 <- string("std.string.format") [v98, v97] (def=d0)
+    Drop v98
     Load v96 <- string("377")
+    Drop v95
+    Drop v96
     Eq v94 <- v95, v96
     Load v99 <- string("octal presentation")
     Call v93 <- string("std.assert.assert") [v94, v99] (def=d1)
+    Drop v99
     Load %16 <- float(4598175219545276416)
     Load v104 <- %16
     Load v105 <- string("{0:%}")
     Call v102 <- string("std.string.format") [v105, v104] (def=d0)
+    Drop v105
     Load v103 <- string("25.000000%")
+    Drop v102
+    Drop v103
     Eq v101 <- v102, v103
     Load v106 <- string("percent presentation")
     Call v100 <- string("std.assert.assert") [v101, v106] (def=d1)
+    Drop v106
     Load %17 <- string("hello")
     Load v111 <- %17
     Load v112 <- string("{0:.3}")
     Call v109 <- string("std.string.format") [v112, v111] (def=d0)
+    Drop v111
+    Drop v112
+    Drop v109
+    Drop v110
     Load v110 <- string("hel")
     Eq v108 <- v109, v110
     Load v113 <- string("string precision truncates")
     Call v107 <- string("std.assert.assert") [v108, v113] (def=d1)
+    Drop v113
     Load v118 <- %17
     Load v119 <- string("{0:^7}")
     Call v116 <- string("std.string.format") [v119, v118] (def=d0)
+    Drop v118
+    Drop v119
+    Drop v116
+    Drop v117
     Load v117 <- string(" hello ")
     Eq v115 <- v116, v117
     Load v120 <- string("center align width 7")
     Call v114 <- string("std.assert.assert") [v115, v120] (def=d1)
+    Drop v120
     Drop %6
     Drop %15
     Drop %7

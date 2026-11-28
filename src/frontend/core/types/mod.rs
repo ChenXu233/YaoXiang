@@ -6,6 +6,7 @@
 pub mod const_data;
 pub mod constraint;
 pub mod error;
+pub mod identity;
 pub mod mono;
 pub mod solver;
 pub mod substitute;

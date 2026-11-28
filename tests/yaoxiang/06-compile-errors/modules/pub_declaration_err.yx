@@ -1,8 +1,8 @@
 // 06-compile-errors/modules/pub_declaration_err.yx
 // 覆盖: RFC-029g —— `pub` 关键字已删除（语言不设可见性机制）
-// 验证: 旧写法 `pub x = 1` 不再被静默接受——`pub` 退回普通标识符后按未定义名报 E1001
+// 验证: 旧写法 `pub x = 1` 不再被静默接受——`pub` 不是关键字，`pub` 与 `helper` 之间又没有换行/分号，按「相邻语句缺分隔」在解析层报 E0012（syntax.md §3.1）
 // 状态: ✅ 可运行
 
-// expect: compile-error E1001
+// expect: compile-error E0012
 
 pub helper = 1

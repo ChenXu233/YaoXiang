@@ -5,7 +5,7 @@ resolver = "2"
 
 # RFC-037：工具链单一版本源（引擎 yaoxiang-rs 与前门 yx 同版本发布）
 [workspace.package]
-version = "0.8.9"
+version = "0.8.10"
 
 [package]
 name = "yaoxiang"
@@ -37,8 +37,6 @@ path = "src/main.rs"
 [dev-dependencies]
 criterion = "0.8.1"
 proptest = "1.11"
-# 8.3 go/no-go 探针：生成 parser 只在 cfg(test) 下编译，生产运行时依赖不变。
-lalrpop-util = "=0.23.2"
 
 [[bench]]
 name = "lib"
@@ -146,4 +144,3 @@ web-time = "1"
 [build-dependencies]
 code-tables = { path = "tools/code-tables" }
 type-tables = { path = "tools/type-tables" }
-lalrpop = "=0.23.2"

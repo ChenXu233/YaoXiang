@@ -708,16 +708,15 @@ main()
     );
 }
 
-/// #519 成因 B 锚（WBS 3.20.7 / 2026-11-01 用户裁决甲案续篇）：跨模块类型
-/// 身份缺口的编译期显性化。类型与泛型定义在不同单元时，mono 无法从类型
-/// 实参还原方法的定义单元键（`Vec3.add` 在合并函数表登记为 `lib.Vec3.add`，
-/// WBS 3.18），此前回退裸名把失败推迟到运行期 E6006 `Vec3.add not found`。
+/// #519 成因 B 锚（WBS 3.20.7 / 2026-11-01 用户裁决甲案续篇）：跨模块约束派发
+/// 必须落定义单元。类型与泛型定义在不同单元时，派发名由**类型身份**给出
+/// （`Vec3.add` 在合并函数表登记为 `lib.Vec3.add`，WBS 3.18）——D64 后类型表示
+/// 层携带模块，不再从「泛型所属单元」猜前缀，本夹具因此从 E1106 转绿。
 ///
-/// 判据：函数表中存在其他单元键下的同名方法条目时，E1106 的 detail 必须列出
-/// 候选键（确定性：sort 后取前 3）——「类型定义模块身份在单态化期丢失」
-/// 从静默数据缺陷变成可诊断的编译期错误。
+/// 判据：跨模块约束派发命中定义单元（check 不报 E1106 / 无错误）。
+/// D59 分流：**B 类**（应过未过——旧 E1106 是类型身份缺口造成的假拒绝）。
 #[test]
-fn test_check_constraint_dispatch_cross_module_miss_reports_candidates() {
+fn test_check_constraint_dispatch_cross_module_resolves_defining_unit() {
     // Arrange - lib.yx 定义 Vec3 与 Vec3.add（合并函数表键 lib.Vec3.add）；
     // main.yx 定义 sum 并以 Vec3 实例化——方法所属单元键与泛型所属单元键不同
     let dir = create_project(&[
@@ -756,7 +755,7 @@ main = () => {
     // Act
     let checked = check_result(&main);
 
-    // Assert - check 报 E1106，detail 列出其他单元键下的候选 lib.Vec3.add
+    // Assert - 类型身份携带定义模块 ⇒ 派发命中 lib.Vec3.add，不再有 E1106
     let e1106: Vec<_> = checked
         .diagnostics
         .iter()
@@ -764,19 +763,18 @@ main = () => {
         .map(|d| &d.diagnostic)
         .collect();
     assert!(
-        !e1106.is_empty(),
-        "cross-module dispatch miss must report E1106, got: {}",
+        e1106.is_empty(),
+        "cross-module constrained dispatch must resolve via type identity, got: {:?}",
+        e1106.iter().map(|d| &d.message).collect::<Vec<_>>()
+    );
+    assert!(
+        checked.diagnostics.is_empty(),
+        "跨模块约束派发夹具不得再有诊断，实际：{:?}",
         checked
             .diagnostics
             .iter()
-            .map(|d| d.diagnostic.code.as_str())
+            .map(|d| (d.diagnostic.code.as_str(), d.diagnostic.message.as_str()))
             .collect::<Vec<_>>()
-            .join(", ")
-    );
-    assert!(
-        e1106.iter().any(|d| d.message.contains("lib.Vec3.add")),
-        "E1106 detail must list the candidate key lib.Vec3.add, got: {:?}",
-        e1106.iter().map(|d| &d.message).collect::<Vec<_>>()
     );
 }
 
@@ -3999,7 +3997,7 @@ main()
 
 // ==================== 7b.4 槽预算判据（裁决 ②）：5 形态 × 成功面 / 拒绝面 ====================
 //
-// 规范来源：09a §P7 7b.4 契约 §四（预算判据按用户裁决 ② 改写）+ RFC-013 E3014。
+// 规范来源：任务 7b.4 的提交信息（预算判据按用户裁决 ② 改写）+ RFC-013 E3014。
 // 7a 的 5 个 >255 探针（函数 / 方法 / lambda / 匿名绑定 / curry 最内层）在
 // 7b.4 后按新语义拆成两面：
 // - 成功面：300 项扁平链——**值总数 >255，但活跃值是常数级** ⇒ 帧槽 ≤255 ⇒

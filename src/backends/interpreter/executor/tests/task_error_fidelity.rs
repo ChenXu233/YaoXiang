@@ -41,7 +41,6 @@ fn divide_by_zero_function() -> BytecodeFunction {
             BytecodeInstr::ReturnValue { value: Reg(2) },
         ],
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     }
 }
@@ -64,7 +63,6 @@ fn call_boom_function(boom_idx: u32) -> BytecodeFunction {
             BytecodeInstr::Return,
         ],
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     }
 }
@@ -126,7 +124,6 @@ fn countdown_function() -> BytecodeFunction {
             BytecodeInstr::ReturnValue { value: Reg(7) },
         ],
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     }
 }

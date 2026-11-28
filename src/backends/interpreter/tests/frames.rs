@@ -25,7 +25,6 @@ fn make_function_with_locals(local_count: usize) -> BytecodeFunction {
         upvalue_count: 0,
         instructions: vec![],
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     }
 }

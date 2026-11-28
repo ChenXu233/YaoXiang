@@ -12,6 +12,7 @@ module
     Load v1 <- %0
     Load v2 <- int(10)
     StoreField v1.0 <- v2 (type=None, name=Some("x"))
+    Drop v1
     Ret
   fn main() -> Void
     slot[0] p : Int(64) @depth1
@@ -34,7 +35,7 @@ module
     value v12: Ref { mutable: false, inner: Int(64) } @block0
     value v13: Ref { mutable: false, inner: Int(64) } @block0
     value v14: Generic { name: "String", args: [] } @block0
-    value v15: TypeRef("?") @block0
+    value v15: Generic { name: "String", args: [] } @block0
     value v16: Void @block0
     value v17: Generic { name: "String", args: [] } @block0
     Load v0 <- int(1)

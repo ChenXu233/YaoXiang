@@ -59,87 +59,93 @@ module
     slot[3] w : Int(64) @depth1
     locals_total=7
     values_total=50
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Generic { name: "String", args: [] } @block0
-    value v5: TypeRef("?") @block0
+    value v5: Never @block0
     value v6: Bool @block0
     value v7: Int(64) @block0
     value v8: Int(64) @block0
     value v9: Generic { name: "String", args: [] } @block0
-    value v10: TypeRef("?") @block0
+    value v10: Never @block0
     value v11: Bool @block0
-    value v12: TypeVar(TypeVar(44)) @block0
+    value v12: Int(64) @block0
     value v13: Int(64) @block0
     value v14: Generic { name: "String", args: [] } @block0
-    value v15: TypeRef("?") @block0
+    value v15: Never @block0
     value v16: Bool @block0
-    value v17: TypeVar(TypeVar(45)) @block0
+    value v17: Int(64) @block0
     value v18: Int(64) @block0
     value v19: Generic { name: "String", args: [] } @block0
-    value v20: TypeRef("?") @block0
+    value v20: Never @block0
     value v21: Bool @block0
     value v22: Int(64) @block0
     value v23: Int(64) @block0
     value v24: Generic { name: "String", args: [] } @block0
-    value v25: TypeRef("?") @block0
+    value v25: Never @block0
     value v26: Bool @block0
     value v27: Int(64) @block0
     value v28: Int(64) @block0
     value v29: Int(64) @block0
     value v30: Generic { name: "String", args: [] } @block0
-    value v31: TypeRef("?") @block0
+    value v31: Never @block0
     value v32: Bool @block0
     value v33: Int(64) @block0
     value v34: Int(64) @block0
     value v35: Generic { name: "String", args: [] } @block0
-    value v36: TypeRef("?") @block0
+    value v36: Never @block0
     value v37: Bool @block0
     value v38: Generic { name: "String", args: [] } @block0
     value v39: Generic { name: "String", args: [] } @block0
     value v40: Generic { name: "String", args: [] } @block0
     value v41: Int(64) @block0
     value v42: Int(64) @block0
-    value v43: TypeRef("?") @block0
+    value v43: Never @block0
     value v44: Bool @block0
     value v45: Int(64) @block0
     value v46: Int(64) @block0
     value v47: Generic { name: "String", args: [] } @block0
-    value v48: TypeRef("?") @block0
+    value v48: Void @block0
     value v49: Generic { name: "String", args: [] } @block0
     Call v2 <- string("ann_fn") [] (def=d0)
     Load v3 <- int(5)
     Eq v1 <- v2, v3
     Load v4 <- string("ann_fn() should be 5")
     Call v0 <- string("std.assert.assert") [v1, v4] (def=d1)
+    Drop v4
     Load v7 <- @1
     Load v8 <- int(7)
     Eq v6 <- v7, v8
     Load v9 <- string("no annotation => value 7")
     Call v5 <- string("std.assert.assert") [v6, v9] (def=d1)
+    Drop v9
     Call v12 <- string("lambda_fn") [] (def=d2)
     Load v13 <- int(9)
     Eq v11 <- v12, v13
     Load v14 <- string("lambda_fn() should be 9")
     Call v10 <- string("std.assert.assert") [v11, v14] (def=d1)
+    Drop v14
     Call v17 <- string("lambda_block") [] (def=d3)
     Load v18 <- int(11)
     Eq v16 <- v17, v18
     Load v19 <- string("lambda_block() should be 11")
     Call v15 <- string("std.assert.assert") [v16, v19] (def=d1)
+    Drop v19
     Call v22 <- string("fn_with_return") [] (def=d4)
     Load v23 <- int(13)
     Eq v21 <- v22, v23
     Load v24 <- string("return penetrates the block, exits the function")
     Call v20 <- string("std.assert.assert") [v21, v24] (def=d1)
+    Drop v24
     Load v29 <- int(1)
     Call v27 <- string("direct_expr") [v29] (def=d5)
     Load v28 <- int(2)
     Eq v26 <- v27, v28
     Load v30 <- string("direct_expr(1) should be 2")
     Call v25 <- string("std.assert.assert") [v26, v30] (def=d1)
+    Drop v30
     Load %0 <- int(5)
     Load %1 <- %0
     Drop %0
@@ -148,12 +154,16 @@ module
     Eq v32 <- v33, v34
     Load v35 <- string("annotated block value should be 5")
     Call v31 <- string("std.assert.assert") [v32, v35] (def=d1)
+    Drop v35
     Load %2 <- string("block value")
     Load v38 <- %2
     Load v39 <- string("block value")
     Eq v37 <- v38, v39
+    Drop v38
+    Drop v39
     Load v40 <- string("annotated block value should be string")
     Call v36 <- string("std.assert.assert") [v37, v40] (def=d1)
+    Drop v40
     Load v41 <- int(1)
     Load v42 <- int(1)
     Add %3 <- v41, v42
@@ -162,8 +172,10 @@ module
     Eq v44 <- v45, v46
     Load v47 <- string("annotated single-expr block should be 2")
     Call v43 <- string("std.assert.assert") [v44, v47] (def=d1)
+    Drop v47
     Load v49 <- string("binding fn vs block ok")
     Call v48 <- string("std.io.println") [v49] (def=d6)
+    Drop v49
     Drop %3
     Drop %1
     Drop %2

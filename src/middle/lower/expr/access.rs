@@ -3,6 +3,7 @@
 //! 方法体逐字搬自原 `middle/ir/ir_gen.rs`（WBS 7.0.3），语义未改。
 
 use crate::ast::Expr;
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::module::registry::QualifiedNameConcern;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::middle::lower::AstToIrGenerator;
@@ -77,7 +78,7 @@ impl AstToIrGenerator {
         instructions: &mut Vec<Instruction>,
     ) -> Result<(), Diagnostic> {
         // #254：闭包体内——先查捕获表（外层变量经 env 捕获，LoadUpvalue 读）
-        if let Some(&env_idx) = self.closure_captures.get(var_name) {
+        if let Some(env_idx) = self.lookup_upvalue(var_name) {
             instructions.push(Instruction::LoadUpvalue {
                 dst: result_reg.clone(),
                 upvalue_idx: env_idx,
@@ -133,7 +134,7 @@ impl AstToIrGenerator {
         } else if self.binding_is_function(var_name) {
             // #348：名字的类型是 Fn ⇒ 它就是函数值。运行时函数值的唯一表示是
             // 闭包，故物化为 MakeClosure（env 为空：本处只处理顶层/自由函数名，
-            // 捕获变量已由上方 closure_captures 处理）。
+            // 捕获变量已由上方词法 upvalue 绑定处理）。
             //
             // 此前落到下方兜底 → E3006（"变量无法解析"），使函数名不能
             // 作一等值使用：`io.println(f)` / `g(f)` / `x = f` 全部失败。
@@ -212,7 +213,7 @@ impl AstToIrGenerator {
             if let Some(full_path) = {
                 let reg = &self.registry;
                 if reg.is_std_submodule(module_name) {
-                    let path = format!("std.{}", field);
+                    let path = DefPath::item("std", field).project();
                     if reg.qualified_name_is(&path, QualifiedNameConcern::NativeName) {
                         Some(path)
                     } else {

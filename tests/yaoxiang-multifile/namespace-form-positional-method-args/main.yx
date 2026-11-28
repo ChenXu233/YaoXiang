@@ -1,0 +1,14 @@
+// namespace-form-positional-method-args/main.yx
+// 覆盖: RFC-029 命名空间写法（lib.Temp 构造 + 方法调用）+ 位置实参
+// 验证: use lib 后 t = lib.Temp(3.0)；t.bump(2.0) 求值 5.0
+//       （P0 形态 6b：位置实参今天成功；命名实参今天失败，不在本夹具断言）
+// 状态: ✅ 可运行（run 退出码 0）
+use std.assert
+use lib
+
+main = () => {
+    t = lib.Temp(3.0)
+    by_position = t.bump(2.0)
+    assert.assert(by_position == 5.0, "命名空间写法 + 位置实参应求值 3.0 + 2.0 = 5.0")
+    assert.assert(t.v == 3.0, "命名空间写法的构造结果应保留字段 v = 3.0")
+}

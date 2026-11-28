@@ -9,11 +9,14 @@
 
 /// (文件路径, 源码文本)。路径形如 `std/test.yx`（use 路径点转斜杠 + .yx）。
 /// native 模块（std.assert 等）不在此表；同名不得同时存在两种实现。
+/// 顺序 = **依赖序**：注册期内每个嵌入模块的导入面只看得见先注册者
+///（`embedded_std_module_info` 的基线参数），故被引用的模块必须排在前面。
+/// std.test 的签名引用 `Result`（std.result）⇒ result 在 test 之前。
 pub const STD_YX_FILES: &[(&str, &str)] = &[
     ("std/list.yx", include_str!("list.yx")),
-    ("std/test.yx", include_str!("test.yx")),
     ("std/result.yx", include_str!("result.yx")),
     ("std/option.yx", include_str!("option.yx")),
+    ("std/test.yx", include_str!("test.yx")),
     ("std/json.yx", include_str!("json.yx")),
 ];
 
@@ -38,13 +41,21 @@ pub fn embedded_source_by_virtual_path(virtual_path: &str) -> Option<&'static st
 /// `extract_module_info`（orchestrator）的嵌入版：解析源码 → 签名收集 → 按 AST 顶层
 /// 定义导出。**只导出模块自身定义的绑定**——TypeChecker::new 会预载 native 签名到 env.vars，
 /// 直接遍历 vars 会把全部 std native 误标成 `std.test.*` 导出。
-pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::module::ModuleInfo> {
+pub fn embedded_std_module_info(
+    use_path: &str,
+    // 已注册的 std 模块基线（native + 先前注册的嵌入 std）。
+    // 注册表构建期内 TypeChecker::new 的 with_std() 处于重入保护下、看不到
+    // 正在构建的嵌入模块——不注入这份基线时，签名里对其他 std 声明类型
+    // （std.json 里的 `Result(...)`）的引用会解析成平路径，与导入方的身份
+    // 不一致（D64）。
+    baseline: &crate::frontend::module::registry::ModuleRegistry,
+) -> Option<crate::frontend::module::ModuleInfo> {
     use crate::frontend::core::parser;
     use crate::frontend::core::sema::checker::TypeChecker;
     use crate::frontend::core::sema::SemanticProbe;
     use crate::frontend::core::tokenize;
+    use crate::frontend::core::types::identity::DefPath;
     use crate::frontend::core::types::mono::MonoType;
-    use crate::frontend::module::symbol::SymbolTable;
     use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 
     let source = embedded_std_source(use_path)?;
@@ -54,6 +65,13 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
         return None;
     }
     let mut checker = TypeChecker::new(use_path);
+    // 导入面对准已注册基线（见函数参数文档）：嵌入模块之间不存在前向引用，
+    // 注册顺序（list → test → result → option → json）保证被引用者先注册。
+    checker.env().module_registry = baseline.clone();
+    // 单元键与限定开关（WBS 4.9.10 D-4/D-8）：std 模块的方法身份**必须**带模块键
+    // （IR 函数表里的 std 方法名一直是 `std.result.Result.is_ok` 这类限定名）。
+    checker.env().unit_key = use_path.to_string();
+    checker.env().qualify_methods = true;
     // 谓词名可见面（WBS 3.20.9 / #522）：嵌入 std 只见自身单元，scan 自身
     // 模块传入（std.yx 源里现无谓词声明，内置谓词名仍由 scan 收进）
     let namespace =
@@ -89,7 +107,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                     });
                     info.add_export(Export {
                         name: name.clone(),
-                        full_path: SymbolTable::qualify(use_path, name),
+                        full_path: DefPath::item(use_path, name).project(),
                         kind: ExportKind::Type,
                         signature: String::new(),
                         mono_type: Some(ty),
@@ -132,7 +150,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                             .unwrap_or_default();
                         info.add_export(Export {
                             name: name.clone(),
-                            full_path: SymbolTable::qualify(use_path, name),
+                            full_path: DefPath::item(use_path, name).project(),
                             kind: if matches!(ty, MonoType::Fn { .. }) {
                                 ExportKind::Function
                             } else {

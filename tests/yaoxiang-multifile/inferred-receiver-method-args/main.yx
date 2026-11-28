@@ -1,0 +1,21 @@
+// inferred-receiver-method-args/main.yx
+// 覆盖: RFC-029 跨单元方法调用 + 推断型接收者（无写出类型标注）
+// 验证: r = make() 的静态类型由返回位推得 Point：
+//       位置实参 r.scale_by(2.0) ⇒ 6.0（P0 形态 10b）；
+//       写出注解后命名实参 p: Point = make() 的 p.scale_by(k = 2.0) ⇒ 6.0（P0 形态 10c）
+// 状态: ✅ 可运行（run 退出码 0）
+use std.assert
+use lib.{Point}
+
+make: () -> Point = () => {
+    return Point(3.0, 4.0)
+}
+
+main = () => {
+    r = make()
+    by_position = r.scale_by(2.0)
+    p: Point = make()
+    by_name = p.scale_by(k = 2.0)
+    assert.assert(by_position == 6.0, "推断接收者的位置实参应求值 3.0 * 2.0 = 6.0")
+    assert.assert(by_name == 6.0, "写出注解后的命名实参应求值 3.0 * 2.0 = 6.0")
+}

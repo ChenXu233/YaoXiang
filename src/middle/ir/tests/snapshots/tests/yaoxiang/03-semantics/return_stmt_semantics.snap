@@ -3,7 +3,7 @@ module
     slot[0] x : Int(64) @depth1
     locals_total=3
     values_total=2
-    value v0: TypeRef("?") @block0
+    value v0: Void @block0
     value v1: Int(64) @block0
     Load %0 <- arg%0
     Load v1 <- %0
@@ -45,18 +45,18 @@ module
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
-    value v4: TypeRef("?") @block0
+    value v4: Never @block0
     value v5: Bool @block0
     value v6: Int(64) @block0
     value v7: Int(64) @block0
     value v8: Generic { name: "String", args: [] } @block0
     value v9: Int(64) @block0
-    value v10: TypeRef("?") @block0
+    value v10: Never @block0
     value v11: Bool @block0
     value v12: Int(64) @block0
     value v13: Int(64) @block0
     value v14: Generic { name: "String", args: [] } @block0
-    value v15: TypeRef("?") @block0
+    value v15: Never @block0
     value v16: Bool @block0
     value v17: Int(64) @block0
     value v18: Int(64) @block0
@@ -71,6 +71,7 @@ module
     Eq v5 <- v6, v7
     Load v8 <- string("early_return(-1) should be 0")
     Call v4 <- string("std.assert.assert") [v5, v8] (def=d3)
+    Drop v8
     Load v9 <- int(5)
     Call %1 <- string("fn_early_return") [v9] (def=d2)
     Load v12 <- %1
@@ -78,12 +79,14 @@ module
     Eq v11 <- v12, v13
     Load v14 <- string("early_return(5) should be 5")
     Call v10 <- string("std.assert.assert") [v11, v14] (def=d3)
+    Drop v14
     Call %2 <- string("fn_return_skips_rest") [] (def=d4)
     Load v17 <- %2
     Load v18 <- int(42)
     Eq v16 <- v17, v18
     Load v19 <- string("return_skips_rest should be 42")
     Call v15 <- string("std.assert.assert") [v16, v19] (def=d3)
+    Drop v19
     Drop %0
     Drop %1
     Drop %2

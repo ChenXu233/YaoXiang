@@ -15,8 +15,8 @@ f: (N: Int) -> (n: N) -> Int = (n) => n
 restored: (y: Int) -> Int = {
     if y == 42 {
         r = match Option(Int).some(7) {
-            some(y) => y,
-            none() => 0,
+            some(y) -> y,
+            none() -> 0,
         }
         f(y)(42)
     } else {
@@ -26,11 +26,11 @@ restored: (y: Int) -> Int = {
 
 own_fact: () -> Int = {
     r = match Option(Int).some(7) {
-        some(y) => {
+        some(y) -> {
             assert(y == 7, "臂内自产事实")
             f(y)(7)
         },
-        none() => 0,
+        none() -> 0,
     }
     r
 }
@@ -38,8 +38,8 @@ own_fact: () -> Int = {
 other_name: (y: Int, z: Int) -> Int = {
     if y == 42 and z == 7 {
         r = match Option(Int).some(0) {
-            some(y) => y,
-            none() => 0,
+            some(y) -> y,
+            none() -> 0,
         }
         f(z)(7)
     } else {

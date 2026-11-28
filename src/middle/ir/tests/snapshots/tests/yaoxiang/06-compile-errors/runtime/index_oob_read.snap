@@ -9,7 +9,7 @@ module
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
-    value v6: TypeRef("?") @block0
+    value v6: Void @block0
     value v7: TypeRef("?") @block0
     value v8: Generic { name: "Vec", args: [Int(64)] } @block0
     value v9: Int(64) @block0
@@ -26,6 +26,7 @@ module
     Load v8 <- %0
     Load v9 <- int(5)
     LoadIndex v7 <- v8[v9]
+    Drop v8
     Call v6 <- string("std.io.println") [v7] (def=d0)
     Drop %0
     Ret v6

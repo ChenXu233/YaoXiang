@@ -2,7 +2,7 @@ module
   fn always_fails() -> Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] }
     locals_total=3
     values_total=3
-    value v0: TypeRef("?") @block0
+    value v0: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } @block0
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     Load v1 <- int(1)
@@ -19,7 +19,7 @@ module
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v5: TypeRef("?") @block0
+    value v5: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } @block0
     value v6: Int(64) @block0
     value v7: Generic { name: "Vec", args: [Int(64)] } @block0
     value v8: Int(64) @block0
@@ -32,9 +32,11 @@ module
     StoreIndex %0[v3] <- v2
     Load v4 <- %0
     Call %1 <- string("std.list.pop") [v4] (def=d1)
+    Drop v4
     Drop %0
     Load v7 <- %1
     StringLength v6 <- v7
+    Drop v7
     Load v8 <- int(1)
     Call v5 <- string("std.test.assert_eq") [v6, v8] (def=d0)
     Drop %1
@@ -43,37 +45,44 @@ module
   fn main() -> Void
     locals_total=4
     values_total=10
-    value v0: TypeRef("?") @block0
-    value v1: TypeRef("?") @block0
-    value v2: TypeRef("?") @block0
+    value v0: Void @block0
+    value v1: Generic { name: "Vec", args: [Generic { name: "Tuple", args: [Void, Void] }] } @block0
+    value v2: Generic { name: "Tuple", args: [Void, Void] } @block0
     value v3: Generic { name: "String", args: [] } @block0
-    value v4: TypeRef("?") @block0
+    value v4: Fn { params: [], return_type: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } } @block0
     value v5: Int(64) @block0
-    value v6: TypeRef("?") @block0
+    value v6: Generic { name: "Tuple", args: [Void, Void] } @block0
     value v7: Generic { name: "String", args: [] } @block0
-    value v8: TypeRef("?") @block0
+    value v8: Fn { params: [], return_type: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } } @block0
     value v9: Int(64) @block0
     AllocArray v1 size=int(2), elem=int(1)
     Load v3 <- string("always_fails")
     MakeClosure v4 <- closure_0 env=[] (def=d2)
     NewTuple v2 <- [v3, v4]
+    Drop v3
+    Drop v4
+    Drop v2
     Load v5 <- int(0)
     StoreIndex v1[v5] <- v2
     Load v7 <- string("pop_still_runs")
     MakeClosure v8 <- closure_1 env=[] (def=d3)
     NewTuple v6 <- [v7, v8]
+    Drop v1
+    Drop v7
+    Drop v8
+    Drop v6
     Load v9 <- int(1)
     StoreIndex v1[v9] <- v6
     Call v0 <- string("std.test.suite") [v1] (def=d4)
     Ret v0
-  fn closure_0() -> Void
+  fn closure_0() -> Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] }
     locals_total=2
     values_total=2
     value v0: TypeRef("?") @block0
     value v1: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } @block0
     Call v1 <- string("always_fails") [] (def=d5)
     Ret v1
-  fn closure_1() -> Void
+  fn closure_1() -> Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] }
     locals_total=2
     values_total=2
     value v0: TypeRef("?") @block0

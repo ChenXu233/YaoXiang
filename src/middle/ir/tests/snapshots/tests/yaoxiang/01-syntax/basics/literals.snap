@@ -4,12 +4,12 @@ module
     slot[1] neg_val : Int(64) @depth1
     locals_total=5
     values_total=29
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Generic { name: "String", args: [] } @block0
-    value v5: TypeRef("?") @block0
+    value v5: Never @block0
     value v6: Bool @block0
     value v7: Int(64) @block0
     value v8: Int(64) @block0
@@ -17,20 +17,20 @@ module
     value v10: Int(64) @block0
     value v11: Generic { name: "String", args: [] } @block0
     value v12: Float(64) @block0
-    value v13: TypeRef("?") @block0
+    value v13: Never @block0
     value v14: Bool @block0
     value v15: Generic { name: "String", args: [] } @block0
-    value v16: TypeRef("?") @block0
+    value v16: Never @block0
     value v17: Bool @block0
     value v18: Generic { name: "String", args: [] } @block0
     value v19: Generic { name: "String", args: [] } @block0
     value v20: Generic { name: "String", args: [] } @block0
-    value v21: TypeRef("?") @block0
+    value v21: Never @block0
     value v22: Bool @block0
     value v23: Generic { name: "String", args: [] } @block0
     value v24: Generic { name: "String", args: [] } @block0
     value v25: Generic { name: "String", args: [] } @block0
-    value v26: TypeRef("?") @block0
+    value v26: Never @block0
     value v27: Bool @block0
     value v28: Generic { name: "String", args: [] } @block0
     Load v2 <- int(42)
@@ -38,6 +38,7 @@ module
     Eq v1 <- v2, v3
     Load v4 <- string("int 42")
     Call v0 <- string("std.assert.assert") [v1, v4] (def=d0)
+    Drop v4
     Load v9 <- int(7)
     Neg v7 <- v9
     Load v10 <- int(7)
@@ -45,25 +46,34 @@ module
     Eq v6 <- v7, v8
     Load v11 <- string("int -7")
     Call v5 <- string("std.assert.assert") [v6, v11] (def=d0)
+    Drop v11
     Load %0 <- float(4614253070214989087)
     Load v12 <- float(4602678819172646912)
     Neg %1 <- v12
     Load v14 <- bool(true)
     Load v15 <- string("float literals assigned")
     Call v13 <- string("std.assert.assert") [v14, v15] (def=d0)
+    Drop v15
     Load v18 <- string("hello")
     Load v19 <- string("hello")
     Eq v17 <- v18, v19
+    Drop v18
+    Drop v19
     Load v20 <- string("str hello")
     Call v16 <- string("std.assert.assert") [v17, v20] (def=d0)
+    Drop v20
     Load v23 <- string("")
     Load v24 <- string("")
     Eq v22 <- v23, v24
+    Drop v23
+    Drop v24
     Load v25 <- string("str empty")
     Call v21 <- string("std.assert.assert") [v22, v25] (def=d0)
+    Drop v25
     Load v27 <- bool(true)
     Load v28 <- string("bool true")
     Call v26 <- string("std.assert.assert") [v27, v28] (def=d0)
+    Drop v28
     Drop %1
     Drop %0
     Ret v26

@@ -22,15 +22,15 @@ module
     value v0: Int(64) @block0
     value v1: Fn { params: [Int(64)], return_type: Int(64) } @block0
     value v2: Int(64) @block0
-    value v3: TypeRef("?") @block0
+    value v3: Never @block0
     value v4: Bool @block0
     value v5: Int(64) @block0
     value v6: Int(64) @block0
     value v7: Generic { name: "String", args: [] } @block0
     value v8: Int(64) @block0
-    value v9: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
+    value v9: Fn { params: [Literal { name: "7", base_type: Int(64), value: Int(7) }], return_type: Int(64) } @block0
     value v10: Int(64) @block0
-    value v11: TypeRef("?") @block0
+    value v11: Never @block0
     value v12: Bool @block0
     value v13: Int(64) @block0
     value v14: Int(64) @block0
@@ -39,20 +39,24 @@ module
     Load v2 <- int(10)
     Call v1 <- string("f") [v2] (def=d2)
     CallDyn %0 <- v1 [v0]
+    Drop v1
     Load v5 <- %0
     Load v6 <- int(15)
     Eq v4 <- v5, v6
     Load v7 <- string("f(10)(5) should be 15")
     Call v3 <- string("std.assert.assert") [v4, v7] (def=d3)
+    Drop v7
     Load v8 <- int(7)
     Load v10 <- int(7)
     Call v9 <- string("g") [v10] (def=d4)
     CallDyn %1 <- v9 [v8]
+    Drop v9
     Load v13 <- %1
     Load v14 <- int(14)
     Eq v12 <- v13, v14
     Load v15 <- string("g(7)(7) should be 14")
     Call v11 <- string("std.assert.assert") [v12, v15] (def=d3)
+    Drop v15
     Drop %0
     Drop %1
     Ret v11

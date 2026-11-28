@@ -41,8 +41,10 @@ use super::check_rootless_mono::{check_codes, make_rootless_project, run_check};
 use super::driver::{make_script_project, run_merged_slot_values, run_multi};
 use super::ref_pool::assert_warnings;
 use crate::driver::helpers::resolved_method_marks;
-use crate::frontend::core::sema::types::OverloadResolutions;
+use crate::frontend::core::sema::types::{MethodResolution, OverloadResolutions};
 use crate::frontend::core::sema::TypeCheckResult;
+use crate::frontend::core::types::identity::DefPath;
+use crate::frontend::module::symbol::SymbolTable;
 use crate::util::plan_id::PlanId;
 
 /// 带 `[run].main` 声明面的多文件夹具——`yaoxiang check main.yx` 的直驱等价形态：
@@ -254,20 +256,25 @@ fn test_cross_unit_key_scope_reports_unhit_siblings_without_cross_unit_exemption
 /// 4.9.7 / #464 ⑦ 驱动侧读取是纯读：读归因标记**不触达** `OverloadResolutions::get`
 /// ⇒ 决议条目仍在未消费差集里——否则「消费必达」结算（W1090）会被驱动侧的读取掩盖
 /// （读一次 = 记一次消费）。空 `units`/`asts`：本条只钉读取面本身。
+///
+/// WBS 4.9.10 D-8：读取面按**方法身份**出标记（决议名经投影索引换回 `DefPath`）
+/// ——故夹具给一份只含该方法的符号表，断言下到身份而不是名字字符串。
 #[test]
 fn test_resolved_method_marks_read_leaves_consumption_ledger_untouched() {
-    // Arrange：一条已登记、尚无消费者（lower 未跑）的决议条目
+    // Arrange：一条已登记、尚无消费者（lower 未跑）的决议条目；符号表里有该方法
     let call = PlanId::from_ordinal(7);
     let mut result = TypeCheckResult::default();
     result.overload_resolutions =
-        OverloadResolutions::from_entries([(call, "Temp.to".to_string())]);
+        OverloadResolutions::from_entries([(call, MethodResolution::target_only("Temp.to"))]);
+    let mut symbols = SymbolTable::new();
+    symbols.intern_method(DefPath::method("", "Temp", "to"));
 
     // Act：驱动侧唯一读取面
-    let marks = resolved_method_marks(&[], &[], &[Some(&result)]);
+    let marks = resolved_method_marks(&[], &[], &[Some(&result)], &symbols);
 
     // Assert：读取面命中该条目（不是空转）；台账的未消费差集不变（纯读）
     assert!(
-        marks.groups.contains("Temp.to"),
+        marks.groups.contains(&DefPath::method("", "Temp", "to")),
         "读取面必须命中决议条目（否则本条断言空转）: {:?}",
         marks.groups
     );
@@ -294,6 +301,10 @@ fn test_resolved_method_marks_read_leaves_consumption_ledger_untouched() {
 // 红态（修复前，实测）：① 的单文件 `check` 报 2 条 W1005（Temp.index :6 /
 // Temp.equal :9）；跨单元（issue 原文夹具）报 4 条（a.yx 与 b.yx 各 :6 / :9）；
 // `run` 值始终正确（20.0 / false）——方法确实被调用，警告为误报。
+//
+// D64 起（类型表示层身份）：`a.Temp` / `b.Temp` 是不同名义类型，`==` 只在同型
+// 两侧成立——夹具的两条比较改为 `u == u` / `t == t`，仍覆盖两单元 `Equal`
+// 各被派发一次；跨型比较按 D59 **B 类收紧**改为类型错误（旧判据依赖裸名混同）。
 
 /// issue #505 跨单元夹具的 a 侧（v+1.0 / true）：W1005 红态落在 :6 与 :9。
 const OP_DISPATCH_A: &str = "// a.yx —— Index/Equal 接口 + 两方法（被 main 的算子表达式派发调用）\nTemp: Type = {\n    v: Float,\n    Index(Temp, Int, Float),\n    Equal(Temp, Temp),\n}\nTemp.index: (self: &Temp, key: &Int) -> Float = (self, key) => {\n    self.v + 1.0\n}\nTemp.equal: (self: &Temp, other: &Temp) -> Bool = (self, other) => {\n    true\n}\n";
@@ -301,8 +312,10 @@ const OP_DISPATCH_A: &str = "// a.yx —— Index/Equal 接口 + 两方法（被
 /// issue #505 跨单元夹具的 b 侧（v*10.0 / false）：同名同序，红态同 :6 / :9。
 const OP_DISPATCH_B: &str = "// b.yx —— 同构接口与两方法（值面不同：v*10.0 / false）\nTemp: Type = {\n    v: Float,\n    Index(Temp, Int, Float),\n    Equal(Temp, Temp),\n}\nTemp.index: (self: &Temp, key: &Int) -> Float = (self, key) => {\n    self.v * 10.0\n}\nTemp.equal: (self: &Temp, other: &Temp) -> Bool = (self, other) => {\n    false\n}\n";
 
-/// issue #505 跨单元入口：`u[0]` / `u == t` 两个派发点（红态 = a/b 各 2 条 W1005）。
-const OP_DISPATCH_MAIN: &str = "// main.yx —— 两个算子表达式分别派发 b.Temp.index / Equal(Temp, Temp)\nuse a.{Temp}\nuse b.{Temp as TempB}\n\nmain = () => {\n    t = Temp(1.0)\n    u = TempB(2.0)\n    println(u[0])\n    println(u == t)\n}\n";
+/// issue #505 跨单元入口：`u[0]` / 两侧同型 `==` 三个派发点（红态 = a/b 各 2 条 W1005）。
+/// D64：a.Temp 与 b.Temp 是不同名义类型，`==` 只在同型两侧成立（旧夹具的
+/// `u == t` 依赖裸名混同，L3 后是类型错误）。
+const OP_DISPATCH_MAIN: &str = "// main.yx —— 三个算子表达式分别派发 b.Temp.index / a.Temp.equal / b.Temp.equal\nuse a.{Temp}\nuse b.{Temp as TempB}\n\nmain = () => {\n    t = Temp(1.0)\n    u = TempB(2.0)\n    println(u[0])\n    println(u == u)\n    println(t == t)\n}\n";
 
 /// ① 跨单元主验收：两单元四个接口方法全被算子派发调用 ⇒ check 诊断集不含
 /// W1005（修复前 4 条，红态实测）。清单带 `[run].main` 声明面（issue 原文
@@ -363,7 +376,8 @@ fn test_operator_interface_declared_without_use_still_reports_unused_method() {
 #[test]
 fn test_operator_dispatch_cross_unit_run_values_unchanged() {
     // Arrange：rootless Script 形态（顶层绑定即程序体，值进全局槽位可观察）
-    let main = "use a.{Temp}\nuse b.{Temp as TempB}\n\nt = Temp(1.0)\nu = TempB(2.0)\nindexed = u[0]\neq = u == t\n";
+    // D64：同名跨模块类型是不同名义类型，比较必须同型（`u == u` 走 b、`t == t` 走 a）。
+    let main = "use a.{Temp}\nuse b.{Temp as TempB}\n\nt = Temp(1.0)\nu = TempB(2.0)\nindexed = u[0]\neq = u == u\naeq = t == t\n";
     let (_dir, entry) = make_script_project(&[
         ("a.yx", OP_DISPATCH_A),
         ("b.yx", OP_DISPATCH_B),
@@ -386,7 +400,11 @@ fn test_operator_dispatch_cross_unit_run_values_unchanged() {
     );
     assert!(
         values.iter().any(|v| v == "Bool(false)"),
-        "u == t 必须派发 b.Temp.equal（false）: {values:?}"
+        "u == u 必须派发 b.Temp.equal（false）: {values:?}"
+    );
+    assert!(
+        values.iter().any(|v| v == "Bool(true)"),
+        "t == t 必须派发 a.Temp.equal（true）: {values:?}"
     );
 }
 

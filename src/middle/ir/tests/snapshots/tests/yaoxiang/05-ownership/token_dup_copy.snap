@@ -46,13 +46,13 @@ module
     value v0: Int(64) @block0
     value v1: Int(64) @block0
     value v2: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v3: TypeRef("?") @block0
+    value v3: Never @block0
     value v4: Bool @block0
     value v5: TypeRef("?") @block0
     value v6: Int(64) @block0
     value v7: Ref { mutable: false, inner: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) } @block0
     value v8: Generic { name: "String", args: [] } @block0
-    value v9: TypeRef("?") @block0
+    value v9: Never @block0
     value v10: Bool @block0
     value v11: TypeRef("?") @block0
     value v12: Int(64) @block0
@@ -61,10 +61,10 @@ module
     value v15: Int(64) @block0
     value v16: Int(64) @block0
     value v17: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v18: TypeRef("?") @block0
+    value v18: Void @block0
     value v19: Int(64) @block0
     value v20: Ref { mutable: false, inner: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) } @block0
-    value v21: TypeRef("?") @block0
+    value v21: Never @block0
     value v22: Bool @block0
     value v23: TypeRef("?") @block0
     value v24: Int(64) @block0
@@ -74,7 +74,7 @@ module
     value v28: Int(64) @block0
     value v29: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v30: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v31: TypeRef("?") @block0
+    value v31: Never @block0
     value v32: Bool @block0
     value v33: Int(64) @block0
     value v34: Int(64) @block0
@@ -84,6 +84,7 @@ module
     Call %0 <- string("Point") [v0, v1] (def=d0)
     Load v2 <- %0
     Move %1 <- v2
+    Drop v2
     Load %2 <- %1
     Load v7 <- %1
     LoadField v5 <- v7.0
@@ -91,6 +92,7 @@ module
     Eq v4 <- v5, v6
     Load v8 <- string("原令牌活跃")
     Call v3 <- string("std.assert.assert") [v4, v8] (def=d1)
+    Drop v8
     Drop %0
     Load v13 <- %2
     LoadField v11 <- v13.1
@@ -98,11 +100,13 @@ module
     Eq v10 <- v11, v12
     Load v14 <- string("复制令牌活跃")
     Call v9 <- string("std.assert.assert") [v10, v14] (def=d1)
+    Drop v14
     Load v15 <- int(7)
     Load v16 <- int(8)
     Call %3 <- string("Point") [v15, v16] (def=d0)
     Load v17 <- %3
     Move %4 <- v17
+    Drop v17
     Load v20 <- %4
     Call v19 <- string("read_x") [v20] (def=d2)
     Call v18 <- string("std.io.println") [v19] (def=d3)
@@ -113,12 +117,15 @@ module
     Eq v22 <- v23, v24
     Load v26 <- string("传参后源令牌仍活跃")
     Call v21 <- string("std.assert.assert") [v22, v26] (def=d1)
+    Drop v26
     Drop %3
     Load v27 <- int(3)
     Load v28 <- int(4)
     Call %5 <- string("Point") [v27, v28] (def=d0)
     Load v30 <- %5
     Move v29 <- v30
+    Drop v30
+    Drop v29
     Call %6 <- string("copy_use") [v29] (def=d4)
     Drop %5
     Load v33 <- %6
@@ -126,6 +133,7 @@ module
     Eq v32 <- v33, v34
     Load v35 <- string("参数令牌复制后两份都活跃")
     Call v31 <- string("std.assert.assert") [v32, v35] (def=d1)
+    Drop v35
     Drop %4
     Drop %0
     Drop %6

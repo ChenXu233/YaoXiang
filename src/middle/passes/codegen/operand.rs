@@ -17,7 +17,7 @@ pub type OperandResult = Result<u8, Diagnostic>;
 ///
 /// `Value` 的槽位来自 7b.2 的过渡映射 `FunctionBody::Code.value_slots`
 /// （index = ValueId；槽号由 lowering 既有分配器给出）。**本解析器不自行
-/// 分配**——线性扫描分配器归 7b.4（09a §P7 7b.2 契约 §二 第 6 条）。
+/// 分配**——线性扫描分配器归 7b.4（提交信息）。
 #[derive(Debug)]
 pub struct OperandResolver {
     /// 当前函数的值 → 槽映射（按 ValueId 索引）

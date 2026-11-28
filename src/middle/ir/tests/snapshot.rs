@@ -246,7 +246,7 @@ fn test_span_stripped_makes_identical_output() {
 }
 
 /// `Phi` 渲染：incoming 打印前按前驱 label 升序，SSA 值按函数内首现序相对化
-/// （07 §第二层「前驱排序」；09a §P7 7b.1a 契约 §二 第 3 行）。
+/// （07 §第二层「前驱排序」；提交信息）。
 #[test]
 fn test_normalize_renders_phi_incoming_sorted_by_predecessor() {
     // Arrange：incoming 故意乱序（label 2 在前、0 在后），dst 与输入用不同 ValueId

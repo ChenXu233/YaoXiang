@@ -143,9 +143,9 @@ pub(crate) fn resolve_record_model<'a>(
     match ty {
         MonoType::Refined { base, .. } => resolve_record_model(models, base),
         MonoType::Ref { inner, .. } => resolve_record_model(models, inner),
-        MonoType::Struct(structure) => models.get(&structure.name),
-        MonoType::TypeRef(name) => models.get(name),
-        MonoType::Generic { name, .. } => models.get(name),
+        MonoType::Struct(structure) => models.get(structure.name.bare()),
+        MonoType::TypeRef(name) => models.get(name.bare()),
+        MonoType::Generic { name, .. } => models.get(name.bare()),
         _ => None,
     }
 }
@@ -154,7 +154,7 @@ pub(crate) fn resolve_record_model<'a>(
 /// 当 `R` 解析到含 evidence 槽的记录模型、`f` 是 evidence 字段 ⇒ 准入。
 ///
 /// **不判 base 名与实参名的一致性**（判定面拿不到应用实参；那一半在应用面
-/// `field_path_base_matches`，09a §P6 6.9.5-B.3 §五）。
+/// `field_path_base_matches`，提交信息）。
 pub(crate) fn witness_premise_admitted(
     models: &std::collections::HashMap<String, RecordModel>,
     refined: &MonoType,

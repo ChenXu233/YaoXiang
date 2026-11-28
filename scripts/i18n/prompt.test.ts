@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { resolveLanguagePrompt, DEFAULT_LANGUAGE_PROMPT } from './prompt.ts';
+import { resolveLanguagePrompt, DEFAULT_LANGUAGE_PROMPT, composePrompt, FIELD_RULES } from './prompt.ts';
 import type { I18nConfig } from './config.ts';
 
 describe('resolveLanguagePrompt', () => {
@@ -44,5 +44,31 @@ describe('resolveLanguagePrompt', () => {
 
     // 未定义风格指令的语言应拿默认 prompt
     expect(resolveLanguagePrompt('en', config)).toBe(DEFAULT_LANGUAGE_PROMPT);
+  });
+});
+
+describe('composePrompt', () => {
+  it('should keep the language style prompt and append the field rules', () => {
+    const result = composePrompt(DEFAULT_LANGUAGE_PROMPT);
+    expect(result).toContain(DEFAULT_LANGUAGE_PROMPT);
+    expect(result).toContain(FIELD_RULES);
+  });
+
+  it('should append the field rules for every configured language', () => {
+    // 回归：字段级规则必须对每种语言都在——喵语/文言文有各自的风格指令，
+    // 若规则只挂在默认 prompt 上，这两种语言的 title 仍会大小写混用。
+    const configPath = fileURLToPath(new URL('../../i18n.config.json', import.meta.url));
+    const config = JSON.parse(readFileSync(configPath, 'utf-8')) as I18nConfig;
+    for (const lang of Object.keys(config.languages)) {
+      const composed = composePrompt(resolveLanguagePrompt(lang, config));
+      expect(composed).toContain(FIELD_RULES);
+      expect(composed).toContain('title');
+    }
+  });
+
+  it('should state the title casing rule explicitly', () => {
+    // title 的句首大写规则必须写在提示词里——否则新增码的大小写仍由模型自行决定。
+    expect(FIELD_RULES).toContain('句首大写');
+    expect(FIELD_RULES).toContain('title');
   });
 });

@@ -82,14 +82,12 @@ pub fn format_stmt(
             ..
         } => format_assign(target, type_annotation, value, *is_mut, ctx, source_map),
         StmtKind::Error(_span) => "/* error */".to_string(),
+        // 解构赋值只输出括号式 `(a, b) = e`（syntax.md §3.2.1）。
         StmtKind::DestructureAssign { names, rhs, .. } => {
+            let rendered: Vec<&str> = names.iter().map(|n| n.name.as_str()).collect();
             format!(
-                "{} = {}",
-                names
-                    .iter()
-                    .map(|n| n.name.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", "),
+                "({}) = {}",
+                rendered.join(", "),
                 format_expr(rhs, ctx, source_map)
             )
         }

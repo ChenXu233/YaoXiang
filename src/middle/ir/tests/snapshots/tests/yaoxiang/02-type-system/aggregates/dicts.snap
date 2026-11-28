@@ -5,15 +5,17 @@ module
     values_total=5
     value v0: Generic { name: "String", args: [] } @block0
     value v1: Int(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Never @block0
     value v3: Bool @block0
     value v4: Generic { name: "String", args: [] } @block0
     Load v0 <- string("key")
     Load v1 <- int(42)
     NewDict %0 <- keys=[v0] values=[v1]
+    Drop v0
     Load v3 <- bool(true)
     Load v4 <- string("dict created successfully")
     Call v2 <- string("std.assert.assert") [v3, v4] (def=d0)
+    Drop v4
     Drop %0
     Ret v2
   init (locals=0)

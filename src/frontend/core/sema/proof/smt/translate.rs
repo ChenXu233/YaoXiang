@@ -24,7 +24,7 @@ use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue, UnO
 ///   见 [`translate_expr`]）。
 ///
 /// 调用方必须把 `None` 当「**无法判断**」（Unproven / 升级），**不得**把空断言集
-/// 交给求解器：空集 check-sat 恒 `sat`，会被读成反例（F10，09a §P6 6.9.5-B.4 §十三）。
+/// 交给求解器：空集 check-sat 恒 `sat`，会被读成反例（F10，提交信息）。
 pub fn translate_constraint(
     constraint: &ConstExpr,
     assumptions: &[ConstExpr],

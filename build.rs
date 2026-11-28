@@ -10,8 +10,6 @@ use std::process::Command;
 const Z3_VERSION: &str = "4.16.0";
 
 fn main() {
-    process_grammar_probe();
-
     // 重建触发面显式化：build.rs 只在这些路径与环境变量（及自身/Cargo.toml）变化时重跑。
     //
     // locales 用目录级声明——触发面必须 ⊇ 构建期校验的输入面（#458）：下文
@@ -99,6 +97,16 @@ fn main() {
   "
             )
         );
+    }
+
+    // P10 S6.2 opcode 表门禁（F7+F8）：`opcode.rs` 的 `pub const` 声明与 `OPCODE_INFO`
+    // 权威表逐项对账——码值唯一、每常量有表项、表项名非空且唯一、按 code 升序。
+    // 判定逻辑单一实现于 `code_tables::opcode_gate`（与 type_tables 门禁同形），
+    // **构建硬失败**：任一漂移即 panic 拒绝编译，通过时只打一行摘要。
+    println!("cargo:rerun-if-changed={}", code_tables::OPCODE_REL);
+    match code_tables::opcode_gate(root) {
+        Ok(summary) => println!("cargo:warning={summary}"),
+        Err(detail) => panic!("opcode 表门禁 F8 失败（构建已拒绝）：\n  {detail}"),
     }
 
     // P6 6.6.2 类型表门禁 T1（`ast::Type` 构造点三类分列 + 零构造清单 + 勘察基线对账）——
@@ -230,32 +238,6 @@ fn main() {
 
     link_z3(&z3_dir);
     copy_shared_lib(&z3_dir);
-}
-
-/// 8.3 最小 LALRPOP 探针：有 grammar 输入时 build-time 生成，生成物不入库。
-///
-/// 无输入目录时提前返回；有输入时也只追加生成步骤，不绕过既有错误码、类型表
-/// 与 Z3 构建门禁。parser 生产入口不在这里接线。
-fn process_grammar_probe() {
-    let manifest = env::var("CARGO_MANIFEST_DIR").unwrap();
-    let src_dir = Path::new(&manifest).join("src");
-    let grammar_dir = src_dir.join("frontend/core/parser/grammar");
-    if !grammar_dir.exists() {
-        return;
-    }
-    println!("cargo:rerun-if-changed={}", grammar_dir.display());
-    // 输入根固定为 `src/`，不用 `process_root()`：后者的输入根是 crate 根，递归扫描会把
-    // `target/`（cargo 自己正在增删的临时文件）与 `.yx-scratch/` 一并卷进来——并发构建下
-    // 命中已消失的临时文件即 NotFound（CI 实测 target/debug/deps/*，构建脚本 panic），
-    // Windows 上碰到失效符号链接即 ERROR_CANT_ACCESS_FILE。生成物落点只取决于「相对输入根
-    // 的目录」，输入根换成 `src/` 后相对路径不变，仍是
-    // `$OUT_DIR/frontend/core/parser/grammar/probe.rs`（grammar_probe.rs 的 `lalrpop_mod!`
-    // 指向它）。
-    lalrpop::Configuration::new()
-        .set_in_dir(&src_dir)
-        .set_out_dir(env::var("OUT_DIR").unwrap())
-        .process()
-        .expect("LALRPOP 探针文法生成失败");
 }
 
 fn link_z3(z3_dir: &Path) {

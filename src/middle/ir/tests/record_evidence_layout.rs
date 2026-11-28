@@ -1,7 +1,7 @@
 //! 6.9.5-B.2：声明期分类 → IR 量词传播与数据布局的直读判据。
 //!
 //! 规范锚：RFC-027 §14.1（space→position→category）、§14.6（擦除与数据索引）、
-//! SPEC §8.3.2 / §8.3.6；09a §P6 6.9.5-B.2 契约 T27 / T28。
+//! SPEC §8.3.2 / §8.3.6；提交信息。
 //!
 //! 为什么走真实管线：手搓 TypeDeclBody 只能证明字段存在，证明不了
 //! 「RecordModel → TypeCheckResult.record_models → TypeDeclBody」这条映射；
@@ -306,7 +306,8 @@ fn module_ir_with_import(
     // 与 driver 的 IrGeneration 臂同源（arms.rs 的 seed_cross_file_types）：
     // 导入类型的字段布局由**定义方 AST** 预注册，量词再由 record_models 补齐。
     // 不预注册时导入字段访问会在 IR 侧报 E3005「无法解析字段索引」。
-    generator.seed_cross_file_types(&[&lib_parsed.module, &entry_parsed.module]);
+    // 本夹具的 typecheck 未开限定（`TypeChecker::new` 默认），身份是平路径 ⇒ 单元键传空串。
+    generator.seed_cross_file_types(&[("", &lib_parsed.module), ("", &entry_parsed.module)]);
     generator
         .generate_module_ir(&entry_parsed.module)
         .expect("导入夹具必须能生成 IR")

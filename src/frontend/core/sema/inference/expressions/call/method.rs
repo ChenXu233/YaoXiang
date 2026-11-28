@@ -3,6 +3,7 @@
 //! 自 `inference/expressions.rs` 纯搬移（WBS 7.0.4）：方法体与文档注释零改动，
 //! 仅补跨模块可见性（`pub(super)`）。
 
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::core::types::MonoType;
 
 use super::super::extract_namespace_path;
@@ -18,7 +19,7 @@ impl<'a> ExpressionInferrer<'a> {
     pub(super) fn method_binding_call_key(
         &self,
         func: &crate::ast::Expr,
-    ) -> Option<String> {
+    ) -> Option<DefPath> {
         let crate::ast::Expr::FieldAccess {
             expr: obj, field, ..
         } = func
@@ -54,7 +55,7 @@ impl<'a> ExpressionInferrer<'a> {
         let (type_name, has_field) = match &resolved {
             MonoType::Struct(s) => (s.name.clone(), s.fields.iter().any(|f| &f.name == field)),
             MonoType::TypeRef(n) => {
-                if let Some(def_ty) = self.type_defs.get(n).map(|p| &p.body) {
+                if let Some(def_ty) = self.type_defs.get(n.bare()).map(|p| &p.body) {
                     let def_ty = self.solver.resolve_type(def_ty);
                     if let MonoType::Struct(s) = def_ty {
                         (s.name.clone(), s.fields.iter().any(|fi| &fi.name == field))
@@ -72,7 +73,12 @@ impl<'a> ExpressionInferrer<'a> {
             return None;
         }
 
-        let key = format!("{}.{}", type_name, field);
+        // 身份：接收者绑定的**类型身份优先**（D-6，跨单元同名类型的唯一区分依据），
+        // 否则按静态类型名经导入面解析（D-5）
+        let key = match self.scope.type_identity(obj_name) {
+            Some(identity) => DefPath::method(&identity.module, &identity.name, field),
+            None => self.method_key(type_name.bare(), field)?,
+        };
         let binding = self.method_bindings.get(&key)?;
         let MonoType::Fn { params, .. } = binding else {
             return None;

@@ -7,6 +7,7 @@
 //! - `query.rs` — `super::super::query`（#403 类型域落点归一的 L3 第四门）
 
 mod budget;
+mod identity_keys;
 mod pattern_range;
 mod query;
 mod regalloc;

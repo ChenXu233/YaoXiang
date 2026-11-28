@@ -22,30 +22,30 @@ main: () -> Void = {
     // 多载荷变体：构造与解构成对
     p = Pair.make(3, 4)
     v = match p {
-        make(a, b) => a * b,
-        empty() => 0,
+        make(a, b) -> a * b,
+        empty() -> 0,
     }
     assert(v == 12, "multi-payload destructure")
 
     q = Pair.empty()
     w = match q {
-        make(a, b) => a + b,
-        empty() => 42,
+        make(a, b) -> a + b,
+        empty() -> 42,
     }
     assert(w == 42, "zero-payload arm")
 
     // 结构体模式：简写 x 绑定同名字段，y: b 重命名
     pt = Point(3, 4)
     area = match pt {
-        Point { x, y: b } => x * b,
+        Point { x, y: b } -> x * b,
     }
     assert(area == 12, "struct pattern with rename")
 
     // 变体载荷绑定
     r = Result(Int, String).ok(7)
     got = match r {
-        ok(n) => n,
-        err(_) => 0,
+        ok(n) -> n,
+        err(_) -> 0,
     }
     assert(got == 7, "variant payload binding")
 }

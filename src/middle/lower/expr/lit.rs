@@ -5,10 +5,24 @@
 use crate::ast;
 use crate::ast::Expr;
 use crate::frontend::core::lexer::tokens::Literal;
+use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::middle::lower::AstToIrGenerator;
 use crate::util::diagnostic::Diagnostic;
 use crate::util::span::Span;
+
+/// 字面量 → 常量值（唯一映射：值表落类型与常量池装载同源）。
+pub(in crate::middle) fn literal_const_value(literal: &Literal) -> ConstValue {
+    match literal {
+        Literal::Int(n) => ConstValue::Int(*n),
+        Literal::Float(f) => ConstValue::Float(*f),
+        Literal::Bool(b) => ConstValue::Bool(*b),
+        Literal::String(s) => ConstValue::String(s.clone()),
+        Literal::Char(c) => ConstValue::Char(*c),
+        Literal::Void => ConstValue::Void,
+    }
+}
 
 impl AstToIrGenerator {
     #[allow(clippy::only_used_in_recursion)]
@@ -20,14 +34,7 @@ impl AstToIrGenerator {
         constants: &mut Vec<ConstValue>,
     ) -> Result<(), Diagnostic> {
         // 常量加载
-        let const_val = match literal {
-            Literal::Int(n) => ConstValue::Int(*n),
-            Literal::Float(f) => ConstValue::Float(*f),
-            Literal::Bool(b) => ConstValue::Bool(*b),
-            Literal::String(s) => ConstValue::String(s.clone()),
-            Literal::Char(c) => ConstValue::Char(*c),
-            Literal::Void => ConstValue::Void,
-        };
+        let const_val = literal_const_value(literal);
         // 字面量类型是可信来源：直接落值表（7b.2 契约 §二 第 2 条）。
         if let Some(ty) = const_val.mono_type() {
             self.note_value_type(&result_reg, ty);
@@ -124,6 +131,15 @@ impl AstToIrGenerator {
             span: *span,
             def: None,
         });
+        // f-string 是合成调用（AST 里没有调用节点），结果类型按声明签名恒为
+        // String（src/std/string.rs 的 `format -> String`）。
+        self.note_value_type(
+            &result_reg,
+            MonoType::Generic {
+                name: Nominal::flat("String").expect("String 是裸类型名"),
+                args: Vec::new(),
+            },
+        );
         Ok(())
     }
 }

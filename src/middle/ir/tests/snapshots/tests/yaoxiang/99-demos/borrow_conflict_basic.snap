@@ -4,7 +4,7 @@ module
   fn Point.read(Ref { mutable: false, inner: TypeRef("Point") }) -> Void
     locals_total=3
     values_total=3
-    value v0: TypeRef("?") @block0
+    value v0: Void @block0
     value v1: TypeRef("?") @block0
     value v2: Ref { mutable: true, inner: TypeRef("Point") } @block0
     Load v2 <- %0
@@ -44,18 +44,18 @@ module
     values_total=16
     value v0: Float(64) @block0
     value v1: Float(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Void @block0
     value v3: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
-    value v4: TypeRef("?") @block0
+    value v4: Void @block0
     value v5: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v6: Float(64) @block0
     value v7: Float(64) @block0
-    value v8: TypeRef("?") @block0
+    value v8: Never @block0
     value v9: Bool @block0
     value v10: Generic { name: "String", args: [] } @block0
-    value v11: TypeRef("?") @block0
+    value v11: Void @block0
     value v12: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
-    value v13: TypeRef("?") @block0
+    value v13: Never @block0
     value v14: Bool @block0
     value v15: Generic { name: "String", args: [] } @block0
     Load v0 <- float(4607182418800017408)
@@ -63,20 +63,25 @@ module
     Call %0 <- string("Point") [v0, v1] (def=d1)
     Load v3 <- %0
     Call v2 <- string("Point.read") [v3] (def=d2)
+    Drop v3
     Drop %0
     Load v5 <- %0
     Load v6 <- float(4607182418800017408)
     Load v7 <- float(4607182418800017408)
     Call v4 <- string("Point.shift") [v5, v6, v7] (def=d3)
+    Drop v5
     Drop %0
     Load v9 <- bool(true)
     Load v10 <- string("point shifted successfully")
     Call v8 <- string("std.assert.assert") [v9, v10] (def=d4)
+    Drop v10
     Load v12 <- %0
     Call v11 <- string("std.io.println") [v12] (def=d0)
+    Drop v12
     Load v14 <- bool(true)
     Load v15 <- string("all passed")
     Call v13 <- string("std.assert.assert") [v14, v15] (def=d4)
+    Drop v15
     Drop %0
     Ret v13
   init (locals=3)

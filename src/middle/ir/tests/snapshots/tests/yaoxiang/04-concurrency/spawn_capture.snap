@@ -22,13 +22,13 @@ module
     value v4: Int(64) @block0
     value v5: Int(64) @block0
     value v6: Int(64) @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
     value v9: Int(64) @block0
     value v10: Int(64) @block0
     value v11: Generic { name: "String", args: [] } @block0
     value v12: Int(64) @block0
-    value v13: TypeRef("?") @block0
+    value v13: Never @block0
     value v14: Bool @block0
     value v15: Int(64) @block0
     value v16: Int(64) @block0
@@ -40,7 +40,7 @@ module
     value v22: TypeRef("?") @block0
     value v23: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v24: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v25: TypeRef("?") @block0
+    value v25: Never @block0
     value v26: Bool @block0
     value v27: Int(64) @block0
     value v28: Int(64) @block0
@@ -50,7 +50,7 @@ module
     value v32: Int(64) @block0
     value v33: Int(64) @block0
     value v34: Int(64) @block0
-    value v35: TypeRef("?") @block0
+    value v35: Never @block0
     value v36: Bool @block0
     value v37: Int(64) @block0
     value v38: Int(64) @block0
@@ -71,6 +71,7 @@ module
     Eq v8 <- v9, v10
     Load v11 <- string("spawn 捕获双变量 t1+t2 == 6")
     Call v7 <- string("std.assert.assert") [v8, v11] (def=d0)
+    Drop v11
     Load %3 <- int(42)
     Spawn %4 <- [] plan(groups=[], deps=[], resources=[])
     Load v12 <- %3
@@ -80,14 +81,17 @@ module
     Eq v14 <- v15, v16
     Load v17 <- string("spawn 捕获单变量 data == 42")
     Call v13 <- string("std.assert.assert") [v14, v17] (def=d0)
+    Drop v17
     Load v18 <- int(3)
     Load v19 <- int(4)
     Call %5 <- string("Point") [v18, v19] (def=d1)
     Spawn %6 <- [] plan(groups=[], deps=[], resources=[])
     Load v23 <- %5
     LoadField v21 <- v23.0
+    Drop v23
     Load v24 <- %5
     LoadField v22 <- v24.1
+    Drop v24
     Add v20 <- v21, v22
     Move %6 <- v20
     Load v27 <- %6
@@ -95,6 +99,7 @@ module
     Eq v26 <- v27, v28
     Load v29 <- string("spawn 捕获 Struct 字段 p.x+p.y == 7")
     Call v25 <- string("std.assert.assert") [v26, v29] (def=d0)
+    Drop v29
     Load %7 <- int(10)
     Load %8 <- int(20)
     Load %9 <- int(30)
@@ -110,6 +115,7 @@ module
     Eq v36 <- v37, v38
     Load v39 <- string("spawn 嵌套表达式 (a+b)*c == 900")
     Call v35 <- string("std.assert.assert") [v36, v39] (def=d0)
+    Drop v39
     Drop %7
     Drop %8
     Drop %9

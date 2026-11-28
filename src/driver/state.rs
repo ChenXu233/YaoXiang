@@ -156,8 +156,9 @@ pub(in crate::driver) struct State {
     pub(in crate::driver) vendor_root: Option<PathBuf>,
     /// Registry 产物（多文件 Typecheck / IrGeneration 的共享注册表）
     pub(in crate::driver) registry: Option<ModuleRegistry>,
-    /// Registry 产物（跨文件方法调用解析，RFC-029）
-    pub(in crate::driver) method_bindings: Option<HashMap<String, MonoType>>,
+    /// Registry 产物（跨文件方法调用解析，RFC-029）。键是方法身份（WBS 4.9.10 D-1）
+    pub(in crate::driver) method_bindings:
+        Option<HashMap<crate::frontend::core::types::identity::DefPath, MonoType>>,
     /// GlobalSlotAlloc 产物（限定名 → 绝对槽位号）
     pub(in crate::driver) global_layout: Option<Vec<(String, usize)>>,
     /// GlobalSlotAlloc 产物（各文件槽位基址）

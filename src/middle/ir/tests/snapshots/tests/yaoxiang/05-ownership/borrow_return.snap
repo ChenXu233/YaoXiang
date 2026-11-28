@@ -4,7 +4,7 @@ module
   fn Point.get_x(Ref { mutable: false, inner: TypeRef("Point") }) -> Generic { name: "Tuple", args: [Ref { mutable: false, inner: Float(64) }, Ref { mutable: false, inner: TypeRef("Point") }] }
     locals_total=4
     values_total=5
-    value v0: TypeRef("?") @block0
+    value v0: Generic { name: "Tuple", args: [Void, Void] } @block0
     value v1: TypeRef("?") @block0
     value v2: TypeRef("?") @block0
     value v3: Ref { mutable: true, inner: TypeRef("Point") } @block0
@@ -51,26 +51,26 @@ module
     values_total=27
     value v0: Float(64) @block0
     value v1: Float(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Generic { name: "Tuple", args: [Ref { mutable: false, inner: Float(64) }, Ref { mutable: false, inner: TypeRef("Point") }] } @block0
     value v3: Ref { mutable: false, inner: TypeRef("Point") } @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
-    value v6: TypeRef("?") @block0
+    value v6: Never @block0
     value v7: Bool @block0
     value v8: Ref { mutable: false, inner: Float(64) } @block0
     value v9: Float(64) @block0
     value v10: Generic { name: "String", args: [] } @block0
-    value v11: TypeRef("?") @block0
+    value v11: Never @block0
     value v12: Bool @block0
     value v13: TypeRef("?") @block0
     value v14: Float(64) @block0
     value v15: Ref { mutable: false, inner: TypeRef("Point") } @block0
     value v16: Generic { name: "String", args: [] } @block0
-    value v17: TypeRef("?") @block0
+    value v17: Void @block0
     value v18: Ref { mutable: false, inner: TypeRef("Point") } @block0
     value v19: Float(64) @block0
     value v20: Float(64) @block0
-    value v21: TypeRef("?") @block0
+    value v21: Never @block0
     value v22: Bool @block0
     value v23: TypeRef("?") @block0
     value v24: Float(64) @block0
@@ -85,17 +85,20 @@ module
     LoadIndex %1 <- v2[v4]
     Load v5 <- int(1)
     LoadIndex %2 <- v2[v5]
+    Drop v2
     Load v8 <- %1
     Load v9 <- float(4607182418800017408)
     Eq v7 <- v8, v9
     Load v10 <- string("子令牌活跃")
     Call v6 <- string("std.assert.assert") [v7, v10] (def=d2)
+    Drop v10
     Load v15 <- %2
     LoadField v13 <- v15.1
     Load v14 <- float(4611686018427387904)
     Eq v12 <- v13, v14
     Load v16 <- string("父令牌返回后活跃")
     Call v11 <- string("std.assert.assert") [v12, v16] (def=d2)
+    Drop v16
     Load v18 <- %2
     Load v19 <- float(4602678819172646912)
     Load v20 <- float(4602678819172646912)
@@ -107,6 +110,7 @@ module
     Eq v22 <- v23, v24
     Load v26 <- string("&mut 复用写回")
     Call v21 <- string("std.assert.assert") [v22, v26] (def=d2)
+    Drop v26
     Drop %2
     Ret v21
   init (locals=3)

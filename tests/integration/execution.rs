@@ -131,7 +131,7 @@ fn test_match_simple() {
     run_ok(
         r#"
         main = () => {
-            r1 = match 1 { 1 => 100, _ => 0 }
+            r1 = match 1 { 1 -> 100, _ -> 0 }
         }
         "#,
     );
@@ -153,6 +153,30 @@ fn test_list_operations() {
             io.println(zs)
             io.println(s)
         }
+        "#,
+    );
+}
+
+/// #575：内置容器构造结果的索引元素按**元素类型**定型，而不是 `Type`。
+///
+/// 值级 oracle：修复前 `v[0]` 的类型是 `Type`，`v[0] + 1` 在编译期报
+/// E1002（同一元素位在算术/比较两臂都应按 Int 定型）；`Vec(Int)(len = …)`
+/// 的槽位分配是未修分支对照，不得受本修影响。
+#[test]
+fn test_vec_ctor_index_element_is_element_type() {
+    run_ok(
+        r#"
+use std.assert
+
+main = () => {
+    v = Vec(Int)(1, 2, 3)
+    assert.assert(v[0] + 1 == 2, "index element must be Int (not Type)")
+    assert.assert(v[0] == 1, "equality against Int literal")
+    a = Array(Int, 3)(1, 2, 3)
+    assert.assert(a[0] + 1 == 2, "Array(T, N) index element must be Int")
+    buf = Vec(Int)(len = 3)
+    assert.assert(buf.length == 3, "len-slot ctor keeps working")
+}
         "#,
     );
 }
@@ -473,10 +497,15 @@ main = () => {
     run(&source).unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
 }
 
-/// #477 锚③：**静默错误值形态**——用户 `read: (File, Int)` 与 native read
-/// 元数与实参运行期形态都兼容（File 运行期即 Int fd）：修前 native_read
+/// #477 锚③：**静默错误值形态**——用户 `read: (Any, Int)` 与 native read
+/// 元数与实参运行期形态都兼容（句柄运行期即 Int fd）：修前 native_read
 /// 拿用户 fd 真读文件、静默返回文件内容（空文件 → 空串），exit 0 但值错；
 /// 只有值断言能区分两种行为。修后用户函数执行。
+///
+/// 形参位迁移（RFC-039 D53 / WBS 8.9.1）：本夹具原写 `(File, Int)`——D53 之前
+/// 裸标识符是「无标注形参」（HM 推断），D53 之后按**类型**解析，而未导入
+/// `File` 这个类型名（native 句柄类型不在类型命名空间）⇒ 构造期 E1003。
+/// 本用例只钉遮蔽派发、不钉句柄类型，故按运行期事实收窄到 `(Any, Int)`。
 #[test]
 fn test_shadowed_read_with_compatible_arity_returns_user_result() {
     // Arrange：native_read 修前会真读该文件（fd 查表命中），静默返回文件内容。
@@ -496,7 +525,7 @@ use std.os
 use std.io
 use std.assert
 
-read: (File, Int) -> String = (f, n) => {{ "user-read-called" }}
+read: (Any, Int) -> String = (f, n) => {{ "user-read-called" }}
 
 main = () => {{
     f = os.open("{anchor_path}", "r")
@@ -566,11 +595,11 @@ use std.assert
 main = () => {
     r = json.parse("\"hello\"")
     match r {
-        ok(v) => {
+        ok(v) -> {
             s = json.stringify(v)
             assert.assert(s == "\"hello\"", "std.json internal bare calls must roundtrip unchanged")
         }
-        err(e) => {
+        err(e) -> {
             assert.assert(false, f"std.json.parse unexpectedly failed: {e}")
         }
     }

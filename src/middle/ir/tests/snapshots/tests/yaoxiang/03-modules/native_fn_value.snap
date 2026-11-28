@@ -14,10 +14,14 @@ module
     Load v1 <- string("hello")
     Load v2 <- %0
     CallDyn v0 <- v2 [v1]
+    Drop v1
+    Drop v2
     Load %1 <- %0
     Load v4 <- string("indirect hello")
     Load v5 <- %1
     CallDyn v3 <- v5 [v4]
+    Drop v4
+    Drop v5
     Drop %0
     Drop %1
     Ret v3

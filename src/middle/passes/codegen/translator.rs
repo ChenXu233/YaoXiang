@@ -101,7 +101,7 @@ pub struct Translator {
     /// 函数名到索引的映射
     function_name_to_idx: Option<HashMap<String, usize>>,
     /// DefId 到函数表索引的映射（Stage 3：按 DefId 分发的主路径）
-    function_def_to_idx: HashMap<crate::frontend::module::symbol::DefId, usize>,
+    function_def_to_idx: HashMap<crate::frontend::core::types::identity::DefId, usize>,
     /// FFI 函数元数据缓存: func_name → mechanism/lib/symbol
     ffi_func_meta: HashMap<String, FfiFuncMeta>,
 
@@ -333,6 +333,9 @@ impl Translator {
             // #368：不再是硬编码 0。槽位表长度覆盖具名局部；纯临时寄存器
             // 由 `Frame::set_slot` 按需扩容（顶层语句的临时量是即用即弃的）。
             local_count: locals.len(),
+            // 顶层序列没有闭包体（捕获在各自的闭包函数里），上值槽恒为 0；
+            // 仍走同一个计数器，避免「两处各说一套」。
+            upvalue_count: Self::upvalue_slot_count(init.iter()),
             local_names,
             debug_map,
         })
@@ -378,7 +381,7 @@ impl Translator {
         let phi_plan = Self::plan_phi_edges(&blocks_ref)?;
         let mut edge_entry: HashMap<(usize, usize), usize> = HashMap::new();
 
-        for block in blocks_ref {
+        for block in &blocks_ref {
             if let Some(groups) = phi_plan.groups.get(&block.label) {
                 if let (Some(&first_ir_index), Some(&body_ir_index)) = (
                     phi_plan.first_ir_index.get(&block.label),
@@ -454,16 +457,41 @@ impl Translator {
             return_type: func.return_type.clone(),
             instructions,
             local_count: locals_len,
+            // RFC-039 D17：上值槽数由函数体的上值读写推导后落盘（v5），
+            // 载入侧不再硬编 0。
+            upvalue_count: Self::upvalue_slot_count(
+                blocks_ref
+                    .iter()
+                    .flat_map(|block| block.instructions.iter()),
+            ),
             local_names,
             debug_map,
         })
+    }
+
+    /// 函数体的上值槽数 = 体内经 `LoadUpvalue` / `StoreUpvalue` 触达的最大槽下标 + 1。
+    ///
+    /// 为什么以 IR 而不是字节码为准：上值下标在 IR 里是 `usize`，编码成字节时
+    /// 截成 u8；以 IR 计数才是「函数需要多少上值槽」的语义事实，编码器截断
+    /// 另有自己的 `to_reg` 越界检查。生产端只此一处（`translate_function`
+    /// 与 `translate_init_sequence` 共用），消费端是 `file::FunctionCode.upvalue_count`
+    /// 的落盘/载入与 `BytecodeModule` 解码。
+    fn upvalue_slot_count<'a>(instructions: impl Iterator<Item = &'a Instruction>) -> usize {
+        instructions
+            .filter_map(|instr| match instr {
+                Instruction::LoadUpvalue { upvalue_idx, .. }
+                | Instruction::StoreUpvalue { upvalue_idx, .. } => Some(*upvalue_idx + 1),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(0)
     }
 
     /// 方案 A 的展开计划：汇合块入口的 `Phi` 按**前驱**分组为 Move 串
     /// （04-ssa.md §「`Phi` 的字节码形态」方案 A：IR-only 伪指令，不新增 opcode）。
     ///
     /// 组序：**落空前驱**领首——它是布局上紧邻本块、且块尾不是
-    /// `Jmp` / `Ret` / `TailCall` 的前驱；落空路径直接流进本块入口，必须命中第一组。
+    /// `Jmp` / `Ret` 的前驱；落空路径直接流进本块入口，必须命中第一组。
     /// 其余前驱按 label 升序，靠「入边跳转重定向到自己的组起点」选择。
     ///
     /// 形态自保（这些形态的判据归 `verify_ssa`，本函数只保证**不产出错代码**）：
@@ -549,11 +577,7 @@ impl Translator {
 
             // 落空前驱：布局上紧邻本块、且块尾不是无条件跳转 / 返回。
             let fallthrough_predecessor = match blocks[block_index - 1].instructions.last() {
-                Some(
-                    Instruction::Jmp { .. }
-                    | Instruction::Ret { .. }
-                    | Instruction::TailCall { .. },
-                ) => None,
+                Some(Instruction::Jmp { .. } | Instruction::Ret { .. }) => None,
                 _ => Some(blocks[block_index - 1].label),
             };
             let mut order: Vec<usize> = Vec::with_capacity(pred_labels.len());
@@ -630,7 +654,7 @@ impl Translator {
                     .any(|(_, src_slot)| src_slot == dst_slot)
                 {
                     return Err(phi_layout_violation(format!(
-                        "块 {block_label} 的 Phi 组（前驱 {}）存在并行拷贝环：槽 {dst_slot} 先被写、随后被读，需要临时槽（登记见 09a §P7 7b.3 契约）",
+                        "块 {block_label} 的 Phi 组（前驱 {}）存在并行拷贝环：槽 {dst_slot} 先被写、随后被读，需要临时槽（见任务 7b.3 的提交信息）",
                         group.predecessor
                     )));
                 }
@@ -660,7 +684,7 @@ impl Translator {
     /// 数据源自 6.6.12 起是 IR 原生的 [`TypeDeclBody`]（收窄载体），不再读语法层 AST。
     ///
     /// **本轮不改行为**：仍按历史行为把**全部**字段（含函数类型字段/方法）算进构造
-    /// 参数。SPEC `type-system.md:443` 要求方法不进构造参数，该不一致登记在 09a
+    /// 参数。SPEC `type-system.md:443` 要求方法不进构造参数，该不一致登记在 提交信息
     /// §P6 6.6.12（载体上的 `is_method` 已能表达区分，留给后续轮次接线）。
     fn synthesize_constructor(
         &mut self,
@@ -678,6 +702,8 @@ impl Translator {
                 return_type: type_func.return_type.clone(),
                 instructions: Vec::new(),
                 local_count: 0,
+                // 构造器没有闭包体，不读上值槽
+                upvalue_count: 0,
                 local_names: HashMap::new(),
                 debug_map: HashMap::new(),
             });
@@ -729,7 +755,9 @@ impl Translator {
 
         // 创建临时 FunctionIR 用于 translate_instruction
         let mut locals: Vec<LocalSlot> = param_types.iter().cloned().map(LocalSlot::temp).collect();
-        locals.push(LocalSlot::temp(MonoType::TypeRef(struct_name.clone())));
+        // 临时槽类型 = 声明类型的身份（lower 随 TypeDeclBody 携带）。
+        // 不按 IR 函数名的点号反解身份：名字是投影的像，反解会引入第二套编码。
+        locals.push(LocalSlot::temp(MonoType::TypeRef(body.identity.clone())));
 
         let temp_func = FunctionIR {
             name: struct_name.clone(),
@@ -873,8 +901,6 @@ impl Translator {
             CallDyn {
                 dst, func, args, ..
             } => self.translate_call_dyn(dst, func, args),
-            TailCall { func, args, .. } => self.translate_tail_call(func, args),
-
             Alloc { dst, .. } => self.translate_alloc(dst),
             Free { .. } => Ok(BytecodeInstruction::new(opcode::NOP, vec![])),
             AllocArray { dst, .. } => self.translate_alloc_array(dst),
@@ -1203,7 +1229,7 @@ impl Translator {
         dst: &Option<Operand>,
         func: &Operand,
         args: &[Operand],
-        def: Option<crate::frontend::module::symbol::DefId>,
+        def: Option<crate::frontend::core::types::identity::DefId>,
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = if let Some(d) = dst {
             self.operand_resolver.to_reg(d)?
@@ -1439,27 +1465,6 @@ impl Translator {
         }
         operands.push(arg_regs.len() as u8);
         Ok(BytecodeInstruction::new(opcode::CALL_DYN, operands))
-    }
-
-    fn translate_tail_call(
-        &mut self,
-        func: &Operand,
-        args: &[Operand],
-    ) -> Result<BytecodeInstruction, Diagnostic> {
-        let func_id = match func {
-            Operand::Const(ConstValue::Int(i)) => *i as u32,
-            _ => 0,
-        };
-        let base_arg_reg = if let Some(first_arg) = args.first() {
-            self.operand_resolver.to_reg(first_arg)?
-        } else {
-            0
-        };
-        let mut operands = vec![];
-        operands.extend_from_slice(&func_id.to_le_bytes());
-        operands.push(base_arg_reg);
-        operands.push(args.len() as u8);
-        Ok(BytecodeInstruction::new(opcode::TAIL_CALL, operands))
     }
 
     fn translate_alloc(
@@ -1699,7 +1704,7 @@ impl Translator {
         &mut self,
         dst: &Operand,
         func_name: &str,
-        def: Option<crate::frontend::module::symbol::DefId>,
+        def: Option<crate::frontend::core::types::identity::DefId>,
         env: &[Operand],
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;

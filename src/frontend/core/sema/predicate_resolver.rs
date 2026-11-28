@@ -201,7 +201,7 @@ impl PredicateResolver {
             // 字面量值：如 Positive(5) 中的 5
             MonoType::Literal { value, .. } => Some(ConstExpr::Lit(value.clone())),
             // 变量引用：如 Positive(b) 中的 b（作为命名变量）
-            MonoType::TypeRef(name) => Some(ConstExpr::NamedVar(name.clone())),
+            MonoType::TypeRef(name) => Some(ConstExpr::NamedVar(name.clone().bare().to_string())),
             // 递归处理 Generic 中的参数（如 Positive(Generic { name: "x", args: [...] })
             MonoType::Generic { name: _name, args } if args.len() == 1 => {
                 Self::mono_type_to_const_expr(&args[0])

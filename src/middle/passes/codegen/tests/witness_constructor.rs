@@ -1,6 +1,6 @@
 //! witness 字段的运行期布局 — 6.9.5-B.1b / H2（数据-only 构造）
 //!
-//! 规范锚：RFC-039 D62 / issue #536（B 路线，H0=B）；09a §P6 6.9.5-B 设计
+//! 规范锚：RFC-039 D62 / issue #536（B 路线，H0=B）。
 //! §一.3（构造 arity 3B）与 §P6 6.9.5-B.1 契约 §五（T01/T02）。
 //!
 //! **为什么直驱构造 IR**：B.1a 保证 parser 与全部生产构造点都写
@@ -14,6 +14,7 @@
 //! `CreateStruct.fields`、`z` 的 operand 位置 = 1。
 
 use crate::ast::Quantity;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::MonoType;
 use crate::middle::bytecode::file::FunctionCode;
 use crate::middle::bytecode::opcode;
@@ -42,11 +43,19 @@ fn module_with_type_decl(fields: Vec<TypeDeclField>) -> ModuleIR {
             name: "Box".to_string(),
             def: None,
             params: Vec::new(),
-            return_type: MonoType::TypeRef("Box".to_string()),
+            return_type: MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Box")))
+                    .expect("type name must be bare and non-empty"),
+            ),
             body: FunctionBody::TypeDecl {
                 body: TypeDeclBody {
                     fields,
-                    self_type: MonoType::TypeRef("Box".to_string()),
+                    self_type: MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&("Box")))
+                            .expect("type name must be bare and non-empty"),
+                    ),
+                    identity: Nominal::flat(AsRef::<str>::as_ref(&("Box")))
+                        .expect("type name must be bare and non-empty"),
                 },
             },
             generic_params: None,

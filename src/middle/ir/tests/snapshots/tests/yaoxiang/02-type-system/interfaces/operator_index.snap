@@ -18,16 +18,16 @@ module
     slot[0] g : Int(64) @depth1
     locals_total=4
     values_total=14
-    value v0: TypeRef("?") @block0
+    value v0: Generic { name: "Vec", args: [Float(64)] } @block0
     value v1: Float(64) @block0
     value v2: Int(64) @block0
     value v3: Float(64) @block0
     value v4: Int(64) @block0
     value v5: Float(64) @block0
     value v6: Int(64) @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
-    value v9: TypeRef("?") @block0
+    value v9: Float(64) @block0
     value v10: Float(64) @block0
     value v11: Struct(StructType { name: "Grid", fields: [("cells", Generic { name: "Vec", args: [Float(64)] })], methods: {}, interfaces: ["Index"] }) @block0
     value v12: Int(64) @block0
@@ -43,13 +43,16 @@ module
     Load v6 <- int(2)
     StoreIndex v0[v6] <- v5
     Call %0 <- string("Grid") [v0] (def=d0)
+    Drop v0
     Load v11 <- %0
     Load v12 <- int(1)
     Call v9 <- string("Grid.index") [v11, v12] (def=d1)
+    Drop v11
     Load v10 <- float(4620693217682128896)
     Eq v8 <- v9, v10
     Load v13 <- string("g[1] == 8.0")
     Call v7 <- string("std.assert.assert") [v8, v13] (def=d2)
+    Drop v13
     Drop %0
     Ret v7
   init (locals=2)

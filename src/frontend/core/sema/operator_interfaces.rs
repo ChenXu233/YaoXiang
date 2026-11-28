@@ -21,6 +21,7 @@ use crate::frontend::core::types::mono::StructType;
 use crate::frontend::core::types::{MonoType, PolyType, TypeVar};
 
 use super::environment::{GenericTypeDef, InterfaceImplEntry, TypeEnvironment};
+use crate::frontend::core::types::identity::Nominal;
 
 /// 运算符接口规格（Layer 2 声明 + Layer 0 方法名映射）
 pub struct OperatorInterfaceSpec {
@@ -91,7 +92,12 @@ pub fn try_member_signature(method: &str) -> MonoType {
         mutable: false,
         inner: Box::new(t),
     };
-    let p = |n: &str| MonoType::TypeRef(n.to_string());
+    let p = |n: &str| {
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&(n)))
+                .expect("type name must be bare and non-empty"),
+        )
+    };
     match method {
         "is_failure" => MonoType::Fn {
             params: vec![borrow(p("Self"))],
@@ -174,7 +180,12 @@ pub fn member_signature(spec: &OperatorInterfaceSpec) -> MonoType {
         mutable: false,
         inner: Box::new(t),
     };
-    let param = |n: &str| MonoType::TypeRef(n.to_string());
+    let param = |n: &str| {
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&(n)))
+                .expect("type name must be bare and non-empty"),
+        )
+    };
     let params = match spec.name {
         "Equal" => vec![borrow(param("Self")), borrow(param("R"))],
         "Index" => vec![borrow(param("Self")), borrow(param("Key"))],
@@ -289,16 +300,52 @@ pub struct OperatorDispatch {
     pub type_name: String,
     /// 派发方法名（如 "equal"）
     pub method: String,
+    /// **IR 最终函数名**（WBS 4.9.10 D-8）：`{module}.{Type}.{method}` 或单文件裸名。
+    ///
+    /// 由 typecheck 在记录派发点时按接收者**身份**（D-6）定名——IR 生成直接用它，
+    /// 不再在 lower 侧按短名二次查表（那等于按名字猜单元）。与 `type_name`/
+    /// `method` 的分工：后两者是**归因**口径（W1005 名字组、泛型特化展开），
+    /// 本条是**调用名**口径（D-8：必须是 IR 函数表里真实存在的名字）。
+    pub dispatch_name: String,
     /// 结果取反（`!=` 派发到 equal 后需 Not）
     pub negate: bool,
+    /// **派发调用的结果类型**（`!=` 记录的是取反**之后**的类型）。
+    ///
+    /// 与 `dispatch_name` 同一个结算点、同一份证据：既然后者已经是「IR 里真实存在
+    /// 的那个函数」，前者就是它的返回位——IR 生成按同一记录落 `Call` 的 dst 类型，
+    /// 不再对合成调用猜类型。`None` = 该派发点的结果类型未定（如约束形参延迟派发
+    /// 之外的未收敛形态）。
+    pub result_type: Option<MonoType>,
 }
+
+#[derive(Debug, Clone)]
+/// `?` 表达式的 Try 结算结果（RFC-011b）：实现类型名 + 成功载荷 + 残余载荷。
+///
+/// 三个字段出自**同一处**登记表查询（[`query_try_impl`]）：`?` 的值类型是
+/// `ok`、失败路径传播的是 `err`。IR 侧无法从接收者类型反推——用户 Try 类型的
+/// 载荷位不在类型实参里（如非泛型 sum 类型 `Maybe`），所以这份事实必须随
+/// 结算点一起走。
+pub struct TryExprInfo {
+    /// Try 实现所在类型的**身份**（module + 定义名；`Result` / `Option` / 用户类型）。
+    /// IR 据此命名四方法：跨模块同名 Try 类型的调用名按定义模块限定，单文件投影
+    /// 为裸名（D64 口径）。
+    pub impl_identity: Nominal,
+    /// 成功载荷（`success` 的返回位，也是 `?` 表达式的值类型）
+    pub ok_ty: MonoType,
+    /// 残余载荷（`residual` 的返回位，失败路径传给 `from_error`）
+    pub err_ty: MonoType,
+}
+
+/// `?` 表达式结算结果的**收集形态**（`TypeCheckResult.try_expr_impls` 的载体）：
+/// span 键控，IR 侧按同一 span 回查实现名与两个载荷位。
+pub type TryExprImpls = Vec<(crate::util::span::Span, TryExprInfo)>;
 
 /// 名义头提取：Struct/TypeRef/Generic 取名字；内建标量无名字返回 None。
 fn type_head_name(ty: &MonoType) -> Option<&str> {
     match ty {
-        MonoType::Struct(s) => Some(&s.name),
-        MonoType::TypeRef(n) => Some(n),
-        MonoType::Generic { name, .. } => Some(name),
+        MonoType::Struct(s) => Some(s.name.bare()),
+        MonoType::TypeRef(n) => Some(n.bare()),
+        MonoType::Generic { name, .. } => Some(name.bare()),
         _ => None,
     }
 }
@@ -307,13 +354,14 @@ fn type_head_name(ty: &MonoType) -> Option<&str> {
 ///
 /// 骨架记录的字段是接口成员（方法签名），**不是构造参数**。旧表示用空的默认值
 /// 向量表达「required=0」；单列无法表达长度不匹配，故逐字段写 `has_default`
-/// 保持旧 arity 行为（零行为；同命名空间口径，见 09a §P6 6.9.5-B.1a 的报告 §R8）。
+/// 保持旧 arity 行为（零行为；同命名空间口径，见提交信息的报告）。
 fn empty_struct(
     name: &str,
     fields: Vec<(String, MonoType)>,
 ) -> StructType {
     StructType {
-        name: name.to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+            .expect("type name must be bare and non-empty"),
         fields: fields
             .into_iter()
             .map(
@@ -423,7 +471,7 @@ fn bind_pattern_args(
 ) {
     match (shape, actual) {
         (MonoType::TypeRef(n), actual) => {
-            subst.insert(n.clone(), actual.clone());
+            subst.insert(n.clone().bare().to_string(), actual.clone());
         }
         (
             MonoType::Generic { args, .. },
@@ -532,13 +580,13 @@ fn bind_template_self(
     let MonoType::Generic { name, args } = self_shape else {
         return None;
     };
-    let def = generic_type_defs.get(name)?.clone();
+    let def = generic_type_defs.get(name.bare())?.clone();
     let mut subst: HashMap<String, MonoType> = HashMap::new();
     match scrutinee {
         MonoType::Generic { name: n2, args: a2 } if n2 == name && a2.len() == args.len() => {
             for (shape_arg, actual) in args.iter().zip(a2.iter()) {
                 if let MonoType::TypeRef(pn) = shape_arg {
-                    subst.insert(pn.clone(), actual.clone());
+                    subst.insert(pn.clone().bare().to_string(), actual.clone());
                 }
             }
         }
@@ -559,7 +607,7 @@ fn bind_template_self(
             }
             for (shape_arg, fv) in args.iter().zip(fresh.iter()) {
                 if let MonoType::TypeRef(pn) = shape_arg {
-                    subst.insert(pn.clone(), solver.resolve_type(fv));
+                    subst.insert(pn.clone().bare().to_string(), solver.resolve_type(fv));
                 }
             }
         }
@@ -568,6 +616,41 @@ fn bind_template_self(
         None
     } else {
         Some(subst)
+    }
+}
+
+/// 约束方法派发的**最终 IR 名**（D64）：类型的身份投影。
+///
+/// 用户类型从名义头取 (module, 定义名) 直接投影成 `{module}.{Type}.{method}`
+/// （单文件 module="" 即 `Type.method`，与既有 IR 名逐字相同）；原语/内建
+/// 无名义身份，沿用 `operator_type_display` 的规范名 + 方法名（FFI 背书名）。
+/// 类型定义模块与泛型函数定义模块**不同**时同样正确——模块取自类型身份，
+/// 不取自泛型函数的所属单元（E1106 成因 B）。
+pub fn operator_method_dispatch_name(
+    concrete: &MonoType,
+    method: &str,
+) -> String {
+    let mut cur = concrete;
+    while let MonoType::Ref { inner, .. } = cur {
+        cur = inner;
+    }
+    let identity = match cur {
+        MonoType::Struct(s) => Some(&s.name),
+        MonoType::Enum(e) => Some(&e.name),
+        MonoType::Generic { name, .. } => Some(name),
+        MonoType::TypeRef(name) => Some(name),
+        _ => None,
+    };
+    match identity {
+        Some(nominal) if !nominal.module().is_empty() => {
+            crate::frontend::core::types::identity::DefPath::method(
+                nominal.module(),
+                nominal.bare(),
+                method,
+            )
+            .project()
+        }
+        _ => format!("{}.{}", operator_type_display(concrete), method),
     }
 }
 
@@ -682,22 +765,35 @@ mod tests {
         // 登记侧 TypeRef("Point") 与查询侧 Struct(Point) 名义相同应命中
         let point_struct = MonoType::Struct(empty_struct("Point", Vec::new()));
         assert!(args_compatible(
-            &MonoType::TypeRef("Point".into()),
+            &MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Point")))
+                    .expect("type name must be bare and non-empty")
+            ),
             &point_struct
         ));
         // Generic 递归：List(Int) vs List(Int)
         let li = |t: MonoType| MonoType::Generic {
-            name: "List".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("List")))
+                .expect("type name must be bare and non-empty"),
             args: vec![t],
         };
         assert!(args_compatible(
-            &li(MonoType::TypeRef("Point".into())),
+            &li(MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Point")))
+                    .expect("type name must be bare and non-empty")
+            )),
             &li(point_struct),
         ));
         // 名字不同不命中
         assert!(!args_compatible(
-            &MonoType::TypeRef("Point".into()),
-            &MonoType::TypeRef("Vec".into()),
+            &MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Point")))
+                    .expect("type name must be bare and non-empty")
+            ),
+            &MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Vec")))
+                    .expect("type name must be bare and non-empty")
+            ),
         ));
     }
 

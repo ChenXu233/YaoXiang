@@ -1,0 +1,13 @@
+// 06-compile-errors/fn-binding/named_arg_on_unnamed_param_err.yx
+// expect: compile-error E1014
+// 覆盖: RFC-039 D53 / WBS 8.9.1 —— 未命名带型参数没有名字可引用（SPEC syntax §2.3）
+// 验证: `f: (Int) -> Int` 的形参是**未命名**参数（名字属于实现），
+//       命名实参 `f(x = 1)` 无槽位可入 ⇒ 构造期报 E1014；
+//       按位置调用 `f(1)` 仍然合法（名字不进契约，位置才是契约）。
+// 状态: ❌ 应编译失败
+
+f: (Int) -> Int = (v) => v
+
+main: () -> Void = {
+    f(x = 1)
+}

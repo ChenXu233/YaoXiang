@@ -43,6 +43,9 @@ pub use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver}
 pub(super) fn mono_type_is_witness_bearing(
     ty: &MonoType,
     type_defs: &std::collections::HashMap<String, PolyType>,
+    type_identity_index: Option<
+        &std::collections::HashMap<crate::frontend::core::types::identity::Nominal, String>,
+    >,
 ) -> bool {
     use crate::frontend::core::types::mono::is_witness_bearing;
     let mut current = ty.clone();
@@ -51,10 +54,24 @@ pub(super) fn mono_type_is_witness_bearing(
     }
     match current {
         MonoType::Struct(struct_type) => is_witness_bearing(&struct_type.fields),
-        MonoType::TypeRef(name) => match type_defs.get(&name).map(|poly| &poly.body) {
-            Some(MonoType::Struct(struct_type)) => is_witness_bearing(&struct_type.fields),
-            _ => false,
-        },
+        MonoType::TypeRef(name) => {
+            // 名义类型 → 本地表键（身份索引；平路径回落裸名）——与其余消费者
+            // 同一口径（D64）；带模块却无索引项 = 查不到，不按裸名猜。
+            let local = if name.module().is_empty() {
+                Some(name.bare())
+            } else {
+                type_identity_index
+                    .and_then(|index| index.get(&name))
+                    .map(String::as_str)
+            };
+            match local
+                .and_then(|key| type_defs.get(key))
+                .map(|poly| &poly.body)
+            {
+                Some(MonoType::Struct(struct_type)) => is_witness_bearing(&struct_type.fields),
+                _ => false,
+            }
+        }
         _ => false,
     }
 }

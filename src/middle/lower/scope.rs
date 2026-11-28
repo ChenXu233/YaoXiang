@@ -4,9 +4,10 @@
 //! 具名高水位）、全局槽位查询，以及 `note_*` written-type/量词事实的写入与读回。
 //! 方法体逐字搬自原 `middle/ir/ir_gen.rs`（WBS 7.0.1），语义未改。
 
-use super::{AstToIrGenerator, LoopTargets, SymbolEntry};
+use super::{AstToIrGenerator, BindingLocation, LoopTargets, SymbolEntry};
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::middle::ir::ir::{FrameId, Instruction, LocalSlot, Operand, ValueId, ValueInfo};
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -14,7 +15,7 @@ use crate::util::i18n::MSG;
 use crate::util::span::Span;
 use std::collections::HashMap;
 
-/// 值表里「类型不可得」的**显式哨兵**（09a §P7 7b.2 契约 §二 第 2 条）。
+/// 值表里「类型不可得」的**显式哨兵**（提交信息）。
 ///
 /// `MonoType::TypeRef` 是 verify 既有「信息不足」口径（与具体类型占位不同），
 /// 快照会原样渲染成 `TypeRef("?")`——不允许用 `Int(64)` 之类静默占位。
@@ -58,8 +59,7 @@ impl AstToIrGenerator {
             scope.insert(
                 name.to_string(),
                 SymbolEntry {
-                    local_idx,
-                    written_type: None,
+                    location: BindingLocation::Local(local_idx),
                 },
             );
         }
@@ -108,24 +108,64 @@ impl AstToIrGenerator {
         slots
     }
 
-    /// 查找局部变量
+    /// 注册当前闭包的一个命名 upvalue；它不占用普通局部槽。
+    pub(super) fn register_upvalue(
+        &mut self,
+        name: &str,
+        upvalue_idx: usize,
+    ) {
+        if let Some(scope) = self.symbols.last_mut() {
+            scope.insert(
+                name.to_string(),
+                SymbolEntry {
+                    location: BindingLocation::Upvalue(upvalue_idx),
+                },
+            );
+        }
+    }
+
+    /// 查找词法上最近的名字绑定；局部变量与 upvalue 共用同一遮蔽规则。
+    pub(super) fn lookup_binding(
+        &self,
+        name: &str,
+    ) -> Option<BindingLocation> {
+        self.symbols
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).map(|entry| entry.location))
+    }
+
+    /// 查找局部变量。最近绑定是 upvalue 时不得穿透到外层同名局部槽。
     pub(in crate::middle) fn lookup_local(
         &self,
         name: &str,
     ) -> Option<usize> {
-        for scope in self.symbols.iter().rev() {
-            if let Some(entry) = scope.get(name) {
+        match self.lookup_binding(name) {
+            Some(BindingLocation::Local(local_idx)) => {
                 tlog!(
                     debug,
                     MSG::IrGenLookupLocal,
                     &name.to_string(),
-                    &entry.local_idx.to_string()
+                    &local_idx.to_string()
                 );
-                return Some(entry.local_idx);
+                Some(local_idx)
+            }
+            _ => {
+                tlog!(debug, MSG::IrGenLookupLocalNotFound, &name.to_string());
+                None
             }
         }
-        tlog!(debug, MSG::IrGenLookupLocalNotFound, &name.to_string());
-        None
+    }
+
+    /// 查找当前词法链上的命名 upvalue。
+    pub(super) fn lookup_upvalue(
+        &self,
+        name: &str,
+    ) -> Option<usize> {
+        match self.lookup_binding(name) {
+            Some(BindingLocation::Upvalue(upvalue_idx)) => Some(upvalue_idx),
+            _ => None,
+        }
     }
 
     /// 查找全局变量，返回**绝对槽位号**（`Operand::Global(idx)` 的值）。
@@ -200,7 +240,10 @@ impl AstToIrGenerator {
         let value = self.next_value;
         self.next_value += 1;
         self.cur_values.push(ValueInfo {
-            ty: MonoType::TypeRef(UNKNOWN_VALUE_TYPE.to_string()),
+            ty: MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&(UNKNOWN_VALUE_TYPE)))
+                    .expect("type name must be bare and non-empty"),
+            ),
             debug_name: None,
             defining_block: self.cur_block_label,
         });
@@ -225,7 +268,7 @@ impl AstToIrGenerator {
     ///
     /// 模式绑定 `s` 复用「值已占用的槽」：分配器把该值固定落具名槽 `S`，
     /// 于是 `Local(S)` 与 `Value(v)` 指向同一帧槽——**不新增指令、不改赋值形态**
-    /// （09a §P7 7b.4 契约 §二 C）。`S` 由具名计数器发放，恒小于具名基址。
+    /// （提交信息）。`S` 由具名计数器发放，恒小于具名基址。
     pub(in crate::middle) fn pin_value_to_local_slot(
         &mut self,
         op: &Operand,
@@ -238,12 +281,20 @@ impl AstToIrGenerator {
         Some(slot)
     }
 
-    /// 给值表里的一条值补真实类型（只填仍为显式未知的项，先到先得）。
+    /// 给值表里的一条值 / 具名槽补真实类型（只填仍为显式未知的项，先到先得）。
+    ///
+    /// 具名槽（`Operand::Local`）是**局部变量的类型事实**：赋值/字面量降级直接写进
+    /// 该槽时由这里落库，`for x in arr` 一类（迭代对象是具名局部）据此拿到元素类型。
     pub(in crate::middle) fn note_value_type(
         &mut self,
         dst: &Operand,
         ty: MonoType,
     ) {
+        // 推断变量不得进 IR（#590）：未收敛的类型保持显式未知 `TypeRef("?")`。
+        // 值表与槽表的「不知道」只有一个形态。
+        if crate::frontend::core::types::substitute::contains_type_vars(&ty) {
+            return;
+        }
         let Operand::Value(id) = dst else {
             return;
         };
@@ -255,8 +306,25 @@ impl AstToIrGenerator {
         }
     }
 
+    /// 已定型操作数的类型（值表里非显式未知的项；Local/Global 不在此列——
+    /// lower 不写 LocalSlot.ty，Global 是无注解占位）。
+    pub(in crate::middle) fn operand_known_type(
+        &self,
+        op: &Operand,
+    ) -> Option<MonoType> {
+        match op {
+            Operand::Value(id) => self
+                .cur_values
+                .get(id.0 as usize)
+                .filter(|v| !is_unknown_value_type(&v.ty))
+                .map(|v| v.ty.clone()),
+            Operand::Const(c) => c.mono_type(),
+            _ => None,
+        }
+    }
+
     /// 取走当前函数体的值表与「值 → 槽」映射，并在取走前做一次**前向类型推导**
-    /// （09a §P7 7b.2 契约 §二 第 2 条）：只补确定类型的指令形态，其余保持显式
+    /// （提交信息）：只补确定类型的指令形态，其余保持显式
     /// 未知 `TypeRef("?")`。
     pub(in crate::middle) fn take_body_values(
         &mut self,
@@ -268,49 +336,11 @@ impl AstToIrGenerator {
         values
     }
 
-    /// 记下局部变量**写出**的类型名（注解原文或构造器名）。
-    ///
-    /// 只记「用户写出来的名字」，不重判类型：`x: TempB` 记 `TempB`，
-    /// `u = TempB(2.0)` 记 `TempB`，`u = b.Temp(2.0)` 记 `b.Temp`。
-    /// 「这个名字属于哪个单元」的判定只在 [`Self::imported_type_owner`] 一处。
-    pub(in crate::middle) fn note_local_written_type(
-        &mut self,
-        name: &str,
-        written: &str,
-    ) {
-        for scope in self.symbols.iter_mut().rev() {
-            if let Some(entry) = scope.get_mut(name) {
-                entry.written_type = Some(written.to_string());
-                return;
-            }
-        }
-    }
-
-    /// 形参写出的类型名（注解原文）——与局部变量走同一条派发归因链。
-    ///
-    /// `declared` 是同一形参位在**声明**里的形参（`declaration_runtime_param_slots`）：
-    /// parser 不再往实现头填声明类型（WBS 6.8.3），故第 i 位「写出的是什么类型名」
-    /// 按「作者标注 → 声明同类位」取——与形参类型、调用侧可用名同一来源。
-    pub(in crate::middle) fn note_param_written_types(
-        &mut self,
-        params: &[ast::Param],
-        declared: &[ast::Param],
-    ) {
-        let written: Vec<(String, String)> = params
-            .iter()
-            .enumerate()
-            .filter_map(|(i, p)| {
-                let ty =
-                    p.ty.as_ref()
-                        .or_else(|| declared.get(i).and_then(|d| d.ty.as_ref()))
-                        .and_then(Self::written_type_name_of)?;
-                Some((p.name.clone(), ty.to_string()))
-            })
-            .collect();
-        for (name, ty) in written {
-            self.note_local_written_type(&name, &ty);
-        }
-    }
+    // WBS 4.9.10 F1 退役：本模块曾有 `note_local_written_type` /
+    // `note_param_written_types` 两个写入点，把「用户写出来的类型名」记进
+    // `SymbolEntry::written_type`，供派发归因时反查。那条链已整体删除——
+    // 「这个名字属于哪个单元」的判定已上移 typecheck 的 `ImportFace`
+    //（D-5 导入面 / D-6 绑定类型身份），IR 生成侧不再持有该信息的副本。
 
     /// 把量词事实写进**当前作用域**里该名字的槽位（`LocalSlot::quantity` 的唯一写入点）。
     ///
@@ -332,8 +362,9 @@ impl AstToIrGenerator {
         }
     }
 
-    /// 实现头第 i 位 ↔ 声明运行期值位第 i 位（与 `note_param_written_types` **同一**
-    /// 对齐口径）：把声明侧已解析的量词事实写到该形参的槽位上。
+    /// 实现头第 i 位 ↔ 声明运行期值位第 i 位（与形参类型、调用侧可用名**同一**
+    /// 对齐口径：`declaration_runtime_param_slots`）：把声明侧已解析的量词事实
+    /// 写到该形参的槽位上。
     ///
     /// 按位而不是按名：实现头可以改名（`f: (a: Int) -> Int = (b) => b`），名字不是
     /// 绑定身份，位次才是。
@@ -346,28 +377,6 @@ impl AstToIrGenerator {
             let quantity = declared.get(i).and_then(|d| d.quantity);
             self.note_slot_quantity(&param.name, quantity);
         }
-    }
-
-    /// 局部变量写出类型名的查找（作用域由符号表本身给出）。
-    fn local_written_type(
-        &self,
-        name: &str,
-    ) -> Option<&str> {
-        for scope in self.symbols.iter().rev() {
-            if let Some(entry) = scope.get(name) {
-                return entry.written_type.as_deref();
-            }
-        }
-        None
-    }
-
-    /// 变量写出的类型名：先查局部作用域，再查本文件顶层绑定位。
-    pub(super) fn binding_written_type(
-        &self,
-        name: &str,
-    ) -> Option<&str> {
-        self.local_written_type(name)
-            .or_else(|| self.global_written_types.get(name).map(String::as_str))
     }
 }
 
@@ -387,7 +396,7 @@ impl AstToIrGenerator {
     ///
     /// 6 处 `FunctionBody::Code` 构造点（函数 / 方法 / lambda / 匿名绑定 / curry
     /// 中间层 / curry 最内层）全部走这里——块切分、槽位分配、locals 取表三件事
-    /// 不再在调用点各写一份（禁令三 A；09a §P7 7b.4 契约 §二 A/E）。
+    /// 不再在调用点各写一份（禁令三 A；提交信息）。
     ///
     /// - 值槽由 [`super::regalloc::allocate_value_slots`] 按活跃区间复用，
     ///   `frame_slots = named_base + max_live`；
@@ -423,6 +432,10 @@ impl AstToIrGenerator {
             .at(span)
             .build()
         })?;
+        // #591 阶段一：直线函数的值释放事实（`Drop(Value)`）。放在槽位分配之后：
+        // 插入只改块内指令序列，不扰动已算好的活跃区间与槽位。
+        let mut blocks = blocks;
+        self.emit_value_release_drops(&mut blocks, &values);
         Ok(FinalizedCodeBody {
             locals: self.take_cur_locals(allocation.frame_slots),
             values,
@@ -438,7 +451,8 @@ fn is_unknown_value_type(ty: &MonoType) -> bool {
 
 fn string_type() -> MonoType {
     MonoType::Generic {
-        name: "String".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("String")))
+            .expect("type name must be bare and non-empty"),
         args: Vec::new(),
     }
 }
@@ -483,6 +497,9 @@ fn infer_value_types(
             continue;
         };
         if is_unknown_value_type(&info.ty) {
+            if crate::frontend::core::types::substitute::contains_type_vars(&ty) {
+                continue;
+            }
             info.ty = ty;
         }
     }
@@ -536,6 +553,7 @@ fn infer_instruction_value_type<'a>(
 /// 一律回滚（值表/`next_value` 是**每个函数体独立**的，与槽计数的帧口径不同）。
 struct SavedFrame {
     counters: Option<(usize, usize)>,
+    symbols_len: usize,
     cur_span: Span,
     cur_locals: Vec<LocalSlot>,
     cur_frame: FrameId,
@@ -572,6 +590,7 @@ impl<'a> NestedBodyGuard<'a> {
     pub(super) fn enter(gen: &'a mut AstToIrGenerator) -> Self {
         let saved = SavedFrame {
             counters: Some((gen.next_temp, gen.temp_high_water)),
+            symbols_len: gen.symbols.len(),
             cur_span: gen.cur_span,
             cur_locals: std::mem::take(&mut gen.cur_locals),
             cur_frame: gen.cur_frame,
@@ -595,6 +614,7 @@ impl<'a> NestedBodyGuard<'a> {
     pub(super) fn enter_decl(gen: &'a mut AstToIrGenerator) -> Self {
         let saved = SavedFrame {
             counters: None,
+            symbols_len: gen.symbols.len(),
             cur_span: gen.cur_span,
             cur_locals: std::mem::take(&mut gen.cur_locals),
             cur_frame: gen.cur_frame,
@@ -627,6 +647,7 @@ impl std::ops::DerefMut for NestedBodyGuard<'_> {
 
 impl Drop for NestedBodyGuard<'_> {
     fn drop(&mut self) {
+        self.gen.symbols.truncate(self.saved.symbols_len);
         self.gen.cur_locals = std::mem::take(&mut self.saved.cur_locals);
         self.gen.cur_frame = self.saved.cur_frame;
         self.gen.loop_stack = std::mem::take(&mut self.saved.loop_stack);

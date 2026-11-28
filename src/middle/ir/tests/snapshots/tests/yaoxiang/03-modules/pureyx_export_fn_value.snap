@@ -7,12 +7,12 @@ module
     values_total=13
     value v0: Generic { name: "String", args: [] } @block0
     value v1: Fn { params: [Ref { mutable: false, inner: Generic { name: "String", args: [] } }], return_type: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } } @block0
-    value v2: TypeRef("?") @block0
-    value v3: TypeRef("?") @block0
+    value v2: Never @block0
+    value v3: Bool @block0
     value v4: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v5: Generic { name: "String", args: [] } @block0
     value v6: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
     value v9: Generic { name: "String", args: [] } @block0
     value v10: Generic { name: "String", args: [] } @block0
@@ -22,20 +22,29 @@ module
     Load v0 <- string("true")
     Load v1 <- %0
     CallDyn %1 <- v1 [v0]
+    Drop v0
+    Drop v1
     Load v4 <- %1
     Call v3 <- string("std.result.is_ok") [v4] (def=d1)
+    Drop v4
     Load v5 <- string("f(\"true\") 应解析成功（间接调用进入 parse 本体）")
     Call v2 <- string("std.assert.assert") [v3, v5] (def=d2)
+    Drop v5
     Drop %1
     Load v6 <- %1
     Call %2 <- string("std.result.unwrap") [v6] (def=d3)
+    Drop v6
     Drop %1
     Load v11 <- %2
     Call v9 <- string("std.json.stringify") [v11] (def=d4)
+    Drop v11
     Load v10 <- string("true")
+    Drop v9
+    Drop v10
     Eq v8 <- v9, v10
     Load v12 <- string("f(\"true\") 往返序列化应为 true")
     Call v7 <- string("std.assert.assert") [v8, v12] (def=d2)
+    Drop v12
     Drop %0
     Drop %2
     Drop %1

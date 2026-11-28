@@ -7,7 +7,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::sema::MonoType;
-use crate::frontend::module::symbol::DefId;
+use crate::frontend::core::types::identity::DefId;
 use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
     TypeDeclBody, ValueId, ValueInfo,
@@ -102,6 +102,7 @@ fn type_decl_fn(name: &str) -> FunctionIR {
             body: TypeDeclBody {
                 fields: Vec::new(),
                 self_type: MonoType::Void,
+                identity: crate::frontend::core::types::identity::Nominal::anonymous(),
             },
         },
     }
@@ -173,9 +174,6 @@ fn assert_references_closed(
             !matches!(
                 instr,
                 Instruction::Call {
-                    func: Operand::Const(ConstValue::Int(_)),
-                    ..
-                } | Instruction::TailCall {
                     func: Operand::Const(ConstValue::Int(_)),
                     ..
                 }
@@ -918,6 +916,83 @@ fn test_orphan_shared_layer_without_site_is_dominance_red() {
     assert!(
         detail.contains("use-before-def"),
         "红必须落在支配性不变量上（env 反推失效的形态）；实际：{detail}"
+    );
+}
+
+/// #591：值释放事实（`Drop(Value)`）在存活函数体内**原样保留**——DCE 删的是
+/// 不可达函数，不得改写存活函数的指令序列（否则值释放计划与实际 IR 就分叉了）。
+#[test]
+fn test_dce_keeps_value_drop_in_live_function_body() {
+    // Arrange：live 体内「生产者 → Drop(Value) → Ret」，main 与 live 可达、dead 不可达
+    let mut live = code_fn(
+        "live",
+        vec![
+            Instruction::Load {
+                dst: Operand::Value(ValueId(0)),
+                src: Operand::Const(ConstValue::Int(1)),
+                span: span(),
+            },
+            Instruction::Drop {
+                src: Operand::Value(ValueId(0)),
+                span: span(),
+            },
+            ret_void(),
+        ],
+    );
+    if let FunctionBody::Code {
+        values,
+        value_slots,
+        ..
+    } = &mut live.body
+    {
+        values.push(ValueInfo {
+            ty: MonoType::make_string(),
+            debug_name: None,
+            defining_block: 0,
+        });
+        value_slots.push(1);
+    }
+    let entry = code_fn("main", vec![call_name("live", None), ret_void()]);
+    let dead = code_fn("dead", vec![ret_void()]);
+    let mut module = module_with(vec![entry, live, dead]);
+
+    // Act
+    let report = eliminate(&mut module).expect("无索引目标/无重复名，DCE 应成功");
+
+    // Assert：dead 被删，live 的生产者与值释放都在
+    assert_eq!(
+        report.deleted,
+        vec!["dead".to_string()],
+        "只删不可达的 dead"
+    );
+    let live = module
+        .functions
+        .iter()
+        .find(|f| f.name == "live")
+        .expect("live 必须存活");
+    let FunctionBody::Code { blocks, .. } = &live.body else {
+        panic!("live 必须是指令体");
+    };
+    let instructions = &blocks[0].instructions;
+    assert!(
+        instructions.iter().any(|i| matches!(
+            i,
+            Instruction::Load {
+                dst: Operand::Value(ValueId(0)),
+                ..
+            }
+        )),
+        "值释放的生产者必须保留：{instructions:#?}"
+    );
+    assert!(
+        instructions.iter().any(|i| matches!(
+            i,
+            Instruction::Drop {
+                src: Operand::Value(ValueId(0)),
+                ..
+            }
+        )),
+        "值释放事实必须保留：{instructions:#?}"
     );
 }
 

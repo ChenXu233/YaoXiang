@@ -143,8 +143,8 @@ data = fetch_data()?
 
 // 概念等价形式
 data = match fetch_data() {
-    ok(v) => v
-    err(e) => return err(e)
+    ok(v) -> v
+    err(e) -> return err(e)
 }
 ```
 
@@ -163,8 +163,8 @@ assert: (cond: Bool, ?msg: String) -> Never
 
 ```
 IsTrue: (b: Bool) -> Type = match b {
-    true => Void,      // ⊤，程序继续
-    false => Never,    // ⊥，发散
+    true -> Void,       // ⊤，程序继续
+    false -> Never,     // ⊥，发散
 }
 
 Assert: (cond: Bool) -> Type = IsTrue(cond)

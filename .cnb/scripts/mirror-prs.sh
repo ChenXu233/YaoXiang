@@ -9,42 +9,17 @@
 # 需要环境变量：CNB_TOKEN（流水线临时令牌）、GH_USER / GH_TOKEN（密钥仓库 imports 注入）。
 set -e
 
-CNB_REPO="ChenXu233/YaoXiang"
-GH_OWNER="ChenXu233"
-CNB_API="https://api.cnb.cool/$CNB_REPO"
-GH_API="https://api.github.com/repos/$CNB_REPO"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=mirror-common.sh
+source "$SCRIPT_DIR/mirror-common.sh"
+
 CNB_GIT="https://cnb:$CNB_TOKEN@cnb.cool/$CNB_REPO.git"
 GH_GIT="https://github.com/$CNB_REPO.git"
 
-if [ -z "$GH_USER" ] || [ -z "$GH_TOKEN" ]; then
-  echo "缺少 GH_USER / GH_TOKEN：检查密钥仓库 ChenXu233/secrets 的 yaoxiang-pr-sync.yml" >&2
-  exit 1
-fi
+require_gh_creds || exit 1
 
 # 凭据走 credential helper，URL 里不带令牌：git 的报错信息才不会把 PAT 打进构建日志。
 git config credential.helper '!f() { echo username=$GH_USER; echo password=$GH_TOKEN; }; f'
-
-cnb_call() {
-  if [ $# -ge 3 ] && [ -n "$3" ]; then
-    curl -sS -f -X "$1" -H "Authorization: Bearer $CNB_TOKEN" \
-      -H "accept: application/json" -H "content-type: application/json" \
-      --data "$3" "$CNB_API$2"
-  else
-    curl -sS -f -X "$1" -H "Authorization: Bearer $CNB_TOKEN" \
-      -H "accept: application/json" "$CNB_API$2"
-  fi
-}
-
-gh_call() {
-  if [ $# -ge 3 ] && [ -n "$3" ]; then
-    curl -sS -f -X "$1" -H "Authorization: Bearer $GH_TOKEN" \
-      -H "accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" \
-      -H "content-type: application/json" --data "$3" "$GH_API$2"
-  else
-    curl -sS -f -X "$1" -H "Authorization: Bearer $GH_TOKEN" \
-      -H "accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "$GH_API$2"
-  fi
-}
 
 PRS="$(mktemp)"
 trap 'rm -f "$PRS"' EXIT

@@ -1,96 +1,97 @@
 # Concurrency Model Specification
 
 > **Status**: Formal specification. Based on RFC-024 (Concurrency Model), RFC-009 (Ownership Model),
-> RFC-008 (Runtime Architecture).
+> and RFC-008 (Runtime Architecture).
 
-This document defines the concurrency model specification of the YaoXiang programming language,
+This document defines the concurrency model specification for the YaoXiang programming language,
 including `{}` block semantics, the `spawn` concurrency primitive, ownership interactions, error
 handling, and resource types.
 
 **Core design—one primitive, one rule**:
 
 ```
-spawn { ... }        ← the only parallel primitive
-direct child assignments create tasks    ← the only rule
-synchronously block waiting for results  ← the only behavior
+spawn { ... }        ← 唯一并行原语
+直接子赋值创建任务    ← 唯一规则
+同步阻塞等待结果      ← 唯一行为
 ```
 
 ---
 
 ## Chapter 1: Overview
 
-### 1.1 The Essence of `{}` Blocks
+### 1.1 The Nature of `{}` Blocks
 
-In YaoXiang, `{}` is a **dependency-driven computation unit**.
+In YaoXiang, a `{}` is a **dependency-driven unit of computation**.
 
-| Attribute         | Description                                                                                                                               |
+| Property          | Description                                                                                                                               |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Dependency-driven | The block checks whether all internal variables are ready when executing; if they are, it runs immediately; otherwise it blocks and waits |
-| Execution timing  | Determined by dependencies, unrelated to "immediate" or "deferred"                                                                        |
-| Return value      | Use `return` to explicitly return a value; without `return`, the default is `Void`                                                        |
-| Unified syntax    | Whether it appears in a function body, variable initialization, or after `spawn`, the semantics are consistent                            |
-| Scope isolation   | Variables are strictly confined within `{}` and do not leak to the outer scope                                                            |
+| Dependency-driven | When it executes, a block checks whether all variables inside it are ready; if so, it executes immediately, otherwise it blocks and waits |
+| Execution timing  | Determined by dependencies, unrelated to being "immediate" or "deferred"                                                                  |
+| Return value      | Use `return` to return a value explicitly; without a `return`, `Void` is returned by default                                              |
+| Uniform syntax    | The semantics are identical whether it appears in a function body, a variable initializer, or after `spawn`                               |
+| Scope isolation   | Variables are strictly confined to the inside of `{}` and do not leak into the outer scope                                                |
 
 ```yaoxiang
 // Dependency-driven example
 x = compute_x()        // x is ready
 y = compute_y()        // y is ready
 result = {
-    // Depends on x and y; runs immediately once both are ready
+    // Depends on x and y; executes as soon as both are ready
     return x + y
 }
 ```
 
 ### 1.2 Return Rules
 
-| Form                            | Return value                                | Description                       |
-| ------------------------------- | ------------------------------------------- | --------------------------------- |
-| `= expr` (no curly braces)      | Directly returns `expr`                     | Expression as value               |
-| `= { ... }` (with curly braces) | Must use `return`, otherwise returns `Void` | Block requires an explicit return |
+| Form                      | Return value                                | Description                           |
+| ------------------------- | ------------------------------------------- | ------------------------------------- |
+| `= expr` (without braces) | Returns `expr` directly                     | The expression is the value           |
+| `= { ... }` (with braces) | Must use `return`; otherwise returns `Void` | The block requires an explicit return |
 
 ```yaoxiang
-// No curly braces: direct return
+// Without braces: return directly
 add: (a: Int, b: Int) -> Int = a + b
 
-// With curly braces: must use return
+// With braces: return is required
 process: (data: Data) -> Result(Data, Error) = {
     validated = validate(data)?
-    // Variant construction must be type-qualified—a bare ok(...) triggers E1001 Unknown variable: 'ok'
+    // Variant construction must be type-qualified—a bare ok(...) reports E1001 Unknown variable: 'ok'
     return Result(Data, Error).ok(transform(validated))
 }
 
-// With curly braces but no return: returns Void
+// With braces but without return: returns Void
 log: (message: String) -> Void = {
-    print(message)  // No return, returns Void
+    print(message)  // No return; returns Void
 }
 ```
 
 ### 1.3 spawn Block Semantics
 
-`spawn { ... }` is the **only parallel primitive** in YaoXiang.
+`spawn { ... }` is the **only parallelism primitive** in YaoXiang.
 
 **Core rules**:
 
-- Direct child assignments of the spawn block create parallel tasks
-- Assignments inside nested `{}` do not count as independent tasks
-- The entire spawn block synchronously blocks and returns a result after all tasks complete
+- Direct child assignments in a spawn block create parallel tasks
+- Assignments nested inside `{}` do not count as independent tasks
+- The entire spawn block blocks synchronously and returns a result after all tasks complete
 - No callbacks, `await`, or annotations
 
 ```yaoxiang
-// Two tasks running in parallel
+// Two tasks run in parallel
 (a, b) = spawn {
-    fetch("url1"),      // task 1
-    fetch("url2")       // task 2
+    fetch("url1"),      // Task 1
+    fetch("url2")       // Task 2
 }
-// Wait until both are complete before continuing
+// Continue after both have completed
 ```
 
 ### 1.4 User Mental Model
 
-> Your ordinary code runs sequentially. When you want multiple things to happen at once, put them
-> inside a `spawn { ... }` block. Every direct assignment in the block starts immediately (in
-> parallel), and the result you need is awaited automatically. The whole block waits for everything
-> to finish, then gives you the final result. No callbacks, no `await`, no strange annotations.
+> The ordinary code you write executes sequentially. When you want several things to happen
+> together, put them in a `spawn { ... }` block. Each direct assignment in the block starts
+> immediately (in parallel), and the result you need is awaited automatically. The entire block
+> waits for everything to finish, then gives you the final result. No callbacks, no `await`, no
+> strange annotations.
 
 ---
 
@@ -98,15 +99,15 @@ log: (message: String) -> Void = {
 
 ### 2.1 Ordinary Code
 
-Ordinary code (outside spawn blocks) is **executed sequentially**.
+Ordinary code outside a spawn block executes **sequentially**.
 
 ```yaoxiang
-a = compute_a()     // runs first
-b = compute_b(a)    // depends on a; runs after a completes
-c = compute_c(b)    // depends on b; runs after b completes
+a = compute_a()     // Executes first
+b = compute_b(a)    // Depends on a; executes after a completes
+c = compute_c(b)    // Depends on b; executes after b completes
 ```
 
-### 2.2 spawn Block
+### 2.2 spawn Blocks
 
 ```
 SpawnBlock  ::= '(' Pattern (',' Pattern)* ')' '=' 'spawn' '{' SpawnBody '}'
@@ -115,10 +116,10 @@ SpawnBody   ::= Assignment (',' Assignment)*
 
 **Semantics**:
 
-1. Direct child assignments within the spawn block run as independent tasks in parallel
-2. Each task's result is bound to the corresponding pattern variable
+1. Direct child assignments within a spawn block run in parallel as independent tasks
+2. Each task's result is bound to its corresponding pattern variable
 3. The entire block blocks until all tasks complete
-4. Returns a tuple of all results
+4. A tuple containing all results is returned
 
 ```yaoxiang
 // Single task
@@ -136,7 +137,7 @@ result = spawn {
 
 ### 2.3 spawn in Function Bodies
 
-A function body is itself a `{}` block, and `spawn` can be used within it.
+A function body is itself a `{}` block, so `spawn` can be used within it.
 
 ```yaoxiang
 fetch_and_parse: (urls: List(String)) -> List(Data) = {
@@ -153,30 +154,30 @@ fetch_and_parse: (urls: List(String)) -> List(Data) = {
 SpawnFor    ::= Identifier '=' 'spawn' 'for' Identifier 'in' Expr '{' Assignment '}'
 ```
 
-**Semantics**: A data-parallel loop, where each iteration is an independent task.
+**Semantics**: A data-parallel loop in which each iteration is an independent task.
 
 ```yaoxiang
-// Process each element in a list in parallel
+// Process each element in the list in parallel
 results = spawn for item in items {
     result = process(item)
 }
 ```
 
-> **Note**: The loop body of `spawn for` is an independent task and does not support sharing mutable
-> state across iterations. If you need to aggregate results, use `spawn for` to collect the results
-> and process them outside.
+> **Note**: The body of a `spawn for` is an independent task and does not support shared mutable
+> state across iterations. To aggregate results, use `spawn for` to collect them and then process
+> them outside the loop.
 
 ```yaoxiang
-// Correct: parallel processing then aggregation outside
+// Correct: process in parallel, then aggregate outside
 transformed = spawn for item in items {
     result = transform(item)
 }
-total = sum(transformed)   // sequential aggregation
+total = sum(transformed)   // Sequential aggregation
 ```
 
 ### 2.5 Nested spawn
 
-spawn blocks can be nested; an inner spawn creates a new concurrency domain.
+Spawn blocks can be nested; an inner spawn creates a new concurrency domain.
 
 ```yaoxiang
 (a, b) = spawn {
@@ -188,8 +189,8 @@ spawn blocks can be nested; an inner spawn creates a new concurrency domain.
 }
 ```
 
-The direct child assignments of the inner spawn are the tasks; the outer spawn does not pass
-through.
+Only the direct child assignments of the inner spawn are tasks; the outer spawn does not see through
+it.
 
 ---
 
@@ -197,22 +198,22 @@ through.
 
 ### 3.1 Move Semantics
 
-Move is YaoXiang's default semantics (zero-copy). Once a variable enters a spawn block, it cannot be
-used externally.
+Move is YaoXiang's default semantics (zero-copy). Once a variable enters a spawn block, it can no
+longer be used outside it.
 
 ```yaoxiang
 data = load_data()
 result = spawn {
-    process(data)   // ownership of data moves into the spawn block
+    process(data)   // Ownership of data is moved into the spawn block
 }
-// data is unavailable here (already moved)
+// data is unavailable here (moved)
 ```
 
 ### 3.2 Borrow Tokens
 
-`&T` and `&mut T` are zero-sized compile-time permission proofs, **and cannot cross task
-boundaries**. This is not a special rule—tokens are compile-time permission proofs; for cross-task
-sharing, use `ref`.
+`&T` and `&mut T` are zero-sized compile-time permission proofs and **cannot cross task
+boundaries**. This is not a special rule—the token is a compile-time permission proof; to share
+across tasks, use `ref`.
 
 ```yaoxiang
 data = load_data()
@@ -223,75 +224,74 @@ result = spawn {
 }
 ```
 
-**Token type attributes**:
+**Token type properties**:
 
-| Token    | Primary semantics                                                                                 | Secondary attributes                                                               |
-| -------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `&T`     | **Freeze the source data**—while a ReadToken is alive, no WriteToken(T) can be obtained           | Zero-sized, copyable (Dup)—multiple read views are safe under the freeze guarantee |
-| `&mut T` | **Exclusive read-write**—while a WriteToken is alive, no other tokens (read or write) can coexist | Zero-sized, linear (non-Dup)—copying under exclusive access is meaningless         |
+| Token    | Primary semantics                                                                                       | Secondary properties                                                                                  |
+| -------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `&T`     | **Freezes the source data**—while a ReadToken is alive, no WriteToken(T) can be obtained                | Zero-sized and copyable (Dup)—multiple read-only views are inherently safe under the freeze guarantee |
+| `&mut T` | **Exclusive read/write access**—while a WriteToken is alive, no other token (read or write) can coexist | Zero-sized and linear (non-Dup)—copying is meaningless under exclusive access                         |
 
-> **Causal order**: The Dup of ReadToken is a corollary of the freeze guarantee, not the other way
-> around. Data is frozen (no mutation possible) → multiple read views are safe → Dup can be
-> implemented. Treating Dup as the definition and conflict checking as a patch inverts the
+> **Causal ordering**: Dup for a ReadToken is a consequence of the freeze guarantee, not the other
+> way around. The data is frozen (mutation is impossible) → multiple read-only views are safe → Dup
+> can be implemented. Treating Dup as the definition and conflict checking as a patch reverses the
 > causality.
 
 ### 3.3 ref Sharing
 
-`ref` is the only way to share across scopes. The compiler automatically chooses `Rc` (single-task)
-or `Arc` (cross-task); the user does not need to care.
+`ref` is the only way to share across scopes. The compiler automatically selects `Rc` (single task)
+or `Arc` (across tasks), so users do not need to worry about it.
 
 ```yaoxiang
 data = load_data()
-shared = ref data       // The compiler automatically chooses Rc or Arc
+shared = ref data       // The compiler automatically selects Rc or Arc
 
 result = spawn {
-    process_a(shared),  // shared reference
-    process_b(shared)   // shared reference
+    process_a(shared),  // Shared reference
+    process_b(shared)   // Shared reference
 }
 ```
 
 **Compiler selection strategy**:
 
-| Condition                                                 | Choice | Reason                         |
-| --------------------------------------------------------- | ------ | ------------------------------ |
-| Default (cannot prove safety)                             | `Arc`  | Safety first, avoid data races |
-| Compiler can prove data is only used within a single task | `Rc`   | No atomic-operation overhead   |
+| Condition                                                     | Selection | Reason                          |
+| ------------------------------------------------------------- | --------- | ------------------------------- |
+| Default (safety cannot be proven)                             | `Arc`     | Safety first; avoids data races |
+| The compiler can prove that the data is used by only one task | `Rc`      | No atomic-operation overhead    |
 
-**ref vs borrow tokens**:
+**ref vs. borrow tokens**:
 
-|              | `&T` / `&mut T`                 | `ref`                               |
-| ------------ | ------------------------------- | ----------------------------------- |
-| What it does | Take a look / modify in place   | Share and hold                      |
-| Cost         | Zero overhead (zero-sized type) | Rc or Arc (compiler chooses)        |
-| Cross-task   | Not allowed                     | Allowed (compiler auto-selects Arc) |
+|              | `&T` / `&mut T`                 | `ref`                                               |
+| ------------ | ------------------------------- | --------------------------------------------------- |
+| What it does | Look at it / modify it in place | Shared ownership                                    |
+| Cost         | Zero overhead (zero-sized type) | `Rc` or `Arc` (selected by the compiler)            |
+| Across tasks | Not possible                    | Possible (the compiler automatically selects `Arc`) |
 
-### 3.4 Closures and Capture
+### 3.4 Closures and Captures
 
-**Closures do not implicitly capture outer variables** (RFC-009 2026-06-16 resolution, SPEC §12.3).
-A lambda only uses explicit parameters and its own local variables; when outer data is needed, pass
-it via explicit parameters, or fix it via currying at the creation point. The compile error code for
-implicit capture is E1001.
+**Closures do not implicitly capture outer variables** (RFC-009 resolution of 2026-06-16, SPEC
+§12.3). A lambda uses only its explicit parameters and its own local variables. When outer data is
+needed, pass it as an explicit parameter or fix it at the creation point through currying. The
+compile error code for implicit capture is E1001.
 
-> Why is it prohibited: the outer scope at the closure's definition point may be dead after the
-> closure escapes, so the implicitly captured reference cannot be guaranteed to be alive; values
-> fixed via currying are taken at the creation point (where the caller's scope is alive), which is
-> safe and has zero hidden cost.
+> Why this is prohibited: After a closure escapes, the outer scope in which it was defined may no
+> longer be alive, so references captured implicitly cannot be guaranteed to remain alive. A value
+> fixed through currying is evaluated at its creation point (while the call-site scope is alive),
+> which is safe and has no hidden cost.
 
 ```yaoxiang
 data = load_data()
-fn = (x: Int) -> Int = data.value + x   // ❌ Compile error E1001: implicitly captures data
+fn = (x: Int) -> Int = data.value + x   // ❌ Compile error E1001: implicit capture of data
 ```
 
 ```yaoxiang
-// ✅ Correct way 1: pass via explicit parameter
+// ✅ Correct approach 1: pass through an explicit parameter
 add: (data: Data, x: Int) -> Int = data.value + x
 
-// ✅ Correct way 2: fix via currying (context is fixed at the creation point, the closure only takes parameters)
+// ✅ Correct approach 2: fix through currying (the context is fixed at the creation point; the closure only takes parameters)
 mk: (data: Data) -> (x: Int) -> Int = (data) => (x) => data.value + x
 ```
 
-**Sharing inside spawn**: when cross-task sharing is needed, use `ref` to explicitly share and hold
-(RFC-024):
+**Sharing within `spawn`**: To share across tasks, explicitly share ownership with `ref` (RFC-024):
 
 ```yaoxiang
 data = load_data()
@@ -303,65 +303,65 @@ result = spawn {
 }
 ```
 
-**There is no `spawn while` construct**: after `spawn` you can only follow with `for` or `{` (the
-`parse_spawn` in `src/frontend/core/parser/pratt/nud.rs:117-136` only dispatches `KwFor` →
-`parse_spawn_for` and `LBrace` → `parse_spawn_block`); the AST also only has two variants:
-`Expr::Spawn` (block) and `Expr::SpawnFor` (data-parallel loop,
-`src/frontend/core/parser/ast.rs:68-72`). To do "repeat conditionally" in a concurrent context,
-write an ordinary `while` loop.
+**There is no `spawn while` construct**: After `spawn`, only `for` or `{` may follow (the
+`parse_spawn` function at `src/frontend/core/parser/pratt/nud.rs:117-136` dispatches only `KwFor` →
+`parse_spawn_for` and `LBrace` → `parse_spawn_block`), and the AST likewise has only two variants:
+`Expr::Spawn` (blocks) and `Expr::SpawnFor` (data-parallel loops,
+`src/frontend/core/parser/ast.rs:68-72`). To "repeat conditionally" in a concurrent context, write
+an ordinary `while` loop.
 
-The iteration variable of `spawn for` is mutable by default; only when written as
-`spawn for mut x in items` is mutation of that binding allowed in the loop body (the `var_mut` field
-of `src/frontend/core/parser/ast.rs:71`; `src/frontend/core/typecheck/layers/ownership.rs:1660-1671`
-registers mutability accordingly).
+The `spawn for` iteration variable is mutable by default; writing `spawn for mut x in items` enables
+the binding to be reassigned within the loop body (the `var_mut` field at
+`src/frontend/core/parser/ast.rs:71`, which is used to register mutability by
+`src/frontend/core/typecheck/layers/ownership.rs:1660-1671`).
 
 ---
 
 ## Chapter 4: Error Handling
 
-### 4.1 The ? Operator
+### 4.1 The `?` Operator
 
-The `?` operator is used for explicit error propagation, with semantics consistent with Rust.
+The `?` operator is used for explicit error propagation and is consistent with Rust semantics.
 
 ```yaoxiang
 read_file: (path: FilePath) -> Result(String, IoError) = {
-    content = open(path)?      // if error, propagate immediately
+    content = open(path)?      // If an error occurs, propagate it immediately
     return content.read_all()
 }
 ```
 
-### 4.2 Error Propagation in spawn Blocks
+### 4.2 Error Propagation Within spawn Blocks
 
 **Rules**:
 
-1. Wait for all tasks to complete (even if some have already failed)
+1. Wait for all tasks to complete, even if some tasks have failed
 2. Propagate the first error encountered
-3. Use `?` to explicitly mark error-propagation points
+3. Use `?` to explicitly mark error propagation points
 
 ```yaoxiang
 (a, b) = spawn {
-    fetch("url1")?,     // may fail
-    fetch("url2")?      // may fail
+    fetch("url1")?,     // May fail
+    fetch("url2")?      // May fail
 }
-// If any task fails, the entire spawn block propagates the first error
+// If either task fails, the entire spawn block propagates the first error
 ```
 
 ### 4.3 Error Types
 
-**Automatically generated**: the compiler automatically generates a union error type.
+**Automatically generated**: The compiler automatically generates a union error type.
 
 ```yaoxiang
 // The compiler infers the error type as HttpError | IoError
 (a, b) = spawn {
-    fetch("url"),           // may throw HttpError
-    read_file("data.txt")  // may throw IoError
+    fetch("url"),           // May raise HttpError
+    read_file("data.txt")  // May raise IoError
 }
 ```
 
-**Manual override**: users can manually define a unified error type. Note that `Result` **does not
-have `map_err`** (it's not among the 8 exports of `src/std/result.rs:71-126`; `result.map_err(...)`
-triggers `E1042`), so before `?` you need to move the upstream error into an `AppError` variant
-yourself:
+**Manual override**: Users can manually define a unified error type. Note that `Result` **does not
+have `map_err`** (it is absent from the 8 exports at `src/std/result.rs:71-126`, and
+`result.map_err(...)` reports `E1042`), so the upstream error must be moved into an `AppError`
+variant before using `?`:
 
 ```
 AppError: Type = {
@@ -370,15 +370,15 @@ AppError: Type = {
     Parse: (parse_error: ParseError) -> AppError
 }
 
-// Conceptual form (map_err is unavailable; use match to move explicitly)
+// Conceptual form (map_err is unavailable; use match to move the error explicitly)
 process: (url: String, path: FilePath) -> Result(Data, AppError) = {
     fetched = match fetch(url) {
-        ok(v) => v
-        err(e) => return AppError.Http(e)
+        ok(v) -> v
+        err(e) -> return AppError.Http(e)
     }
     content = match read_file(path) {
-        ok(v) => v
-        err(e) => return AppError.Io(e)
+        ok(v) -> v
+        err(e) -> return AppError.Io(e)
     }
     return parse(fetched + content)
 }
@@ -390,24 +390,24 @@ process: (url: String, path: FilePath) -> Result(Data, AppError) = {
 
 ### 5.1 Built-in Resource Types
 
-| Resource type | Description         | Compiler behavior                         |
-| ------------- | ------------------- | ----------------------------------------- |
-| `FilePath`    | Filesystem path     | Same-path operations auto-serialize       |
-| `HttpUrl`     | HTTP endpoint       | Same-URL operations auto-serialize        |
-| `DBUrl`       | Database connection | Same-connection operations auto-serialize |
-| `Console`     | Standard output     | All Console operations auto-serialize     |
+| Resource type | Description         | Compiler behavior                                              |
+| ------------- | ------------------- | -------------------------------------------------------------- |
+| `FilePath`    | Filesystem path     | Operations on the same path are automatically serialized       |
+| `HttpUrl`     | HTTP endpoint       | Operations on the same URL are automatically serialized        |
+| `DBUrl`       | Database connection | Operations on the same connection are automatically serialized |
+| `Console`     | Standard output     | All Console operations are automatically serialized            |
 
 ```yaoxiang
-// Operations on the same file are auto-serialized
+// Operations on the same file are automatically serialized
 (a, b) = spawn {
-    read_file("data.txt"),      // runs first
-    write_file("data.txt", x)   // waits for the read to complete
+    read_file("data.txt"),      // Executes first
+    write_file("data.txt", x)   // Waits for the read to complete
 }
 ```
 
-### 5.2 User-Defined Resource Types
+### 5.2 User-defined Resource Types
 
-User-defined resource types need to be explicitly marked.
+User-defined resource types must be explicitly marked.
 
 ```yaoxiang
 Database: Type = {
@@ -416,18 +416,18 @@ Database: Type = {
 }
 ```
 
-### 5.3 Side-Effect Tracking
+### 5.3 Side-effect Tracking
 
 The compiler tracks the use of resource types to ensure concurrency safety.
 
 ```yaoxiang
 // Compiler warning: Console operations may interleave
 spawn {
-    print("Hello"),     // may interleave with the next line
+    print("Hello"),     // May interleave with the next line
     print("World")
 }
 
-// Correct: explicit serialization
+// Correct: explicitly serial
 spawn {
     print("Hello\nWorld")
 }
@@ -439,49 +439,49 @@ spawn {
 
 ### 6.1 DAG Analysis
 
-The compiler analyzes the dependency relationships (DAG) within a spawn block at compile time,
-determining:
+At compile-time, the compiler analyzes the dependency relationships (DAG) within a spawn block to
+determine:
 
 1. Which expressions can run in parallel
-2. Which must be sequential
-3. How to assign tasks
+2. Which expressions must run serially
+3. How to allocate tasks
 
 ```yaoxiang
 (a, b, c) = spawn {
-    x = fetch("url1"),      // task 1
-    y = fetch("url2"),      // task 2 (parallel with task 1)
-    z = process(x, y)       // task 3 (depends on x and y; must wait)
+    x = fetch("url1"),      // Task 1
+    y = fetch("url2"),      // Task 2 (runs in parallel with Task 1)
+    z = process(x, y)       // Task 3 (depends on x and y and must wait)
 }
 ```
 
 ### 6.2 Rc/Arc Selection (Conservative Strategy)
 
-The compiler adopts a **conservative strategy**, defaulting to `Arc` to ensure thread safety:
+The compiler uses a **conservative strategy**, defaulting to `Arc` to ensure thread safety:
 
-- **Default `Arc`**: when the compiler cannot determine whether a `ref` is only used within a single
-  task, it conservatively selects `Arc`
-- **Degrade to `Rc`**: only when the compiler can **prove** through DAG analysis that the data will
-  absolutely not be shared across tasks does it degrade to `Rc`
-- **Better slow than wrong**: the extra overhead of choosing `Arc` is far smaller than the risk of a
+- **Default to `Arc`**: When the compiler cannot determine whether a `ref` is used only within a
+  single task, it conservatively selects `Arc`
+- **Downgrade to `Rc`**: It downgrades to `Rc` only when DAG analysis can **prove** that the data
+  will never be shared across tasks
+- **Rather slow than wrong**: The additional overhead of `Arc` is far smaller than the risk of a
   data race
 
 ### 6.3 No-Parallelism Warning
 
-If the tasks inside a spawn block have no real opportunity for parallelism, the compiler issues a
+If the tasks in a spawn block have no actual opportunity for parallelism, the compiler emits a
 warning.
 
 ```yaoxiang
 // Compiler warning: no opportunity for parallelism
 result = spawn {
-    a = fetch("url")    // the only task
+    a = fetch("url")    // The only task
 }
-// Suggestion: use ordinary code directly
+// Recommendation: use ordinary code directly
 result = fetch("url")
 ```
 
 ### 6.4 Resource Conflict Detection
 
-The compiler detects potential conflicts on resource types.
+The compiler detects potential conflicts between resource types.
 
 ```yaoxiang
 // Compile error: concurrent writes to the same file
@@ -495,27 +495,28 @@ spawn {
 
 ## Chapter 7: Runtime Tiers
 
-The compile phase is exactly the same; the difference lies only in how execution is performed at
+The compilation stage is exactly the same; the only difference is how execution is performed at
 runtime (RFC-008).
 
-| Tier             | spawn support | DAG analysis                        | Use case                                      |
+| Tier             | spawn support | DAG analysis                        | Use cases                                     |
 | ---------------- | ------------- | ----------------------------------- | --------------------------------------------- |
-| Embedded Runtime | ❌            | None                                | WASM, game scripting, rule engines            |
-| Standard Runtime | ✅            | Inside spawn blocks                 | Web services, data pipelines                  |
-| Full Runtime     | ✅            | Inside spawn blocks + work stealing | Scientific computing, large-scale parallelism |
+| Embedded Runtime | ❌            | None                                | WASM, game scripts, rule engines              |
+| Standard Runtime | ✅            | Within spawn blocks                 | Web services, data pipelines                  |
+| Full Runtime     | ✅            | Within spawn blocks + work stealing | Scientific computing, large-scale parallelism |
 
-**Embedded Runtime**: just-in-time executor, no spawn support, high performance with low overhead.
+**Embedded Runtime**: An immediate executor with no spawn support, offering high performance and low
+overhead.
 
-**Standard Runtime**: supports `spawn {}` blocks, performs DAG analysis and automatic concurrency
-inside spawn blocks. `num_workers=1` means single-threaded mode.
+**Standard Runtime**: Supports `spawn {}` blocks and performs DAG analysis and automatic concurrency
+within spawn blocks. `num_workers=1` means single-threaded mode.
 
-**Full Runtime**: Standard + WorkStealer load balancing.
+**Full Runtime**: Standard plus WorkStealer load balancing.
 
 ---
 
 ## Appendix: Syntax Quick Reference
 
-### A.1 spawn Statement
+### A.1 spawn Statements
 
 ```
 SpawnBlock  ::= '(' Pattern (',' Pattern)* ')' '=' 'spawn' '{' SpawnBody '}'
@@ -527,16 +528,16 @@ SpawnBody   ::= Assignment (',' Assignment)*
 ### A.2 Error Handling
 
 ```
-Expr '?'              // error propagation (Result type)
+Expr '?'              // Error propagation (Result type)
 ```
 
-### A.3 ref Expression
+### A.3 ref Expressions
 
 ```
 RefExpr     ::= 'ref' Expr
 ```
 
-### A.4 Resource Type Annotation
+### A.4 Resource Type Declarations
 
 ```
 ResourceDecl ::= Identifier ':' 'Type' '=' RecordType

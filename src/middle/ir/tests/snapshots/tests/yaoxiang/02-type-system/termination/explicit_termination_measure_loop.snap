@@ -10,7 +10,7 @@ module
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
-    value v5: TypeVar(TypeVar(45)) @block0
+    value v5: TypeRef("?") @block0
     Load %0 <- arg%0
     Load %1 <- int(0)
     Load %2 <- void
@@ -40,7 +40,7 @@ module
     value v4: Int(64) @block0
     value v5: Int(64) @block0
     value v6: Int(64) @block0
-    value v7: TypeVar(TypeVar(45)) @block0
+    value v7: TypeRef("?") @block0
     Load %0 <- arg%0
     Load %1 <- int(0)
     Load %2 <- void
@@ -62,19 +62,19 @@ module
   fn main() -> Void
     locals_total=3
     values_total=18
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Generic { name: "String", args: [] } @block0
-    value v6: TypeRef("?") @block0
+    value v6: Never @block0
     value v7: Bool @block0
     value v8: Int(64) @block0
     value v9: Int(64) @block0
     value v10: Int(64) @block0
     value v11: Generic { name: "String", args: [] } @block0
-    value v12: TypeRef("?") @block0
+    value v12: Never @block0
     value v13: Bool @block0
     value v14: Int(64) @block0
     value v15: Int(64) @block0
@@ -86,18 +86,21 @@ module
     Eq v1 <- v2, v3
     Load v5 <- string("循环值应为末次迭代的尾表达式值 4")
     Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
+    Drop v5
     Load v10 <- int(1)
     Call v8 <- string("loop") [v10] (def=d0)
     Load v9 <- int(1)
     Eq v7 <- v8, v9
     Load v11 <- string("单次迭代：循环值应为末次迭代的尾表达式值 1")
     Call v6 <- string("std.assert.assert") [v7, v11] (def=d1)
+    Drop v11
     Load v16 <- int(3)
     Call v14 <- string("countdown") [v16] (def=d2)
     Load v15 <- int(30)
     Eq v13 <- v14, v15
     Load v17 <- string("测度与循环值各自独立，值为 3 * 10")
     Call v12 <- string("std.assert.assert") [v13, v17] (def=d1)
+    Drop v17
     Ret v12
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

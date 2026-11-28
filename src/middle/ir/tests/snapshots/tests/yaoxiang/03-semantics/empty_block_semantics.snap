@@ -32,10 +32,11 @@ module
   fn main() -> Void
     locals_total=2
     values_total=2
-    value v0: TypeRef("?") @block0
+    value v0: Void @block0
     value v1: Generic { name: "String", args: [] } @block0
     Load v1 <- string("empty_block_semantics: ok")
     Call v0 <- string("std.io.println") [v1] (def=d1)
+    Drop v1
     Ret v0
   init (locals=15)
     islot[2] x : Int(64) @depth1

@@ -68,7 +68,7 @@
 - **不看的代码不改**：没有打开过文件、没有 grep 过引用点，就不许动它。行号以仓库现状为准，文档行号会漂移。
 - **不留待实现遗留**：核心功能不许出现 `todo!()` / `Vec::new() // Not implemented yet` /
   "独立 issue 以后再修"。发现了就修，或登记进当前阶段任务——不许带出新遗留（D52 先例：`.42`
-  三处数据丢失已全部收编 P7）。
+  的两处真丢失已全部收编 P7；第三处 `exception_handlers` 复核为误报——死字段，**已随 P10 S6.1 删除（6753bbe）**）。
 - **核实项必须逐行核实**：任务标注"必须逐行核实，不能假定等价"（如 4.2.7、6.1.3）时，把核实结论写进 PR 描述。
 - **删测试换绿灯 = 违规**：DoD 要求每阶段结束时测试数不低于开始时。
 - **机械问题已被工具兜住的部分不要人肉 check**：fmt / clippy / `build.rs` 门禁 / P0 起的
@@ -90,6 +90,7 @@ cargo fmt                                              # 格式化（必跑）
 cargo clippy --all --all-features --all-targets -- -D warnings
 python scripts/dev/testsuite.py run fast               # 提交前必跑：lib + 集成侧，见下
 python scripts/ci/check-test-channel.py                # 四处口径同源（本页 / AGENTS.md / test-specification / pre-commit）
+python scripts/dev/test-gate-census.py --check         # 普查表与当前树一致（pre-commit 在 .rs / 普查表变动时自动跑）
 ```
 
 `run fast` 的目标集是显式的：`--lib`（src/ 单元测试）加四个集成侧目标
@@ -105,10 +106,9 @@ python scripts/ci/check-docs-truth.py
 python scripts/ci/check-boundary.py
 python scripts/ci/check-fanout.py
 python scripts/ci/check-docs-refs.py
-python scripts/docs/gen-error-code-docs.py && git diff --quiet
 ```
 
-改动诊断码或其发射点（增、删、行号平移）都必须重跑生成器并确认 `git diff --quiet`；生成物禁止手改，提交信息须分类说明。
+**错误码参考页是构建期产物，不入库**：文档站构建时由 `scripts/docs/gen-error-code-docs.py` 从码表注册表与 `locales/*.json` 重新生成（zh 与 en 两侧），因此本地不再「再生入库」。改诊断码时改的是权威源——`define_codes!` 注册表与文案：新增码必须同时补齐 `locales/zh.json` 与 `locales/en.json`，否则生成页该码显示「locales 无条目」。要预览生成结果跑 `node docs/gen-error-docs.js`。
 
 ## 二、改文档
 

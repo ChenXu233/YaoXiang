@@ -21,8 +21,8 @@ module
     value v8: Int(64) @block0
     value v9: Int(64) @block0
     value v10: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v11: TypeRef("?") @block0
-    value v12: TypeRef("?") @block0
+    value v11: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v12: Never @block0
     value v13: Bool @block0
     value v14: Generic { name: "String", args: [] } @block0
     value v15: Int(64) @block0
@@ -36,8 +36,8 @@ module
     value v23: Int(64) @block0
     value v24: Int(64) @block0
     value v25: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v26: TypeRef("?") @block0
-    value v27: TypeRef("?") @block0
+    value v26: Fn { params: [Int(64)], return_type: Bool } @block0
+    value v27: Never @block0
     value v28: Bool @block0
     value v29: Generic { name: "String", args: [] } @block0
     value v30: Int(64) @block0
@@ -51,9 +51,9 @@ module
     value v38: Int(64) @block0
     value v39: Int(64) @block0
     value v40: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v41: TypeRef("?") @block0
+    value v41: Fn { params: [Int(64), Int(64)], return_type: Int(64) } @block0
     value v42: Int(64) @block0
-    value v43: TypeRef("?") @block0
+    value v43: Never @block0
     value v44: Bool @block0
     value v45: Int(64) @block0
     value v46: Int(64) @block0
@@ -68,11 +68,11 @@ module
     value v55: Int(64) @block0
     value v56: Int(64) @block0
     value v57: Int(64) @block0
-    value v58: TypeRef("?") @block0
+    value v58: Generic { name: "Vec", args: [Int(64)] } @block0
     value v59: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v60: TypeRef("?") @block0
-    value v61: TypeRef("?") @block0
-    value v62: TypeRef("?") @block0
+    value v60: Fn { params: [Int(64)], return_type: Bool } @block0
+    value v61: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v62: Never @block0
     value v63: Bool @block0
     value v64: Generic { name: "String", args: [] } @block0
     AllocArray %0 size=int(5), elem=int(1)
@@ -94,10 +94,13 @@ module
     Load v10 <- %0
     MakeClosure v11 <- closure_0 env=[] (def=d0)
     Call %1 <- string("std.list.map") [v10, v11] (def=d1)
+    Drop v10
+    Drop v11
     Drop %0
     Load v13 <- bool(true)
     Load v14 <- string("list.map works")
     Call v12 <- string("std.assert.assert") [v13, v14] (def=d2)
+    Drop v14
     AllocArray %2 size=int(5), elem=int(1)
     Load v15 <- int(1)
     Load v16 <- int(0)
@@ -117,10 +120,13 @@ module
     Load v25 <- %2
     MakeClosure v26 <- closure_1 env=[] (def=d3)
     Call %3 <- string("std.list.filter") [v25, v26] (def=d4)
+    Drop v25
+    Drop v26
     Drop %2
     Load v28 <- bool(true)
     Load v29 <- string("list.filter works")
     Call v27 <- string("std.assert.assert") [v28, v29] (def=d2)
+    Drop v29
     AllocArray %4 size=int(5), elem=int(1)
     Load v30 <- int(1)
     Load v31 <- int(0)
@@ -141,12 +147,15 @@ module
     MakeClosure v41 <- closure_2 env=[] (def=d5)
     Load v42 <- int(0)
     Call %5 <- string("std.list.reduce") [v40, v41, v42] (def=d6)
+    Drop v40
+    Drop v41
     Drop %4
     Load v45 <- %5
     Load v46 <- int(15)
     Eq v44 <- v45, v46
     Load v47 <- string("list.reduce sum of 1..5 should be 15")
     Call v43 <- string("std.assert.assert") [v44, v47] (def=d2)
+    Drop v47
     AllocArray %6 size=int(5), elem=int(1)
     Load v48 <- int(1)
     Load v49 <- int(0)
@@ -166,12 +175,17 @@ module
     Load v59 <- %6
     MakeClosure v60 <- closure_3 env=[] (def=d7)
     Call v58 <- string("std.list.filter") [v59, v60] (def=d4)
+    Drop v59
+    Drop v60
+    Drop v58
     MakeClosure v61 <- closure_4 env=[] (def=d8)
     Call %7 <- string("std.list.map") [v58, v61] (def=d1)
+    Drop v61
     Drop %6
     Load v63 <- bool(true)
     Load v64 <- string("chained list.map and list.filter works")
     Call v62 <- string("std.assert.assert") [v63, v64] (def=d2)
+    Drop v64
     Drop %1
     Drop %3
     Drop %0
@@ -181,27 +195,27 @@ module
     Drop %7
     Drop %5
     Ret v62
-  fn closure_0(Int(64)) -> Void
+  fn closure_0(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth2
     locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
-    value v1: TypeVar(TypeVar(44)) @block0
-    value v2: TypeVar(TypeVar(44)) @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
     value v3: Int(64) @block0
     Load v2 <- %0
     Load v3 <- int(2)
     Mul v1 <- v2, v3
     Ret v1
-  fn closure_1(Int(64)) -> Void
+  fn closure_1(Int(64)) -> Bool
     slot[0] x : Int(64) @depth2
     locals_total=4
     values_total=6
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
-    value v2: TypeVar(TypeVar(44)) @block0
+    value v2: TypeRef("?") @block0
     value v3: Int(64) @block0
-    value v4: TypeVar(TypeVar(44)) @block0
+    value v4: TypeRef("?") @block0
     value v5: Int(64) @block0
     Load v4 <- %0
     Load v5 <- int(2)
@@ -209,38 +223,38 @@ module
     Load v3 <- int(0)
     Eq v1 <- v2, v3
     Ret v1
-  fn closure_2(Int(64), Int(64)) -> Void
+  fn closure_2(Int(64), Int(64)) -> Int(64)
     slot[0] acc : Int(64) @depth2
     slot[1] x : Int(64) @depth2
     locals_total=5
     values_total=4
     value v0: TypeRef("?") @block0
-    value v1: TypeVar(TypeVar(56)) @block0
-    value v2: TypeVar(TypeVar(56)) @block0
-    value v3: TypeVar(TypeVar(44)) @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: TypeRef("?") @block0
     Load v2 <- %0
     Load v3 <- %1
     Add v1 <- v2, v3
     Ret v1
-  fn closure_3(Int(64)) -> Void
+  fn closure_3(Int(64)) -> Bool
     slot[0] x : Int(64) @depth2
     locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
-    value v2: TypeVar(TypeVar(44)) @block0
+    value v2: TypeRef("?") @block0
     value v3: Int(64) @block0
     Load v2 <- %0
     Load v3 <- int(2)
     Gt v1 <- v2, v3
     Ret v1
-  fn closure_4(Int(64)) -> Void
+  fn closure_4(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth2
     locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
-    value v1: TypeVar(TypeVar(44)) @block0
-    value v2: TypeVar(TypeVar(44)) @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
     value v3: Int(64) @block0
     Load v2 <- %0
     Load v3 <- int(10)

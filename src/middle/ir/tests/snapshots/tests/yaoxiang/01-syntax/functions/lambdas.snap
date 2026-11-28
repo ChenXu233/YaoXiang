@@ -2,27 +2,27 @@ module
   fn main() -> Void
     locals_total=3
     values_total=27
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
-    value v2: TypeVar(TypeVar(45)) @block0
+    value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Generic { name: "String", args: [] } @block0
-    value v6: TypeRef("?") @block0
+    value v6: Never @block0
     value v7: Bool @block0
-    value v8: TypeVar(TypeVar(52)) @block0
+    value v8: Int(64) @block0
     value v9: Int(64) @block0
     value v10: Int(64) @block0
     value v11: Int(64) @block0
     value v12: Generic { name: "String", args: [] } @block0
-    value v13: TypeRef("?") @block0
+    value v13: Never @block0
     value v14: Bool @block0
     value v15: Int(64) @block0
     value v16: Int(64) @block0
     value v17: Int(64) @block0
     value v18: Int(64) @block0
     value v19: Generic { name: "String", args: [] } @block0
-    value v20: TypeRef("?") @block0
+    value v20: Never @block0
     value v21: Bool @block0
     value v22: Int(64) @block0
     value v23: Int(64) @block0
@@ -35,6 +35,7 @@ module
     Eq v1 <- v2, v3
     Load v5 <- string("double(21) == 42")
     Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
+    Drop v5
     Load v10 <- int(3)
     Load v11 <- int(4)
     Call v8 <- string("add") [v10, v11] (def=d2)
@@ -42,6 +43,7 @@ module
     Eq v7 <- v8, v9
     Load v12 <- string("add(3, 4) == 7")
     Call v6 <- string("std.assert.assert") [v7, v12] (def=d1)
+    Drop v12
     Load v17 <- int(10)
     Load v18 <- int(20)
     Call v15 <- string("std.math.max") [v17, v18] (def=d3)
@@ -49,6 +51,7 @@ module
     Eq v14 <- v15, v16
     Load v19 <- string("max(10, 20) == 20")
     Call v13 <- string("std.assert.assert") [v14, v19] (def=d1)
+    Drop v19
     Load v24 <- int(30)
     Load v25 <- int(5)
     Call v22 <- string("std.math.max") [v24, v25] (def=d3)
@@ -56,14 +59,15 @@ module
     Eq v21 <- v22, v23
     Load v26 <- string("max(30, 5) == 30")
     Call v20 <- string("std.assert.assert") [v21, v26] (def=d1)
+    Drop v26
     Ret v20
   fn double(Int(64)) -> Void
     slot[0] x : Int(64) @depth2
     locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
-    value v1: TypeVar(TypeVar(46)) @block0
-    value v2: TypeVar(TypeVar(46)) @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
     value v3: Int(64) @block0
     Load %0 <- arg%0
     Load v2 <- %0
@@ -77,9 +81,9 @@ module
     locals_total=5
     values_total=4
     value v0: TypeRef("?") @block0
-    value v1: TypeVar(TypeVar(62)) @block0
-    value v2: TypeVar(TypeVar(62)) @block0
-    value v3: TypeVar(TypeVar(63)) @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: TypeRef("?") @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
     Load v2 <- %0
@@ -92,12 +96,12 @@ module
     slot[1] b : Int(64) @depth2
     locals_total=5
     values_total=6
-    value v0: TypeVar(TypeVar(62)) @block0
+    value v0: TypeRef("?") @block0
     value v1: Bool @block0
-    value v2: TypeVar(TypeVar(62)) @block0
-    value v3: TypeVar(TypeVar(63)) @block0
-    value v4: TypeVar(TypeVar(62)) @block0
-    value v5: TypeVar(TypeVar(63)) @block0
+    value v2: TypeRef("?") @block0
+    value v3: TypeRef("?") @block0
+    value v4: TypeRef("?") @block0
+    value v5: TypeRef("?") @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
     Load v2 <- %0

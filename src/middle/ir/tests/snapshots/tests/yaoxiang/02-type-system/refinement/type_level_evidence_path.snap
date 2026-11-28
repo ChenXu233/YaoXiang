@@ -18,6 +18,7 @@ module
     Load %1 <- arg%1
     Load v1 <- %0
     LoadField v0 <- v1.0
+    Drop v1
     Ret v0
   init (locals=0)
     Load %0 <- int(3)

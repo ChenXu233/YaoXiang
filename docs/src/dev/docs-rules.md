@@ -114,11 +114,11 @@ description: 'YaoXiang 文档的分类规则（Diátaxis）与维基式语言风
 - **标题**：每篇一个 H1，正文从 H2 开始，不跳级。
 - **链接**：站内链接一律使用指向目标文件的相对路径，不使用站点绝对路径。构建配置
   `ignoreDeadLinks: false`，死链会使构建失败。
-- **不写行号**：行号随任何一次改动漂移，而 `check-docs-refs.py` 只校验路径能否解析。用语义描述定位（「`ir_gen` 里取 `Expr::Cast` span 的那个臂」）；确需行号时在被引用的 revision 上重取（`git show <rev>:<file>`）。
+- **不写行号**：行号随任何一次改动漂移，而 `check-docs-refs.py` 只校验路径能否解析。用语义描述定位（「`ir_gen` 里取 `Expr::Cast` span 的那个臂」）；确需行号时在被引用的 revision 上重取（`git show <rev>:<file>`）。**例外**：构建期生成的错误码参考页带 `file:line` 发射点锚——行号由生成器在构建时按当前源码算出，始终新鲜。
 - **移动文件 = 改 URL**：必须同步全站引用、两个侧边栏配置、en/ 镜像、引用了该路径的脚本与 AGENTS.md。完整流程见
   [HOWTO.md](./HOWTO.md) 第二节「移动文档六同步」。
 - **格式**：表格对齐、围栏空行由 prettier（`docs/.prettierrc.json`）与 markdownlint 强制。
-- **中英镜像**：zh 是源，en 由翻译工作流同步。新增/移动 zh 文件后，en 侧路径必须一致。
+- **中英镜像**：zh 是源，en 由翻译工作流同步。新增/移动 zh 文件后，en 侧路径必须一致。**例外**：错误码参考页不入库，zh 与 en 两侧都由 `scripts/docs/gen-error-code-docs.py` 在构建期产出（文案分别取 `locales/zh.json` 与 `locales/en.json`），不经翻译工作流。
 
 ## 4. 目录索引页的职责
 
@@ -132,7 +132,7 @@ description: 'YaoXiang 文档的分类规则（Diátaxis）与维基式语言风
 
 **改文档前必须读三样**：
 
-1. **上游设计**：这次要改的文档，其结论来自哪份 RFC 的哪条决议（[RFC-039](../rfc/accepted/039-compiler-architecture.md) 的决议登记 D1–D59，或该领域的专题 RFC）。写不出来 = 这次改动没有依据。
+1. **上游设计**：这次要改的文档，其结论来自哪份 RFC 的哪条决议（[RFC-039](../rfc/accepted/039-compiler-architecture.md) 的决议登记 D1–D64，或该领域的专题 RFC）。写不出来 = 这次改动没有依据。
 2. **同层相邻文档**：同一张表、同一组术语是否在别处已有定义——两处各写一份是 §0「不得生造」的翻版。
 3. **[commit-convention.md](./commit-convention.md)** 与 [coding-rules.md](./coding-rules.md) 的红线。
 

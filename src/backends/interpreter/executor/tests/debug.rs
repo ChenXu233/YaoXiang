@@ -32,7 +32,6 @@ fn make_module(
         upvalue_count: 0,
         instructions,
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     });
     module.constants = constants;
@@ -105,7 +104,6 @@ fn module_with_callee(
         upvalue_count: 0,
         instructions: callee_instrs,
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     };
 
@@ -120,7 +118,6 @@ fn module_with_callee(
         upvalue_count: 0,
         instructions: main_instrs,
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     });
     module.entry_point = Some(main_idx);

@@ -223,14 +223,14 @@ RFC-027 的三个单测（`src/frontend/core/sema/tests/rfc027_phase25_proof_fn.
 
 **结论：第三层判据需要补充多文件语料层，否则它无法充当本文的验收工具。** 见「实施要点」S1。
 
-### 义务字段：14 个「产出即契约」的字段，零机制保证
+### 义务字段：16 个「产出即契约」的字段，零机制保证
 
-`src/frontend/core/sema/types.rs:16-80` 的 `TypeCheckResult` 中，有 **14 个字段**的文档注释明确写着「由 X 阶段产出 → Y 阶段消费」，即它们本质上是**跨阶段义务**：
+`src/frontend/core/sema/types.rs:16-107` 的 `TypeCheckResult` 中，有 **16 个字段**的文档注释明确写着「由 X 阶段产出 → Y 阶段消费」，即它们本质上是**跨阶段义务**：
 
 | 字段 | 定义行 | 产出方 → 消费方 |
 | --- | --- | --- |
 
-> **取行约定**：定义行 = `types.rs` 里该字段的**声明行**（`pub` / `pub(super)` 那一行），不是 doc 注释首行——同一字段的注释块可能多行，声明行才是唯一可锚定的位置。本表上方那句里的**结构体范围**（`src/frontend/core/sema/types.rs:16-80`）随结构体行号浮动，由门禁 **F5** 机械对账（写错即红）；定义行列由 **F4** 对账。
+> **取行约定**：定义行 = `types.rs` 里该字段的**声明行**（`pub` / `pub(super)` 那一行），不是 doc 注释首行——同一字段的注释块可能多行，声明行才是唯一可锚定的位置。本表上方那句里的**结构体范围**（`src/frontend/core/sema/types.rs:16-107`）随结构体行号浮动，由门禁 **F5** 机械对账（写错即红）；定义行列由 **F4** 对账。
 | `proof_calls` | `36` | typecheck → **proof_execution** |
 | `release_plan` | `38` | ownership → IR 生成（**`PlanId` 键控**：`ir_gen.rs:360` 读（`type_result.release_plan.clone()`）、`:3103` 用（`ReleasePlan::consume`）；结算完成标记 `:1095`） |
 | `escaped_refs` | `40` | ownership → IR 生成 |
@@ -239,12 +239,14 @@ RFC-027 的三个单测（`src/frontend/core/sema/tests/rfc027_phase25_proof_fn.
 | `implementation_proofs` | `46` | typecheck → IR 生成 |
 | `sum_types` | `54` | typecheck → IR 生成 |
 | `sum_type_param_names` | `57` | typecheck → IR 生成 |
-| `operator_dispatches` | `59` | typecheck → IR 生成（span 键控） |
-| `overload_resolutions` | `62` | typecheck → IR 生成（**`PlanId` 键控**——调用点身份：产出 `inference/expressions.rs:4550`、消费 `ir_gen.rs:7697` / `:7772`（`OverloadResolutions::get`）；结算完成标记 `:1097`） |
-| `try_expr_impls` | `65` | typecheck → IR 生成（span 键控） |
-| `match_scrutinee_types` | `69` | typecheck → IR 生成（span 键控） |
-| `module_namespaces` | `72` | typecheck → IR 生成 |
-| `record_models` | `79` | typecheck（声明期一遍）→ IR 生成（量词传播；B.2 起 witness 字段的 `TypeDeclField.quantity` 与构造参数/默认值填充都从这张表读） |
+| `operator_dispatches` | `66` | typecheck → IR 生成（span 键控） |
+| `overload_resolutions` | `69` | typecheck → IR 生成（**`PlanId` 键控**——调用点身份：产出 `inference/expressions.rs:4550`、消费 `ir_gen.rs:7697` / `:7772`（`OverloadResolutions::get`）；结算完成标记 `:1097`） |
+| `try_expr_impls` | `74` | typecheck → IR 生成（span 键控：实现**类型身份** + 成功载荷 + 残余载荷，三样同出 `query_try_impl` 一次结算；IR 据此命名四方法并落它们的结果类型） |
+| `match_scrutinee_types` | `78` | typecheck → IR 生成（span 键控） |
+| `module_namespaces` | `81` | typecheck → IR 生成 |
+| `record_models` | `88` | typecheck（声明期一遍）→ IR 生成（量词传播；B.2 起 witness 字段的 `TypeDeclField.quantity` 与构造参数/默认值填充都从这张表读） |
+| `type_identity_index` | `64` | typecheck → IR 生成（**`Nominal` 键控**——类型身份：`Nominal → 写名`，lower 的构造调用身份、字段表与「写名 → 身份」反查都从这份派生索引读，D64 §2.5「身份不得从名字串反解」） |
+| `expr_result_types` | `106` | typecheck → IR 生成（**`PlanId` 键控**——调用点身份：产出 `inference/expressions/expr.rs` 的 Call 臂，消费 `lower/query.rs::expr_value_type`；导出点收敛，未收敛条目不导出） |
 
 **改判记录（3.4.9，2026-10-13 用户裁决甲）**：原第 14 行 `interface_impl_registry`（types.rs:49）已**改判为树内事实**——它按设计由 typecheck 在相位消费、跨阶段零读取，不是义务：
 
@@ -252,18 +254,18 @@ RFC-027 的三个单测（`src/frontend/core/sema/tests/rfc027_phase25_proof_fn.
 - **跨阶段零读取（直证）**：`git grep -n 'interface_impl_registry' -- src/middle` → 空；`src/driver` 侧仅账本自身的登记与文档（已随本轮移除）。
 - **处置**：删掉文档注释里「镜像供 middle 端/LSP 消费」的**声明**，保留字段与在相位消费；该字段登记在 `src/driver/obligations.rs` 的 `NON_OBLIGATION_FIELDS`（含理由）。将来 LSP 真需要该表，按 4.6.x 新登记走，**不在本轮造消费者**。
 
-**这些字段全部以 `Span` 或名字表为键跨层传递。** 等价性判据文档已指出 span 键控契约的失配会「静默失效，无任何错误」（`ReleasePlan` 是典型：两侧 span 计算方式任何一处不一致 → `Drop` 指令静默消失）。
+**这些字段以 `PlanId`（语句 / 调用点结构身份）、`Span` 或名字表为键跨层传递。** 等价性判据文档已指出 span 键控契约的失配会「静默失效，无任何错误」（`ReleasePlan` 是典型：两侧 span 计算方式任何一处不一致 → `Drop` 指令静默消失）。
 
 `release_plan` 为什么存活而 `proof_calls` 死了？差别是**结构性的，不是偶然的**：
 
 - `release_plan` 的消费者 `ir_gen.rs:360`（`release_plan: type_result.release_plan.clone()`）位于 `generate_ir_with_context` 内部，而 `compile_project:154-156` **恰好把完整的 `&TypeCheckResult` 传给了它**——消费者在下游模块，而下游模块在所有入口的必经之路上。
 - `proof_calls` 的消费者在 `pipeline.rs` **顶层**，属于**另一个入口实现**。orchestrator 的四个入口根本不经过 `pipeline.rs` 这一层。
 
-**已核实事实**：目前全仓库**没有任何机制**保证这 14 个字段被消费。唯一"保护"是 `ReleasePlan` 恰好搭上了 IR 生成的便车。
+**已核实事实**：目前全仓库**没有任何机制**保证这 16 个字段被消费。唯一"保护"是 `ReleasePlan` 恰好搭上了 IR 生成的便车。
 
 ### 非义务字段登记：`TypeCheckResult` 里的通道 / 在相位 / 树内事实字段
 
-**`NON_OBLIGATION_FIELDS`（8 条）**：`TypeCheckResult` 里不属跨阶段义务的字段逐一登记（字段名 + 理由），与上面「§义务字段」表**互补**：
+**`NON_OBLIGATION_FIELDS`（9 条）**：`TypeCheckResult` 里不属跨阶段义务的字段逐一登记（字段名 + 理由），与上面「§义务字段」表**互补**：
 
 | 字段 | 为什么不是跨阶段义务（要点） |
 | --- | --- |
@@ -275,6 +277,7 @@ RFC-027 的三个单测（`src/frontend/core/sema/tests/rfc027_phase25_proof_fn.
 | `trait_table` | 跨阶段读取 ir_gen.rs:4336/:6867，文档注释未声明契约 |
 | `warnings` | 警告诊断通道（与 `diagnostics` 同类） |
 | `interface_impl_registry` | 树内事实（3.4.9 用户裁决甲；在相位消费点见「§义务字段」的改判记录） |
+| `method_def_ir_names` | 跨阶段映射（typecheck 按方法声明语句 `PlanId` 产出混编名 → IR 生成只读取名，WBS 7c.3）；未命中即 E3005 响亮失败、无静默面；消费粒度是逐声明而非按单元非空，义务台账「单元产出即须交付」口径不适用 |
 
 **为什么不是「接线消费端」**：给这些字段造下游只会凭空引入假义务，把「按设计不需要跨阶段消费」伪装成契约缺陷；正确的闭合机制是**反向 containment**——`TypeCheckResult` 字段集 = 义务清单 ∪ 非义务登记（由 `scripts/ci/check-obligations.py` 判据 1 硬判：加字段忘登记、删字段忘同步、非义务登记缺理由、两表重叠都当场红）。
 
@@ -466,7 +469,7 @@ pub struct Obligations {
     pub instantiation_requests:  Vec<InstantiationRequest>,  // types.rs:42
     pub existential_coercions:   Vec<ExistentialCoercion>,   // types.rs:44
     pub overload_resolutions:    OverloadResolutions,         // types.rs:62
-    pub try_expr_impls:          Vec<(Span, String)>,        // types.rs:59
+    pub try_expr_impls:          TryExprImpls,               // types.rs:74
     // …其余 span 键控字段
 }
 
@@ -498,7 +501,7 @@ impl Obligations {
 > **一、落地物（file:line）**
 >
 > - 账本 `src/driver/obligations.rs`：13 条义务清单 `INVENTORY`（:201，字段名/消费者阶段/红名单）、
->   **非义务字段登记 `NON_OBLIGATION_FIELDS`（:150，8 条含理由）**、交付标记台账 `DeliveryLedger`、
+>   **非义务字段登记 `NON_OBLIGATION_FIELDS`（:175，9 条含理由）**、交付标记台账 `DeliveryLedger`、
 >   纯结算 `settle_obligations`（:577）、外发 `emit_obligation_diagnostics`（:654）、
 >   非消费方门控 `consumer_visible_unit`（:538）、跳过判据 `consumer_stage_skipped`（:549）、
 >   IrGeneration 交付集 `IR_GENERATION_DELIVERED`（:285）、W1090 码串常量 `OBLIGATION_UNDRAINED_CODE`。
@@ -681,7 +684,7 @@ impl Obligations {
 > | t3 F1 / t4 R2 | 红名单 evidence 是纯文本指针，替代消费者被摘除时会静默陈旧 | **已落地**：门禁 F1 锚点校验（文件可定位 + 行号在册 + 符号锚，`scripts/ci/check-obligations.py:251`）；反例夹具 `tests/baselines/obligations-gate/stale-anchor/` |
 > | t3 F2 / t4 R3 | 门禁判据 1 缺反向 containment，新增字段忘登记时静默 PASS | **已落地**：F2 差值显式输出（`:577`）+ F4 定义行对账（`:455`）+ F5 范围对账；反例夹具 `unregistered-field/` |
 > | t4 R4 | W-only 与升 E 的口径未登记 | **已落地**：本注记第三 / 七段 + RFC-013「发射通道」+ 六语言 `locales/*.json` 的 W1090 help 与 error_output 样例 |
-> | t7 F5 | 死代码分析对重载方法引用计数失真（合法重载仍被误报 `W1005`） | **已转 issue `#450`**，归属 WBS **4.9 引用池正确实现**（`docs/src/dev/architecture/09-execution-wbs.md:237` 登记）——非本二级任务 |
+> | t7 F5 | 死代码分析对重载方法引用计数失真（合法重载仍被误报 `W1005`） | **已转 issue `#450`**，归属 WBS **4.9 引用池正确实现**（登记见 `docs/src/dev/architecture/09-execution-wbs.md` 的 4.9 行）——非本二级任务 |
 > | t11 F7 | 门禁 `--root` 模式下 F1 不覆盖模块头散文注释里的锚点承诺 | **已知边界**（见 8.4） |
 > | t11 F8 | 验证方工具侧自记：变异驱动曾误写主仓（即时 `git restore` 清除、受影响轮次输出作废重跑） | **信息项**（非交付物缺陷） |
 > | t11 F9 | 主仓中间态（未暂存文件使本文表头与 `INVENTORY` 不同步）触发门禁红 | **信息项 / 已消解**：冻结提交自洽 PASS；「中间态直接提交会红门禁」正是 F2/F4 的设计意图 |
@@ -894,7 +897,7 @@ impl Driver {
 > 15. 3.4.8 R1（①）落地（2026-10-10，a9438007）。按 #14 设计落地限定调用
 >     实例化收集：`ExpressionInferrer` 注入模块限定键表（`use` 三臂登记——普通
 >     / 别名 / 逐项别名且仅 SubModule 类导出），`callee_generic_name` 经
->     `SymbolTable::qualify` 拼接与 merged IR 同源的限定名；限定调用首路径
+>     统一限定名拼接得到与 merged IR 同源的限定名（拼接实现见 `frontend::module::symbol`）；限定调用首路径
 >     arity 判据收紧（参数表解不出时落第二路径按签名取实参，避免跨模块同名函数
 >     错配误报 E3018）。实施中实证 mono 侧**三个不对称缺陷**并同轮修复：
 >     (1) 删除键（泛型名集合）与改写键（containing_fn + 名 + span 三元组）
@@ -1275,7 +1278,7 @@ pub enum Aggregation {
 - `src/frontend/core/sema/layers/README.md` — 层序调用表与 `equivalence` 的真实身份（无 short-circuit）
 - `src/frontend/core/sema/layers/predicate.rs:31-32` — SMT 初始化硬失败的明文理由
 - `src/frontend/core/sema/proof/smt/backend.rs:60` — 「调用方应保守降级」的契约声明（与 `predicate.rs` 矛盾）
-- `src/frontend/core/sema/types.rs:16-80` — 14 个下游必须消费的义务字段（3.4.4/3.4.5/3.4.9 清账后）
+- `src/frontend/core/sema/types.rs:16-107` — 16 个下游必须消费的义务字段（3.4.4/3.4.5/3.4.9 清账后）
 - `src/frontend/core/sema/tests/rfc027_refined_transparency.rs:13-15` — 单测自认「停在 pipeline 之前」
 - `tests/yaoxiang/06-compile-errors/refinement/refined_annotation_literal_violates_err.yx:12-13` — 语料自认「由 pipeline.rs 在 check_module 之后执行」
 - `wasm/src/lib.rs` 的 `compile_playground`（`run_code` 经它编译）— playground 的第四个编译调用方（单文件路径，故执行 proof_execution）

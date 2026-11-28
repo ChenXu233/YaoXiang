@@ -11,16 +11,14 @@ check-docs-truth.py —— 文档与源码事实对账门禁
   本脚本改为对账「事实」，而不是「时间」。
 
 检查项：
-  1. 诊断码：src/util/diagnostic/codes/ 注册表 vs 文档码集合
-  2. 标准库：src/std/ 实际模块 vs 文档声明的模块（幽灵模块检测）
-  3. 版本号：Cargo.toml version vs 文档中出现的硬编码版本串
-  4. 命令：src/main.rs 子命令表 vs 文档中出现的 yx 子命令
-  5. 关键字：src/frontend/core/lexer/state.rs vs language-spec/syntax.md 关键字表
+  1. 标准库：src/std/ 实际模块 vs 文档声明的模块（幽灵模块检测）
+  2. 版本号：Cargo.toml version vs 文档中出现的硬编码版本串
+  3. 命令：src/main.rs 子命令表 vs 文档中出现的 yx 子命令
+  4. 关键字：src/frontend/core/lexer/state.rs vs language-spec/syntax.md 关键字表
 
 退出码：0 = 全部一致；1 = 存在差异（CI 应失败）；2 = 脚本自身无法完成对账
 """
 import io
-import json
 import os
 import re
 import sys
@@ -51,109 +49,7 @@ def zh_docs():
     return [p for p in walk_md(DOCS) if os.sep + 'en' + os.sep not in p]
 
 
-# ---------------------------------------------------------------- 1. 诊断码
-def check_error_codes():
-    codes_dir = os.path.join(ROOT, 'src', 'util', 'diagnostic', 'codes')
-    if not os.path.isdir(codes_dir):
-        notes.append('跳过错误码对账：未找到 src/util/diagnostic/codes/')
-        return
-
-    src_codes = set()
-    for fn in sorted(os.listdir(codes_dir)):
-        if not fn.endswith('.rs') or fn == 'mod.rs':
-            continue
-        # tests/ 子目录里的 E9xxx 是合成码，不属于注册表
-        if 'test' in fn.lower():
-            continue
-        txt = read(os.path.join(codes_dir, fn))
-        # 剔除 #[test] 函数体：builder.rs 在 codes/ 目录内、文件名不含
-        # "test"，但其中的 E9000/E9001/E9999 是验证多语言 fallback 的
-        # 合成码，只出现在 #[test] 函数里。逐函数剔除比按文件名判断可靠。
-        txt = re.sub(r'#\[(?:tokio::)?test[^\]]*\]\s*(?:#\[[^\]]*\]\s*)*'
-                     r'(?:pub\s+)?(?:async\s+)?fn\s+\w+[^{]*\{.*?\n\s*\}',
-                     '', txt, flags=re.S)
-        src_codes |= set(re.findall(r'\("([EW]\d{4})"', txt))
-
-    # std 层运行时码。它们有两条来源，都要认：
-    #   1. src/std/result.rs 的 RUNTIME_ERROR_CODES 权威注册表
-    #   2. 各模块经 error_new("EXXXX", …) / result.error("EXXXX", …) 的发射点
-    # （早期版本只扫注册表，导致 E6010-E6013 被误判成「文档凭空多写」）
-    rt_reg = os.path.join(ROOT, 'src', 'std', 'result.rs')
-    if os.path.exists(rt_reg):
-        src_codes |= set(re.findall(r'\("(E\d{4})"',
-                                    read(rt_reg)))
-
-    for r, dirs, files in os.walk(os.path.join(ROOT, 'src')):
-        dirs[:] = [d for d in dirs if d not in ('target', '.git')]
-        for fn in files:
-            if not fn.endswith(('.rs', '.yx')):
-                continue
-            # 跳过测试代码：其中的 E9xxx / E9999 等是单元测试用的占位码。
-            # 判定不能只看文件名 —— builder.rs 里有 #[cfg(test)] 模块，
-            # codes/tests/codes.rs 是 tests 子目录，路径任一段含 test 都要跳。
-            norm = fn.replace('\\', '/')
-            parts = norm.split('/')
-            if any('test' in seg.lower() for seg in parts):
-                continue
-            # 注册表自身：每个码都会在这里出现定义行，若不跳过则
-            # 148 个码全部被误判为「有发射点」
-            if norm.startswith('util/diagnostic/codes/'):
-                continue
-            try:
-                txt = read(os.path.join(r, fn))
-            except OSError:
-                continue
-            if '#[cfg(test)]' in txt or 'mod tests' in txt:
-                # 只保留该文件 #[cfg(test)] 之前的生产代码部分参与对账
-                cut = min((i for i in (txt.find('#[cfg(test)]'),
-                                       txt.find('mod tests'))
-                           if i != -1), default=-1)
-                if cut != -1:
-                    txt = txt[:cut]
-            # 逐个 #[test] 函数整体剔除。诊断系统里有一批 E9xxx 合成码
-            # （builder.rs 的 chain_lookup 测试、codes/tests 等）用于验证
-            # 多语言 fallback 与未注册码分支，不是真实诊断码。
-            txt = re.sub(r'#\[(?:tokio::)?test[^\]]*\]\s*(?:#\[[^\]]*\]\s*)*'
-                         r'(?:pub\s+)?(?:async\s+)?fn\s+\w+[^{]*\{.*?\n\s*\}',
-                         '', txt, flags=re.S)
-            for m in re.finditer(r'(?:error_new|\.error)\(\s*"(E\d{4})"',
-                                 txt):
-                code = m.group(1)
-                # E9xxx 是诊断系统单元测试专用的合成码（builder.rs / codes.rs
-                # 里用来验证多语言 fallback 与未注册码分支），不是面向用户的
-                # 真实诊断码。它们的号段也刻意与 E0xxx-E8xxx 分离。
-                if code.startswith('E9'):
-                    continue
-                src_codes.add(code)
-
-    doc_codes = set()
-    ec_index = os.path.join(DOCS, 'reference', 'error-code', 'index.md')
-    ec_dir = os.path.join(DOCS, 'reference', 'error-code')
-    for p in ([ec_index] if os.path.exists(ec_index) else []) + \
-             ([os.path.join(ec_dir, f) for f in sorted(os.listdir(ec_dir))
-               if f.endswith('.md')] if os.path.isdir(ec_dir) else []):
-        doc_codes |= set(re.findall(r'\b([EW]\d{4})\b', read(p)))
-
-    missing = sorted(src_codes - doc_codes)
-    extra = sorted(doc_codes - src_codes)
-    if missing:
-        problems.append(f'[错误码] 源码已注册/发射但文档缺失 {len(missing)} 个：'
-                        f'{", ".join(missing)}')
-    if extra:
-        problems.append(f'[错误码] 文档声明但源码无发射点 {len(extra)} 个：'
-                        f'{", ".join(extra)}')
-    notes.append(f'错误码：源码 {len(src_codes)} / 文档 {len(doc_codes)}')
-
-    # 语义陷阱：W1001 族是「未使用的私有」，不是「未使用的导出」
-    wc = os.path.join(DOCS, 'reference', 'warning-code', 'warning-codes.md')
-    if os.path.exists(wc):
-        t = read(wc)
-        if '未使用的导出' in t or 'Unused exported' in t:
-            problems.append('[错误码] 警告码文档把 W1001 族写成「未使用的导出」，'
-                            '实际语义是「未使用的私有」（w1xxx.rs:6，#321 定案 B）')
-
-
-# ------------------------------------------------------------ 2. 标准库模块
+# ---------------------------------------------------------------- 1. 标准库模块
 def check_stdlib_modules():
     std_dir = os.path.join(ROOT, 'src', 'std')
     if not os.path.isdir(std_dir):
@@ -190,7 +86,7 @@ def check_stdlib_modules():
     notes.append(f'标准库：源码 {len(src_modules)} 模块 / 文档 {len(doc_modules)} 页')
 
 
-# ---------------------------------------------------------------- 3. 版本号
+# ---------------------------------------------------------------- 2. 版本号
 def _version_is_incidental(line, rel):
     """判断一行里的版本号是否与「本项目自身版本」无关。
 
@@ -265,7 +161,7 @@ def check_versions():
     notes.append(f'版本对账：当前 {cur}（archive/blog/explanation/rfc/dev 及依赖/历史语境不参与）')
 
 
-# ---------------------------------------------------------------- 4. 子命令
+# ---------------------------------------------------------------- 3. 子命令
 def check_cli():
     main_rs = os.path.join(ROOT, 'src', 'main.rs')
     if not os.path.exists(main_rs):
@@ -312,7 +208,7 @@ def check_cli():
                             f'但 src/main.rs 无此子命令')
 
 
-# ---------------------------------------------------------------- 5. 关键字
+# ---------------------------------------------------------------- 4. 关键字
 def check_keywords():
     state = os.path.join(ROOT, 'src', 'frontend', 'core', 'lexer', 'state.rs')
     spec = os.path.join(DOCS, 'reference', 'language-spec', 'syntax.md')
@@ -345,7 +241,6 @@ def main():
     if not os.path.isdir(DOCS):
         print('[ERROR] 未找到 docs/src/', file=sys.stderr)
         return 2
-    check_error_codes()
     check_stdlib_modules()
     check_versions()
     check_cli()

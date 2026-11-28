@@ -133,7 +133,7 @@ src/
 │   │   ├── loops.rs
 │   │   ├── query.rs               #     纯查询工具
 │   │   ├── expr/                  #     表达式 lowering
-│   │   └── synth.rs               #     唯一允许构造 ast::Expr 的地方
+│   │   └── synth.rs               #     唯一允许构造 ast::Expr / ast::Stmt / ast::Type 的地方
 │   ├── passes/                    #   IR 上的 pass
 │   │   ├── mono/                  #     单态化（删 415 行闭包残余）
 │   │   ├── dce/                   #     post-mono 死代码消除（根集 mark-sweep）
@@ -194,7 +194,7 @@ src/
 | `sema/` | 类型检查与静态分析 | **不得**构造 IR；不感知 opcode |
 | `proof/` | 证明结果类型、SMT 后端 | Solver trait 是唯一后端抽象点；**不得** `.expect()` panic |
 | `middle/ir/` | IR 定义与不变量 | IR 满足 SSA 纪律；`verify_ssa` 绿是合入前提 |
-| `middle/lower/` | AST → IR | **唯一**允许构造 `ast::Expr` 的地方是 `synth.rs` |
+| `middle/lower/` | AST → IR | L3/L4 生产代码**唯一**允许构造 `ast::Expr` / `ast::Stmt` / `ast::Type` 的地方是 `synth.rs`；模式匹配与只读查询不属于构造 |
 | `middle/codegen/` | IR → 字节码 lowering | 只依赖 IR，不依赖 `sema`；不定义 opcode 词表 |
 | `middle/bytecode/` | 字节码域：opcode 词表 + `.42` 容器 + 编解码 | **opcode 词表唯一归属**；`backends/` 只消费不定义；`sema` 不感知 opcode |
 | `backends/` | 执行 | **不得**反向引用 L1/L2；不感知 AST |

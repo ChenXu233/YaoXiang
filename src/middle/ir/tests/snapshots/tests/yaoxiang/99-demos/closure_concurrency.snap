@@ -10,15 +10,15 @@ module
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
-    value v4: TypeRef("?") @block0
+    value v4: Generic { name: "Tuple", args: [Void, Void] } @block0
     value v5: Int(64) @block0
     value v6: Int(64) @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
     value v9: Generic { name: "String", args: [] } @block0
-    value v10: TypeRef("?") @block0
+    value v10: Void @block0
     value v11: Generic { name: "Tuple", args: [Int(64), Int(64)] } @block0
-    value v12: TypeRef("?") @block0
+    value v12: Never @block0
     value v13: Bool @block0
     value v14: Generic { name: "String", args: [] } @block0
     Load %0 <- int(100)
@@ -33,16 +33,20 @@ module
     Load v6 <- %2
     NewTuple v4 <- [v5, v6]
     Move %3 <- v4
+    Drop v4
     Drop %1
     Drop %2
     Load v8 <- bool(true)
     Load v9 <- string("spawn result captured")
     Call v7 <- string("std.assert.assert") [v8, v9] (def=d0)
+    Drop v9
     Load v11 <- %3
     Call v10 <- string("std.io.println") [v11] (def=d1)
+    Drop v11
     Load v13 <- bool(true)
     Load v14 <- string("all passed")
     Call v12 <- string("std.assert.assert") [v13, v14] (def=d0)
+    Drop v14
     Drop %0
     Drop %3
     Ret v12

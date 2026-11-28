@@ -1318,7 +1318,7 @@ useWitness: (b: Box) -> Type = { Proved(b.w) }   // b.w 解析为 FieldPath + ev
 // 值级 b.w => E1114
 ```
 
-> **取代 4A 的「类型级无用户语法」**。4A 裁决（09a §P6 6.9.5 H0 裁决，2026-11-13）的前提是「`b.w` 需要 `ConstExpr::FieldPath` 与 proof token，属独立 term 语言设计，现在加会造第二 term world」，故裁定 V1 不提供用户 `b.w` 投影。`ConstExpr::FieldPath`、`EvidenceTerm`、`TypeDefPayload.evidence_slots` 都属于**同一套统一项世界**（§4，不是第二 term world），该前提不成立：**类型级 `b.w` 是用户可用语法**（上例 `useWitness`），4A 的「类型级 `b.w` 无用户语法」一条由本节取代，不再有效。4A 的其余两条——witness 是编译期字段、构造时证明、运行期擦除；字段表示 `quantity` + 命题类型——继续成立。值级 `b.w` 仍按 4A 拒绝（E1114）。`FieldPath` 只活在类型/命题位置，不是运行期字段路径，不构成「A 式运行期字段」。
+> **取代 4A 的「类型级无用户语法」**。4A 裁决（任务 6.9.5 的提交信息H0 裁决，2026-11-13）的前提是「`b.w` 需要 `ConstExpr::FieldPath` 与 proof token，属独立 term 语言设计，现在加会造第二 term world」，故裁定 V1 不提供用户 `b.w` 投影。`ConstExpr::FieldPath`、`EvidenceTerm`、`TypeDefPayload.evidence_slots` 都属于**同一套统一项世界**（§4，不是第二 term world），该前提不成立：**类型级 `b.w` 是用户可用语法**（上例 `useWitness`），4A 的「类型级 `b.w` 无用户语法」一条由本节取代，不再有效。4A 的其余两条——witness 是编译期字段、构造时证明、运行期擦除；字段表示 `quantity` + 命题类型——继续成立。值级 `b.w` 仍按 4A 拒绝（E1114）。`FieldPath` 只活在类型/命题位置，不是运行期字段路径，不构成「A 式运行期字段」。
 
 #### 14.6 不可变、擦除与诊断码
 

@@ -42,18 +42,18 @@ module
     values_total=18
     value v0: Int(64) @block0
     value v1: Int(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Never @block0
     value v3: Bool @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
     value v6: Generic { name: "String", args: [] } @block0
     value v7: Int(64) @block0
-    value v8: TypeRef("?") @block0
+    value v8: Never @block0
     value v9: Bool @block0
     value v10: Int(64) @block0
     value v11: Int(64) @block0
     value v12: Generic { name: "String", args: [] } @block0
-    value v13: TypeRef("?") @block0
+    value v13: Never @block0
     value v14: Bool @block0
     value v15: Generic { name: "String", args: [] } @block0
     value v16: Generic { name: "String", args: [] } @block0
@@ -66,6 +66,7 @@ module
     Eq v3 <- v4, v5
     Load v6 <- string("add(3, 4) == 7")
     Call v2 <- string("std.assert.assert") [v3, v6] (def=d1)
+    Drop v6
     Load v7 <- int(41)
     Call %1 <- string("inc") [v7] (def=d2)
     Load v10 <- %1
@@ -73,12 +74,16 @@ module
     Eq v9 <- v10, v11
     Load v12 <- string("inc(41) == 42")
     Call v8 <- string("std.assert.assert") [v9, v12] (def=d1)
+    Drop v12
     Call %2 <- string("greet") [] (def=d3)
     Load v15 <- %2
     Load v16 <- string("Hello")
     Eq v14 <- v15, v16
+    Drop v15
+    Drop v16
     Load v17 <- string("greet() == Hello")
     Call v13 <- string("std.assert.assert") [v14, v17] (def=d1)
+    Drop v17
     Drop %2
     Drop %0
     Drop %1

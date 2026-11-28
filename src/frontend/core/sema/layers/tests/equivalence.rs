@@ -14,6 +14,7 @@ use crate::frontend::core::sema::proof::verdict::{ProofFailure, UnprovenReason};
 use crate::frontend::core::sema::TypeEnvironment;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, ConstValue};
 use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::mono::{MonoType, PolyType};
 
 /// `<var> <op> <n>` 形态的约束表达式。
@@ -55,7 +56,8 @@ fn generic(
     args: Vec<MonoType>,
 ) -> MonoType {
     MonoType::Generic {
-        name: name.to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+            .expect("type name must be bare and non-empty"),
         args,
     }
 }
@@ -333,7 +335,10 @@ fn test_normalize_type_depth_exceeded_is_beyond_kernel() {
         let body = if i == 101 {
             MonoType::Int(64)
         } else {
-            MonoType::TypeRef(format!("A{}", i + 1))
+            MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&(format!("A{}", i + 1))))
+                    .expect("type name must be bare and non-empty"),
+            )
         };
         env.add_type(format!("A{i}"), PolyType::mono(body));
     }
@@ -346,7 +351,13 @@ fn test_normalize_type_depth_exceeded_is_beyond_kernel() {
     };
 
     // Act
-    let result = normalize_type(&MonoType::TypeRef("A0".to_string()), &ctx);
+    let result = normalize_type(
+        &MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("A0")))
+                .expect("type name must be bare and non-empty"),
+        ),
+        &ctx,
+    );
 
     // Assert
     let failure = result.expect_err("101 层别名链应触发求值深度上限");

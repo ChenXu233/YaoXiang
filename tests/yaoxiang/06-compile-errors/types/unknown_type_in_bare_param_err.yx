@@ -1,0 +1,12 @@
+// 06-compile-errors/types/unknown_type_in_bare_param_err.yx
+// expect: compile-error E1003
+// 覆盖: RFC-039 D53 / WBS 8.9.1 —— 参数位裸标识符按**类型**命名空间解析
+// 验证: `Bogus` 不是已声明类型，`(Bogus)` 必须报 E1003 且指向标识符本身。
+//       D53 之前它被读成「名为 Bogus 的无标注形参」（ty = None，HM 推断），
+//       标注对类型零约束、check 静默通过——正是 D53 要消灭的形态。
+// 状态: ❌ 应编译失败
+//
+// 注：本文件是**编译期拒绝测试**（`// expect: compile-error`），判定契约是
+// 「check 非 0 且输出含预期码」，不执行任何运行期语句——故无 assert.assert。
+
+f: (Bogus) -> Int = (x) => 1

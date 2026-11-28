@@ -12,9 +12,9 @@ module
     locals_total=4
     values_total=8
     value v0: Int(64) @block0
-    value v1: Fn { params: [TypeRef("m")], return_type: Int(64) } @block0
+    value v1: Fn { params: [Literal { name: "42", base_type: Int(64), value: Int(42) }], return_type: Int(64) } @block0
     value v2: Int(64) @block0
-    value v3: TypeRef("?") @block0
+    value v3: Never @block0
     value v4: Bool @block0
     value v5: Int(64) @block0
     value v6: Int(64) @block0
@@ -23,11 +23,13 @@ module
     Load v2 <- int(42)
     Call v1 <- string("f") [v2] (def=d1)
     CallDyn %0 <- v1 [v0]
+    Drop v1
     Load v5 <- %0
     Load v6 <- int(42)
     Eq v4 <- v5, v6
     Load v7 <- string("f(42)(42) with lowercase m should return 42")
     Call v3 <- string("std.assert.assert") [v4, v7] (def=d2)
+    Drop v7
     Drop %0
     Ret v3
   fn __f_l0(TypeRef("m")) -> Int(64)

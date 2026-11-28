@@ -10,88 +10,109 @@ module
     locals_total=10
     values_total=35
     value v0: Generic { name: "String", args: [] } @block0
-    value v1: TypeRef("?") @block0
-    value v2: TypeRef("?") @block0
+    value v1: Never @block0
+    value v2: Bool @block0
     value v3: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v4: Generic { name: "String", args: [] } @block0
     value v5: Generic { name: "String", args: [] } @block0
-    value v6: TypeRef("?") @block0
-    value v7: TypeRef("?") @block0
+    value v6: Never @block0
+    value v7: Bool @block0
     value v8: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v9: Generic { name: "String", args: [] } @block0
     value v10: Generic { name: "String", args: [] } @block0
-    value v11: TypeRef("?") @block0
-    value v12: TypeRef("?") @block0
+    value v11: Never @block0
+    value v12: Bool @block0
     value v13: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v14: Generic { name: "String", args: [] } @block0
     value v15: Generic { name: "String", args: [] } @block0
-    value v16: TypeRef("?") @block0
-    value v17: TypeRef("?") @block0
+    value v16: Never @block0
+    value v17: Bool @block0
     value v18: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v19: Generic { name: "String", args: [] } @block0
     value v20: Generic { name: "String", args: [] } @block0
-    value v21: TypeRef("?") @block0
-    value v22: TypeRef("?") @block0
+    value v21: Never @block0
+    value v22: Bool @block0
     value v23: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v24: Generic { name: "String", args: [] } @block0
     value v25: Generic { name: "String", args: [] } @block0
-    value v26: TypeRef("?") @block0
-    value v27: TypeRef("?") @block0
+    value v26: Never @block0
+    value v27: Bool @block0
     value v28: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v29: Generic { name: "String", args: [] } @block0
     value v30: Generic { name: "String", args: [] } @block0
-    value v31: TypeRef("?") @block0
-    value v32: TypeRef("?") @block0
+    value v31: Never @block0
+    value v32: Bool @block0
     value v33: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v34: Generic { name: "String", args: [] } @block0
     Load v0 <- string("{\"s\": \"you\", \"i\": 42, \"f\": 2.5, \"t\": true, \"n\": null, \"a\": [1, \"x\"]}")
     Call %0 <- string("std.json.parse") [v0] (def=d0)
+    Drop v0
     Load v3 <- %0
     Call v2 <- string("std.result.is_ok") [v3] (def=d1)
+    Drop v3
     Load v4 <- string("composite parse ok")
     Call v1 <- string("std.assert.assert") [v2, v4] (def=d2)
+    Drop v4
     Drop %0
     Load v5 <- string("{\"deep\": {\"list\": [10, 20, 30]}}")
     Call %1 <- string("std.json.parse") [v5] (def=d0)
+    Drop v5
     Load v8 <- %1
     Call v7 <- string("std.result.is_ok") [v8] (def=d1)
+    Drop v8
     Load v9 <- string("nested parse ok")
     Call v6 <- string("std.assert.assert") [v7, v9] (def=d2)
+    Drop v9
     Drop %1
     Load v10 <- string("-0.5")
     Call %2 <- string("std.json.parse") [v10] (def=d0)
+    Drop v10
     Load v13 <- %2
     Call v12 <- string("std.result.is_ok") [v13] (def=d1)
+    Drop v13
     Load v14 <- string("scalar number parse ok")
     Call v11 <- string("std.assert.assert") [v12, v14] (def=d2)
+    Drop v14
     Drop %2
     Load v15 <- string("true")
     Call %3 <- string("std.json.parse") [v15] (def=d0)
+    Drop v15
     Load v18 <- %3
     Call v17 <- string("std.result.is_ok") [v18] (def=d1)
+    Drop v18
     Load v19 <- string("bool literal parse ok")
     Call v16 <- string("std.assert.assert") [v17, v19] (def=d2)
+    Drop v19
     Drop %3
     Load v20 <- string("null")
     Call %4 <- string("std.json.parse") [v20] (def=d0)
+    Drop v20
     Load v23 <- %4
     Call v22 <- string("std.result.is_ok") [v23] (def=d1)
+    Drop v23
     Load v24 <- string("null literal parse ok")
     Call v21 <- string("std.assert.assert") [v22, v24] (def=d2)
+    Drop v24
     Drop %4
     Load v25 <- string("\"plain\"")
     Call %5 <- string("std.json.parse") [v25] (def=d0)
+    Drop v25
     Load v28 <- %5
     Call v27 <- string("std.result.is_ok") [v28] (def=d1)
+    Drop v28
     Load v29 <- string("plain string parse ok")
     Call v26 <- string("std.assert.assert") [v27, v29] (def=d2)
+    Drop v29
     Drop %5
     Load v30 <- string("[1, 2]")
     Call %6 <- string("std.json.parse") [v30] (def=d0)
+    Drop v30
     Load v33 <- %6
     Call v32 <- string("std.result.is_ok") [v33] (def=d1)
+    Drop v33
     Load v34 <- string("trailing whitespace tolerated")
     Call v31 <- string("std.assert.assert") [v32, v34] (def=d2)
+    Drop v34
     Drop %0
     Drop %1
     Drop %2
@@ -108,9 +129,9 @@ module
     slot[4] s : Int(64) @depth1
     locals_total=8
     values_total=44
-    value v0: TypeRef("?") @block0
+    value v0: Generic { name: "Result", args: [Generic { name: "String", args: [] }, TypeRef("Error")] } @block0
     value v1: Int(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Generic { name: "Result", args: [Generic { name: "String", args: [] }, TypeRef("Error")] } @block0
     value v3: Int(64) @block0
     value v4: Generic { name: "String", args: [] } @block0
     value v5: Generic { name: "String", args: [] } @block0
@@ -141,103 +162,141 @@ module
     value v30: Generic { name: "String", args: [] } @block0
     value v31: Generic { name: "String", args: [] } @block0
     value v32: Generic { name: "String", args: [] } @block0
-    value v33: TypeRef("?") @block0
-    value v34: TypeRef("?") @block0
+    value v33: Never @block0
+    value v34: Bool @block0
     value v35: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v36: Generic { name: "String", args: [] } @block0
-    value v37: TypeRef("?") @block0
+    value v37: TypeRef("Json") @block0
     value v38: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
-    value v39: TypeRef("?") @block0
-    value v40: TypeRef("?") @block0
+    value v39: Never @block0
+    value v40: Bool @block0
     value v41: Generic { name: "String", args: [] } @block0
     value v42: Generic { name: "String", args: [] } @block0
     value v43: Generic { name: "String", args: [] } @block0
     Load v1 <- int(34)
     Call v0 <- string("std.string.from_char_code") [v1] (def=d3)
     Call %0 <- string("std.result.unwrap") [v0] (def=d4)
+    Drop v0
     Load v3 <- int(92)
     Call v2 <- string("std.string.from_char_code") [v3] (def=d3)
     Call %1 <- string("std.result.unwrap") [v2] (def=d4)
+    Drop v2
     Load v4 <- string("{")
     Load v5 <- %0
     Call %2 <- string("std.string.concat") [v4, v5] (def=d5)
+    Drop v4
+    Drop v5
     Drop %0
     Load v6 <- %2
     Load v7 <- string("q")
     Call %2 <- string("std.string.concat") [v6, v7] (def=d5)
+    Drop v6
+    Drop v7
     Drop %2
     Load v8 <- %2
     Load v9 <- %0
     Call %2 <- string("std.string.concat") [v8, v9] (def=d5)
+    Drop v8
+    Drop v9
     Drop %2
     Drop %0
     Load v10 <- %2
     Load v11 <- string(": ")
     Call %2 <- string("std.string.concat") [v10, v11] (def=d5)
+    Drop v10
+    Drop v11
     Drop %2
     Load v12 <- %2
     Load v13 <- %0
     Call %2 <- string("std.string.concat") [v12, v13] (def=d5)
+    Drop v12
+    Drop v13
     Drop %2
     Drop %0
     Load v14 <- %2
     Load v15 <- string("a")
     Call %2 <- string("std.string.concat") [v14, v15] (def=d5)
+    Drop v14
+    Drop v15
     Drop %2
     Load v16 <- %2
     Load v17 <- %1
     Call %2 <- string("std.string.concat") [v16, v17] (def=d5)
+    Drop v16
+    Drop v17
     Drop %1
     Drop %2
     Load v18 <- %2
     Load v19 <- %0
     Call %2 <- string("std.string.concat") [v18, v19] (def=d5)
+    Drop v18
+    Drop v19
     Drop %2
     Drop %0
     Load v20 <- %2
     Load v21 <- string("b")
     Call %2 <- string("std.string.concat") [v20, v21] (def=d5)
+    Drop v20
+    Drop v21
     Drop %2
     Load v22 <- %2
     Load v23 <- %1
     Call %2 <- string("std.string.concat") [v22, v23] (def=d5)
+    Drop v22
+    Drop v23
     Drop %1
     Drop %2
     Load v24 <- %2
     Load v25 <- %1
     Call %2 <- string("std.string.concat") [v24, v25] (def=d5)
+    Drop v24
+    Drop v25
     Drop %1
     Drop %2
     Load v26 <- %2
     Load v27 <- string("c")
     Call %2 <- string("std.string.concat") [v26, v27] (def=d5)
+    Drop v26
+    Drop v27
     Drop %2
     Load v28 <- %2
     Load v29 <- %0
     Call %2 <- string("std.string.concat") [v28, v29] (def=d5)
+    Drop v28
+    Drop v29
     Drop %2
     Drop %0
     Load v30 <- %2
     Load v31 <- string("}")
     Call %2 <- string("std.string.concat") [v30, v31] (def=d5)
+    Drop v30
+    Drop v31
     Drop %2
     Load v32 <- %2
     Call %3 <- string("std.json.parse") [v32] (def=d0)
+    Drop v32
     Drop %2
     Load v35 <- %3
     Call v34 <- string("std.result.is_ok") [v35] (def=d1)
+    Drop v35
     Load v36 <- string("escaped string parse ok")
     Call v33 <- string("std.assert.assert") [v34, v36] (def=d2)
+    Drop v36
     Drop %3
     Load v38 <- %3
     Call v37 <- string("std.result.unwrap") [v38] (def=d4)
+    Drop v38
+    Drop v37
     Call %4 <- string("std.json.stringify") [v37] (def=d6)
     Drop %3
     Load v41 <- %4
     Load v42 <- %1
     Call v40 <- string("std.string.contains") [v41, v42] (def=d7)
+    Drop v41
+    Drop v42
     Load v43 <- string("stringify re-escapes quote/backslash")
     Call v39 <- string("std.assert.assert") [v40, v43] (def=d2)
+    Drop v43
     Drop %1
     Drop %2
     Drop %0
@@ -270,23 +329,23 @@ module
     slot[22] rlonely : Int(64) @depth1
     locals_total=27
     values_total=125
-    value v0: TypeRef("?") @block0
+    value v0: Generic { name: "Result", args: [Generic { name: "String", args: [] }, TypeRef("Error")] } @block0
     value v1: Int(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Generic { name: "Result", args: [Generic { name: "String", args: [] }, TypeRef("Error")] } @block0
     value v3: Int(64) @block0
-    value v4: TypeRef("?") @block0
+    value v4: Generic { name: "Result", args: [Generic { name: "String", args: [] }, TypeRef("Error")] } @block0
     value v5: Int(64) @block0
-    value v6: TypeRef("?") @block0
+    value v6: Generic { name: "Result", args: [Generic { name: "String", args: [] }, TypeRef("Error")] } @block0
     value v7: Int(64) @block0
-    value v8: TypeRef("?") @block0
+    value v8: Generic { name: "Result", args: [Generic { name: "String", args: [] }, TypeRef("Error")] } @block0
     value v9: Int(64) @block0
-    value v10: TypeRef("?") @block0
+    value v10: Generic { name: "Result", args: [Generic { name: "String", args: [] }, TypeRef("Error")] } @block0
     value v11: Int(64) @block0
-    value v12: TypeRef("?") @block0
+    value v12: Generic { name: "Result", args: [Generic { name: "String", args: [] }, TypeRef("Error")] } @block0
     value v13: Int(64) @block0
-    value v14: TypeRef("?") @block0
+    value v14: Generic { name: "Result", args: [Generic { name: "String", args: [] }, TypeRef("Error")] } @block0
     value v15: Int(64) @block0
-    value v16: TypeRef("?") @block0
+    value v16: Generic { name: "Result", args: [Generic { name: "String", args: [] }, TypeRef("Error")] } @block0
     value v17: Int(64) @block0
     value v18: Generic { name: "String", args: [] } @block0
     value v19: Generic { name: "String", args: [] } @block0
@@ -339,8 +398,8 @@ module
     value v66: Generic { name: "String", args: [] } @block0
     value v67: Generic { name: "String", args: [] } @block0
     value v68: Generic { name: "String", args: [] } @block0
-    value v69: TypeRef("?") @block0
-    value v70: TypeRef("?") @block0
+    value v69: Never @block0
+    value v70: Bool @block0
     value v71: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v72: Generic { name: "String", args: [] } @block0
     value v73: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
@@ -351,37 +410,37 @@ module
     value v78: TypeRef("?") @block0
     value v79: Generic { name: "String", args: [] } @block0
     value v80: Generic { name: "String", args: [] } @block0
-    value v81: TypeRef("?") @block0
+    value v81: Never @block0
     value v82: Bool @block0
     value v83: Generic { name: "String", args: [] } @block0
     value v84: Generic { name: "String", args: [] } @block0
     value v85: Generic { name: "String", args: [] } @block0
-    value v86: TypeRef("?") @block0
+    value v86: Generic { name: "String", args: [] } @block0
     value v87: Generic { name: "String", args: [] } @block0
     value v88: Int(64) @block0
     value v89: Int(64) @block0
     value v90: Int(64) @block0
-    value v91: TypeRef("?") @block0
+    value v91: Never @block0
     value v92: Bool @block0
     value v93: Int(64) @block0
     value v94: Int(64) @block0
     value v95: Generic { name: "String", args: [] } @block0
-    value v96: TypeRef("?") @block0
+    value v96: Generic { name: "String", args: [] } @block0
     value v97: Generic { name: "String", args: [] } @block0
     value v98: Int(64) @block0
     value v99: Int(64) @block0
     value v100: Int(64) @block0
-    value v101: TypeRef("?") @block0
+    value v101: Never @block0
     value v102: Bool @block0
     value v103: Int(64) @block0
     value v104: Int(64) @block0
     value v105: Generic { name: "String", args: [] } @block0
-    value v106: TypeRef("?") @block0
+    value v106: Generic { name: "String", args: [] } @block0
     value v107: Generic { name: "String", args: [] } @block0
     value v108: Int(64) @block0
     value v109: Int(64) @block0
     value v110: Int(64) @block0
-    value v111: TypeRef("?") @block0
+    value v111: Never @block0
     value v112: Bool @block0
     value v113: Int(64) @block0
     value v114: Int(64) @block0
@@ -391,8 +450,8 @@ module
     value v118: Generic { name: "String", args: [] } @block0
     value v119: Generic { name: "String", args: [] } @block0
     value v120: Generic { name: "String", args: [] } @block0
-    value v121: TypeRef("?") @block0
-    value v122: TypeRef("?") @block0
+    value v121: Never @block0
+    value v122: Bool @block0
     value v123: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v124: Generic { name: "String", args: [] } @block0
     Load v1 <- int(34)
@@ -661,58 +720,72 @@ module
     locals_total=7
     values_total=22
     value v0: Generic { name: "String", args: [] } @block0
-    value v1: TypeRef("?") @block0
-    value v2: TypeRef("?") @block0
+    value v1: Never @block0
+    value v2: Bool @block0
     value v3: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v4: Generic { name: "String", args: [] } @block0
     value v5: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v6: TypeRef("Error") @block0
-    value v7: TypeRef("?") @block0
-    value v8: TypeRef("?") @block0
+    value v7: Never @block0
+    value v8: Bool @block0
     value v9: Generic { name: "String", args: [] } @block0
     value v10: Generic { name: "String", args: [] } @block0
     value v11: Generic { name: "String", args: [] } @block0
-    value v12: TypeRef("?") @block0
-    value v13: TypeRef("?") @block0
+    value v12: Never @block0
+    value v13: Bool @block0
     value v14: Generic { name: "String", args: [] } @block0
     value v15: Generic { name: "String", args: [] } @block0
     value v16: Generic { name: "String", args: [] } @block0
     value v17: Generic { name: "String", args: [] } @block0
-    value v18: TypeRef("?") @block0
-    value v19: TypeRef("?") @block0
+    value v18: Never @block0
+    value v19: Bool @block0
     value v20: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v21: Generic { name: "String", args: [] } @block0
     Load v0 <- string("{\"a\": tru}")
     Call %0 <- string("std.json.parse") [v0] (def=d0)
+    Drop v0
     Load v3 <- %0
     Call v2 <- string("std.result.is_err") [v3] (def=d10)
+    Drop v3
     Load v4 <- string("invalid literal rejected")
     Call v1 <- string("std.assert.assert") [v2, v4] (def=d2)
+    Drop v4
     Drop %0
     Load v5 <- %0
     Call %1 <- string("std.result.unwrap_err") [v5] (def=d11)
+    Drop v5
     Drop %0
     Load v6 <- %1
     Call %2 <- string("std.result.message") [v6] (def=d12)
+    Drop v6
     Drop %1
     Load v9 <- %2
     Load v10 <- string("line 1")
     Call v8 <- string("std.string.contains") [v9, v10] (def=d7)
+    Drop v9
+    Drop v10
     Load v11 <- string("error message carries line")
     Call v7 <- string("std.assert.assert") [v8, v11] (def=d2)
+    Drop v11
     Drop %2
     Load v14 <- %2
     Load v15 <- string("column 7")
     Call v13 <- string("std.string.contains") [v14, v15] (def=d7)
+    Drop v14
+    Drop v15
     Load v16 <- string("error message carries column")
     Call v12 <- string("std.assert.assert") [v13, v16] (def=d2)
+    Drop v16
     Drop %2
     Load v17 <- string("\"abc")
     Call %3 <- string("std.json.parse") [v17] (def=d0)
+    Drop v17
     Load v20 <- %3
     Call v19 <- string("std.result.is_err") [v20] (def=d10)
+    Drop v20
     Load v21 <- string("unterminated string rejected")
     Call v18 <- string("std.assert.assert") [v19, v21] (def=d2)
+    Drop v21
     Drop %1
     Drop %2
     Drop %0
@@ -728,81 +801,102 @@ module
     locals_total=9
     values_total=31
     value v0: Generic { name: "String", args: [] } @block0
-    value v1: TypeRef("?") @block0
-    value v2: TypeRef("?") @block0
+    value v1: Never @block0
+    value v2: Bool @block0
     value v3: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v4: Generic { name: "String", args: [] } @block0
-    value v5: TypeRef("?") @block0
+    value v5: TypeRef("Json") @block0
     value v6: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v7: Generic { name: "String", args: [] } @block0
-    value v8: TypeRef("?") @block0
-    value v9: TypeRef("?") @block0
+    value v8: Never @block0
+    value v9: Bool @block0
     value v10: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v11: Generic { name: "String", args: [] } @block0
-    value v12: TypeRef("?") @block0
+    value v12: TypeRef("Json") @block0
     value v13: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
-    value v14: TypeRef("?") @block0
+    value v14: Never @block0
     value v15: Bool @block0
     value v16: Generic { name: "String", args: [] } @block0
     value v17: Generic { name: "String", args: [] } @block0
     value v18: Generic { name: "String", args: [] } @block0
-    value v19: TypeRef("?") @block0
+    value v19: TypeRef("Json") @block0
     value v20: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
-    value v21: TypeRef("?") @block0
-    value v22: TypeRef("?") @block0
+    value v21: Never @block0
+    value v22: Bool @block0
     value v23: Generic { name: "String", args: [] } @block0
     value v24: Generic { name: "String", args: [] } @block0
     value v25: Generic { name: "String", args: [] } @block0
     value v26: Generic { name: "String", args: [] } @block0
-    value v27: TypeRef("?") @block0
-    value v28: TypeRef("?") @block0
+    value v27: Never @block0
+    value v28: Bool @block0
     value v29: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v30: Generic { name: "String", args: [] } @block0
     Load v0 <- string("[123456789, \"\", {\"k\": [true, false, null]}]")
     Call %0 <- string("std.json.parse") [v0] (def=d0)
+    Drop v0
     Load v3 <- %0
     Call v2 <- string("std.result.is_ok") [v3] (def=d1)
+    Drop v3
     Load v4 <- string("roundtrip source parse ok")
     Call v1 <- string("std.assert.assert") [v2, v4] (def=d2)
+    Drop v4
     Drop %0
     Load v6 <- %0
     Call v5 <- string("std.result.unwrap") [v6] (def=d4)
+    Drop v6
+    Drop v5
     Call %1 <- string("std.json.stringify") [v5] (def=d6)
     Drop %0
     Load v7 <- %1
     Call %2 <- string("std.json.parse") [v7] (def=d0)
+    Drop v7
     Drop %1
     Load v10 <- %2
     Call v9 <- string("std.result.is_ok") [v10] (def=d1)
+    Drop v10
     Load v11 <- string("re-parse stringify output ok")
     Call v8 <- string("std.assert.assert") [v9, v11] (def=d2)
+    Drop v11
     Drop %2
     Load v13 <- %2
     Call v12 <- string("std.result.unwrap") [v13] (def=d4)
+    Drop v13
+    Drop v12
     Call %3 <- string("std.json.stringify") [v12] (def=d6)
     Drop %2
     Load v16 <- %1
     Load v17 <- %3
     Eq v15 <- v16, v17
+    Drop v16
+    Drop v17
     Load v18 <- string("stringify is stable across roundtrip")
     Call v14 <- string("std.assert.assert") [v15, v18] (def=d2)
+    Drop v18
     Load v20 <- %0
     Call v19 <- string("std.result.unwrap") [v20] (def=d4)
+    Drop v20
+    Drop v19
     Call %4 <- string("std.json.pretty") [v19] (def=d13)
     Drop %0
     Load v23 <- %4
     Load v24 <- string("\n")
     Call v22 <- string("std.string.contains") [v23, v24] (def=d7)
+    Drop v23
+    Drop v24
     Load v25 <- string("pretty output is multiline")
     Call v21 <- string("std.assert.assert") [v22, v25] (def=d2)
+    Drop v25
     Drop %4
     Load v26 <- %4
     Call %5 <- string("std.json.parse") [v26] (def=d0)
+    Drop v26
     Drop %4
     Load v29 <- %5
     Call v28 <- string("std.result.is_ok") [v29] (def=d1)
+    Drop v29
     Load v30 <- string("pretty output re-parses")
     Call v27 <- string("std.assert.assert") [v28, v30] (def=d2)
+    Drop v30
     Drop %1
     Drop %4
     Drop %0

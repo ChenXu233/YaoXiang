@@ -2,6 +2,7 @@
 //!
 //! 提供通用的类型替换算法，消除各模块间的重复代码。
 
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::mono::StructFieldInfo;
 use crate::frontend::core::types::{EnumType, MonoType, StructType, TypeVar};
 use std::collections::HashMap;
@@ -88,8 +89,14 @@ impl Substitution {
 /// 层级：Type1/Type2+ 的构造器在类型实参位以**名字**传递）。
 pub fn ctor_head_name(ty: &MonoType) -> Option<String> {
     match ty {
-        MonoType::TypeRef(name) => Some(name.clone()),
-        MonoType::Generic { name, args } if args.is_empty() => Some(name.clone()),
+        // 构造器变量的实参是**名字**（平路径）：带模块的 TypeRef 是具体名义
+        // 类型（D64），不是构造器变量，参与「按名改头部」会把身份压成裸名。
+        MonoType::TypeRef(name) if name.module().is_empty() => {
+            Some(name.clone().bare().to_string())
+        }
+        MonoType::Generic { name, args } if args.is_empty() && name.module().is_empty() => {
+            Some(name.clone().bare().to_string())
+        }
         _ => None,
     }
 }
@@ -113,7 +120,14 @@ pub fn substitute_ctor_heads(
     }
     match ty {
         MonoType::Generic { name, args } => MonoType::Generic {
-            name: head_map.get(name).cloned().unwrap_or_else(|| name.clone()),
+            // 只改写**命中**的头部（构造器变量按名绑定到实参构造器）；未命中的
+            // 头部原样保留——把未命中的身份头也重建成平路径会丢模块（D64），
+            // 同一次替换里另一位的平路径构造器足以让所有头被压平。
+            name: match head_map.get(name.bare()) {
+                Some(replacement) => Nominal::flat(AsRef::<str>::as_ref(&(replacement.clone())))
+                    .expect("type name must be bare and non-empty"),
+                None => name.clone(),
+            },
             args: args
                 .iter()
                 .map(|a| substitute_ctor_heads(a, head_map))
@@ -189,86 +203,83 @@ pub fn substitute_ctor_heads(
     }
 }
 
-/// 名义类型引用的改写：把 `TypeRef(名)` 按 `rebinds`（定义名 → 本地名）改名。
+/// 类型表示层身份解析：把**平路径**名义名按导入面解析成 (module, 定义名) 身份。
 ///
-/// 用途（WBS 3.24.3 / issue #504）：跨单元导入的函数签名携带**定义单元的裸
-/// 名义名**（`make_b: () -> Temp` 的返回位 `TypeRef("Temp")`），而导入方的
-/// 注解写的是本地名（`use b.{Temp as TempB}` 后的 `TempB`）。两处在判等点的
-/// 字符串比对（`solver.rs` TypeRef/TypeRef 臂）下判异，合法程序被误拒
-/// （E1012 + E1002）。导入方登记导入项时用本函数把签名里的裸名引用改绑到
-/// 本地名，注解侧与值侧回到同一来源。
+/// 用途（RFC-039 D63/D64）：类型构造点从 AST 写出名得到的是平路径
+/// （`Nominal::flat`）；身份的唯一解析实现是导入面
+/// [`crate::frontend::core::sema::import_face::ImportFace::type_identity`]，
+/// 它知道本单元声明 / 花括号导入 / std 已声明类型，也只把**已声明类型**
+/// 解析成身份（幻名、类型族、内建名、类型参数保持平路径）。
 ///
-/// 与 [`substitute_ctor_heads`] 的分工：那是构造器**应用头部**改名
-///（`Generic{name}` 的头部），不触碰 `TypeRef` 引用体；本函数恰好相反——
-/// 改写名义引用体与接口实现名（`Struct.interfaces`：接口名是名义名位，
-/// 语义与 `TypeRef` 引用体同——别名导入接口后，实现判定按本地名同源）；
-/// 头部与记录名（`Generic{name}` / `Struct.name` / 构造器名）一律不动。
-/// 改写头部或记录名会改变诊断渲染与记录查表键，不是本函数的语义。
-/// 与 [`MonoType::substitute`] 的分工：那是类型**变量**替换（目标是
-/// 任意 `MonoType`，如换进求解器新变量），且不遍历 `Struct` 字段 / `DepFn` /
-/// `Refined` / `Literal`；本函数按名义引用语义结构递归全部变体。
-pub fn rebind_nominal_refs(
+/// 幂等：已经带模块的身份原样保留——否则把 a.Result 传进一个只看得见
+/// std.result 的模块就会被改写成 std.result.Result（身份被猜测覆盖）。
+/// 平路径才查表；查不到保持平路径（D64：module="" 即内建/参数/合成名）。
+///
+/// 与 [`substitute_ctor_heads`] 的分工：那是泛型应用头部的**改名**；本函数
+/// 不改名，只把平路径升格为身份（同名不同模块因此可分）。与
+/// [`MonoType::substitute`] 的分工：那是类型**变量**替换；本函数按名义
+/// 引用语义结构递归全部变体。
+pub fn resolve_nominal_identities(
     ty: &MonoType,
-    rebinds: &HashMap<String, String>,
+    resolve: &impl Fn(&str) -> Option<Nominal>,
 ) -> MonoType {
-    if rebinds.is_empty() {
-        return ty.clone();
-    }
-    match ty {
-        MonoType::TypeRef(name) => {
-            MonoType::TypeRef(rebinds.get(name).cloned().unwrap_or_else(|| name.clone()))
+    let resolve_face = |name: &Nominal| -> Nominal {
+        if !name.module().is_empty() || name.bare().is_empty() {
+            return name.clone();
         }
+        resolve(name.bare()).unwrap_or_else(|| name.clone())
+    };
+    match ty {
+        MonoType::TypeRef(name) => MonoType::TypeRef(resolve_face(name)),
         MonoType::Fn {
             params,
             return_type,
         } => MonoType::Fn {
             params: params
                 .iter()
-                .map(|p| rebind_nominal_refs(p, rebinds))
+                .map(|p| resolve_nominal_identities(p, resolve))
                 .collect(),
-            return_type: Box::new(rebind_nominal_refs(return_type, rebinds)),
+            return_type: Box::new(resolve_nominal_identities(return_type, resolve)),
         },
         MonoType::Generic { name, args } => MonoType::Generic {
-            name: name.clone(),
+            name: resolve_face(name),
             args: args
                 .iter()
-                .map(|a| rebind_nominal_refs(a, rebinds))
+                .map(|a| resolve_nominal_identities(a, resolve))
                 .collect(),
         },
         MonoType::Struct(s) => MonoType::Struct(StructType {
+            name: resolve_face(&s.name),
             fields: s
                 .fields
                 .iter()
                 .map(|field_info| StructFieldInfo {
-                    ty: rebind_nominal_refs(&field_info.ty, rebinds),
+                    ty: resolve_nominal_identities(&field_info.ty, resolve),
                     ..field_info.clone()
                 })
                 .collect(),
-            // 接口实现名是名义名位（语义与 TypeRef 引用体同）：别名导入接口
-            // 后，实现类型的接口名按本地名同源——不改绑则 Struct-vs-TypeRef
-            // 判等臂（solver `s.interfaces.contains`）拿定义单元裸名与本地名
-            // 判异，合法程序被误拒（E1002）。记录名（身份面）不动。
-            interfaces: s
-                .interfaces
-                .iter()
-                .map(|iface| rebinds.get(iface).cloned().unwrap_or_else(|| iface.clone()))
-                .collect(),
+            // 接口实现名是名义名位（语义与 TypeRef 引用体同）。
+            interfaces: s.interfaces.iter().map(resolve_face).collect(),
             ..s.clone()
+        }),
+        MonoType::Enum(e) => MonoType::Enum(EnumType {
+            name: resolve_face(&e.name),
+            ..e.clone()
         }),
         MonoType::Ref { mutable, inner } => MonoType::Ref {
             mutable: *mutable,
-            inner: Box::new(rebind_nominal_refs(inner, rebinds)),
+            inner: Box::new(resolve_nominal_identities(inner, resolve)),
         },
         MonoType::Union(types) => MonoType::Union(
             types
                 .iter()
-                .map(|t| rebind_nominal_refs(t, rebinds))
+                .map(|t| resolve_nominal_identities(t, resolve))
                 .collect(),
         ),
         MonoType::Intersection(types) => MonoType::Intersection(
             types
                 .iter()
-                .map(|t| rebind_nominal_refs(t, rebinds))
+                .map(|t| resolve_nominal_identities(t, resolve))
                 .collect(),
         ),
         MonoType::MetaType {
@@ -278,7 +289,7 @@ pub fn rebind_nominal_refs(
             universe_level: universe_level.clone(),
             type_params: type_params
                 .iter()
-                .map(|t| rebind_nominal_refs(t, rebinds))
+                .map(|t| resolve_nominal_identities(t, resolve))
                 .collect(),
         },
         MonoType::AssocType {
@@ -286,11 +297,11 @@ pub fn rebind_nominal_refs(
             assoc_name,
             assoc_args,
         } => MonoType::AssocType {
-            host_type: Box::new(rebind_nominal_refs(host_type, rebinds)),
+            host_type: Box::new(resolve_nominal_identities(host_type, resolve)),
             assoc_name: assoc_name.clone(),
             assoc_args: assoc_args
                 .iter()
-                .map(|t| rebind_nominal_refs(t, rebinds))
+                .map(|t| resolve_nominal_identities(t, resolve))
                 .collect(),
         },
         MonoType::Literal {
@@ -299,11 +310,11 @@ pub fn rebind_nominal_refs(
             value,
         } => MonoType::Literal {
             name: name.clone(),
-            base_type: Box::new(rebind_nominal_refs(base_type, rebinds)),
+            base_type: Box::new(resolve_nominal_identities(base_type, resolve)),
             value: value.clone(),
         },
         MonoType::Refined { base, constraint } => MonoType::Refined {
-            base: Box::new(rebind_nominal_refs(base, rebinds)),
+            base: Box::new(resolve_nominal_identities(base, resolve)),
             constraint: constraint.clone(),
         },
         MonoType::DepFn {
@@ -314,19 +325,17 @@ pub fn rebind_nominal_refs(
                 .iter()
                 .map(|dep_param| crate::frontend::core::types::mono::DepParam {
                     name: dep_param.name.clone(),
-                    ty: rebind_nominal_refs(&dep_param.ty, rebinds),
+                    ty: resolve_nominal_identities(&dep_param.ty, resolve),
                 })
                 .collect(),
-            return_type: Box::new(rebind_nominal_refs(return_type, rebinds)),
+            return_type: Box::new(resolve_nominal_identities(return_type, resolve)),
         },
-        // 无名义引用位的十个变体——逐名显式穷尽、无兜底臂（3.24.3 t3 F1）：
-        // 新增变体时编译器在此指路，不再静默吞掉。Enum 是名字串表、TypeVar
-        // 由求解器管理、原语（Never/Void/Bool/Int/Float/Char）与 FFI 形态
-        //（LibraryRef/ExternRef）无名义引用位——原样克隆。
+        // 无名义引用位的变体——逐名显式穷尽、无兜底臂（3.24.3 t3 F1）：
+        // 新增变体时编译器在此指路，不再静默吞掉。TypeVar 由求解器管理，
+        // 原语（Never/Void/Bool/Int/Float/Char）与 FFI 形态无名义引用位。
         MonoType::Never | MonoType::Void | MonoType::Bool | MonoType::Char => ty.clone(),
         MonoType::Int(width) => MonoType::Int(*width),
         MonoType::Float(width) => MonoType::Float(*width),
-        MonoType::Enum(e) => MonoType::Enum(e.clone()),
         MonoType::TypeVar(tv) => MonoType::TypeVar(*tv),
         MonoType::LibraryRef { mechanism, lib } => MonoType::LibraryRef {
             mechanism: mechanism.clone(),
@@ -528,7 +537,7 @@ pub fn contains_type_vars(ty: &MonoType) -> bool {
         } => contains_type_vars(host_type) || assoc_args.iter().any(contains_type_vars),
         // 借用类型 `&T` / `&mut T`：与 `TypeConstraintSolver::contains_var` 同族，
         // 内层必须穿透——缺本臂时「含类型变量」对借用位恒为假，occurs check
-        // 一类的判据在借用位整段失灵（同一缺陷的两份实现，见 09a §P6 6.8.3）。
+        // 一类的判据在借用位整段失灵（同一缺陷的两份实现，见提交信息）。
         MonoType::Ref { inner, .. } => contains_type_vars(inner),
         _ => false,
     }

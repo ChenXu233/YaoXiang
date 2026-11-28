@@ -5,6 +5,7 @@
 use crate::ast;
 use crate::ast::Expr;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
+use crate::middle::lower::synth::{synth_closure, synth_expr_block, SynthEnv};
 use crate::middle::lower::AstToIrGenerator;
 use crate::util::diagnostic::Diagnostic;
 use crate::util::span::Span;
@@ -87,29 +88,25 @@ impl AstToIrGenerator {
             let mut env_ops = Vec::new();
             let mut env_names = Vec::new();
             for var in &task.reads {
-                if let Some(local_idx) = self.lookup_local(var) {
-                    env_ops.push(Operand::Local(local_idx));
+                if let Some(operand) = self.capture_operand(var, instructions) {
+                    env_ops.push(operand);
                     env_names.push(var.clone());
                 }
             }
-            self.pending_env_vars = env_ops;
-            self.pending_env_names = env_names;
+            let env = SynthEnv::new(env_ops, env_names);
             let closure_reg = self.next_temp_reg();
-            let lambda = ast::Expr::Lambda {
-                params: Vec::new(),
-                body: Box::new(ast::Block {
-                    stmts: vec![ast::Stmt {
-                        kind: ast::StmtKind::Expr(Box::new(task.expr.clone())),
-                        span: *span,
-                        plan_id: ast::PlanId::UNPLANNED,
-                    }],
-                    span: *span,
-                }),
-                span: *span,
-            };
-            self.generate_expr_ir(&lambda, closure_reg.clone(), instructions, constants)?;
-            self.pending_env_vars.clear();
-            self.pending_env_names.clear();
+            let lambda = synth_closure(
+                Vec::new(),
+                synth_expr_block(task.expr.clone(), *span),
+                *span,
+            );
+            self.generate_expr_ir_with_env(
+                &lambda,
+                env,
+                closure_reg.clone(),
+                instructions,
+                constants,
+            )?;
             closure_regs.push(closure_reg.clone());
         }
 

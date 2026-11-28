@@ -34,8 +34,8 @@ use std.result
 
 // 函数使用 match 处理 Result
 handle: (r: Result(Int, String)) -> String = match r {
-    ok(value) => "成功！得到的值是: {value}",
-    err(msg) => "出错啦: {msg}",
+    ok(value) -> "成功！得到的值是: {value}",
+    err(msg) -> "出错啦: {msg}",
 }
 
 main: () -> Void = {
@@ -55,8 +55,8 @@ main: () -> Void = {
 use std.option
 
 describe: (opt: Option(Int)) -> String = match opt {
-    some(n) => "有值: {n}",
-    none() => "什么也没有",
+    some(n) -> "有值: {n}",
+    none() -> "什么也没有",
 }
 
 main: () -> Void = {
@@ -73,9 +73,9 @@ main: () -> Void = {
 Color: Type = { red: () -> Color, green: () -> Color, blue: () -> Color }
 
 to_hex: (c: Color) -> String = match c {
-    red() => "#FF0000",
-    green() => "#00FF00",
-    blue() => "#0000FF",
+    red() -> "#FF0000",
+    green() -> "#00FF00",
+    blue() -> "#0000FF",
 }
 
 main: () -> Void = {
@@ -102,7 +102,7 @@ Rect: Type = { x: Float, y: Float, width: Float, height: Float }
 
 // 目标语法：结构体模式解构
 area: (shape: Rect) -> Float = match shape {
-    { x: _, y: _, width: w, height: h } => w * h,
+    { x: _, y: _, width: w, height: h } -> w * h,
 }
 
 r = Rect(x= 0.0, y= 0.0, width= 10.0, height= 20.0)
@@ -133,11 +133,11 @@ main: () -> Void = {
 
 ```yaoxiang
 first: (p: (Int, String)) -> Int = match p {
-    (n, _) => n,
+    (n, _) -> n,
 }
 
 second: (p: (Int, String)) -> String = match p {
-    (_, s) => s,
+    (_, s) -> s,
 }
 
 main: () -> Void = {
@@ -158,8 +158,8 @@ Token: Type = { number: (Int) -> Token, plus: () -> Token, minus: () -> Token, t
 // 注意：变体在模式位置要带括号，写成裸 `plus | minus` 会被当成标识符模式，
 // 报 E1033「both sides of `|` must bind the same name set」
 is_operator: (t: Token) -> Bool = match t {
-    plus() | minus() | times() | divide() => true,
-    _ => false,
+    plus() | minus() | times() | divide() -> true,
+    _ -> false,
 }
 
 main: () -> Void = {
@@ -170,7 +170,7 @@ main: () -> Void = {
 
 `|` 的两条硬规则：① 两侧必须绑定**同名变量集**（`circle(r) | square(r)` 合法，
 `circle(r) | square(s)` 报 `E1033`）；② 或模式只用于**单个匹配臂内**的多选一，
-不要拆成多条臂——`ok(0) => ...` 和 `ok(n) => ...` 会触发 `E1031 Unreachable pattern`。
+不要拆成多条臂——`ok(0) -> ...` 和 `ok(n) -> ...` 会触发 `E1031 Unreachable pattern`。
 
 ## 卫表达式（if 守卫）
 
@@ -182,8 +182,8 @@ use std.result
 // 卫表达式附加额外条件
 // 注意：带 `if` 的臂不计入穷尽性检查，末尾必须补 `_`（否则 E1030）
 can_drive: (a: Result(Int, String)) -> Bool = match a {
-    ok(n) if n >= 18 => true,
-    _ => false,
+    ok(n) if n >= 18 -> true,
+    _ -> false,
 }
 
 main: () -> Void = {
@@ -204,10 +204,10 @@ Direction: Type = { north: () -> Direction, south: () -> Direction, east: () -> 
 // ✅ 正确：四个方向全部覆盖
 // 注意：变体构造要写成 `Direction.east()`，裸 `east` 是未定义变量（E1001）
 turn: (d: Direction) -> Direction = match d {
-    north() => Direction.east(),
-    east() => Direction.south(),
-    south() => Direction.west(),
-    west() => Direction.north(),
+    north() -> Direction.east(),
+    east() -> Direction.south(),
+    south() -> Direction.west(),
+    west() -> Direction.north(),
 }
 
 main: () -> Void = {
@@ -218,9 +218,9 @@ main: () -> Void = {
 
 // ❌ 编译错误：缺少 west
 // broken: (d: Direction) -> Direction = match d {
-//     north() => Direction.east(),
-//     east() => Direction.south(),
-//     south() => Direction.west(),
+//     north() -> Direction.east(),
+//     east() -> Direction.south(),
+//     south() -> Direction.west(),
 //     // west 未处理 → 编译错误
 // }
 ```
@@ -238,9 +238,9 @@ Expr: Type = { literal: (Int) -> Expr, add: (Expr, Expr) -> Expr, mul: (Expr, Ex
 // ⚠️ 每个变体只能有一条臂——写成 add(literal(0), right) 与
 // add(left, literal(0)) 两条会报 E1031 Unreachable pattern
 simplify: (e: Expr) -> Int = match e {
-    add(literal(0), right) => 1,   // 命中 0 + x
-    mul(literal(1), right) => 2,   // 命中 1 * x
-    literal(n) => n,              // 兜底：把字面量本身当结果
+    add(literal(0), right) -> 1,   // 命中 0 + x
+    mul(literal(1), right) -> 2,   // 命中 1 * x
+    literal(n) -> n,              // 兜底：把字面量本身当结果
 }
 
 main: () -> Void = {

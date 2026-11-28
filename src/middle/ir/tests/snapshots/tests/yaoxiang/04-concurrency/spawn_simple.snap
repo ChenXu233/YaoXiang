@@ -5,7 +5,7 @@ module
     locals_total=5
     values_total=6
     value v0: Int(64) @block0
-    value v1: TypeRef("?") @block0
+    value v1: Never @block0
     value v2: Bool @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
@@ -19,6 +19,7 @@ module
     Eq v2 <- v3, v4
     Load v5 <- string("result should be 42")
     Call v1 <- string("std.assert.assert") [v2, v5] (def=d0)
+    Drop v5
     Drop %1
     Ret v1
   init (locals=0)

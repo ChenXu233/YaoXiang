@@ -10,7 +10,7 @@ mod call;
 mod closure;
 mod container;
 mod control;
-mod lit;
+pub(crate) mod lit;
 mod op;
 mod reference;
 mod spawn;
@@ -18,10 +18,12 @@ mod spawn;
 #[cfg(test)]
 mod tests;
 
+use super::synth::SynthEnv;
 use super::AstToIrGenerator;
 use crate::ast;
 use crate::ast::Expr;
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
@@ -166,12 +168,85 @@ pub(in crate::middle) fn collect_free_vars_expr(
                 collect_free_vars_stmt(s, bound, seen, out);
             }
         }
-        Expr::For { iterable, body, .. } => {
+        Expr::For {
+            var,
+            iterable,
+            body,
+            ..
+        } => {
             collect_free_vars_expr(iterable, bound, seen, out);
+            let mut body_bound = bound.clone();
+            body_bound.insert(var.as_str());
+            for s in &body.stmts {
+                collect_free_vars_stmt(s, &body_bound, seen, out);
+            }
+        }
+        Expr::SpawnFor {
+            var,
+            iterable,
+            body,
+            ..
+        } => {
+            collect_free_vars_expr(iterable, bound, seen, out);
+            let mut body_bound = bound.clone();
+            body_bound.insert(var.as_str());
+            for s in &body.stmts {
+                collect_free_vars_stmt(s, &body_bound, seen, out);
+            }
+        }
+        Expr::Spawn { body, .. } | Expr::Unsafe { body, .. } => {
             for s in &body.stmts {
                 collect_free_vars_stmt(s, bound, seen, out);
             }
         }
+        Expr::Lambda { params, body, .. } => {
+            let mut nested_bound = bound.clone();
+            nested_bound.extend(params.iter().map(|param| param.name.as_str()));
+            for s in &body.stmts {
+                collect_free_vars_stmt(s, &nested_bound, seen, out);
+            }
+        }
+        Expr::ListComp {
+            element,
+            generators,
+            ..
+        } => {
+            let mut nested_bound = bound.clone();
+            for generator in generators {
+                collect_free_vars_expr(&generator.iterable, &nested_bound, seen, out);
+                nested_bound.insert(generator.var.as_str());
+                if let Some(condition) = &generator.condition {
+                    collect_free_vars_expr(condition, &nested_bound, seen, out);
+                }
+            }
+            collect_free_vars_expr(element, &nested_bound, seen, out);
+        }
+        Expr::Match {
+            expr: matched,
+            arms,
+            ..
+        } => {
+            collect_free_vars_expr(matched, bound, seen, out);
+            for arm in arms {
+                for stmt in &arm.body.stmts {
+                    collect_free_vars_stmt(stmt, bound, seen, out);
+                }
+            }
+        }
+        Expr::FString { segments, .. } => {
+            for segment in segments {
+                if let crate::ast::FStringSegment::Interpolation { expr, .. } = segment {
+                    collect_free_vars_expr(expr, bound, seen, out);
+                }
+            }
+        }
+        Expr::In {
+            elem, container, ..
+        } => {
+            collect_free_vars_expr(elem, bound, seen, out);
+            collect_free_vars_expr(container, bound, seen, out);
+        }
+        Expr::Return(Some(value), _) => collect_free_vars_expr(value, bound, seen, out),
         _ => {}
     }
 }
@@ -185,6 +260,24 @@ impl AstToIrGenerator {
     pub(in crate::middle) fn generate_expr_ir(
         &mut self,
         expr: &ast::Expr,
+        result_reg: Operand,
+        instructions: &mut Vec<Instruction>,
+        constants: &mut Vec<ConstValue>,
+    ) -> Result<(), Diagnostic> {
+        self.generate_expr_ir_with_env(
+            expr,
+            SynthEnv::default(),
+            result_reg,
+            instructions,
+            constants,
+        )
+    }
+
+    /// 带显式合成环境的表达式入口；只有根节点是合成 Lambda 时消费该环境。
+    pub(super) fn generate_expr_ir_with_env(
+        &mut self,
+        expr: &ast::Expr,
+        env: SynthEnv,
         result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -211,9 +304,20 @@ impl AstToIrGenerator {
                     .build()
                 })? as u32;
             let payload_reg = self.next_temp_reg();
-            self.generate_expr_ir_inner(expr, payload_reg.clone(), instructions, constants)?;
+            // 载荷值自身的类型：包装点绕过了常规 prologue（下面那段），这里补同一份
+            // 来源——`Dog(...)` 这类构造调用的结果类型只在表达式结果类型表里。
+            if let Some(ty) = self.expr_value_type(expr) {
+                self.note_value_type(&payload_reg, ty);
+            }
+            self.generate_expr_ir_inner(expr, payload_reg.clone(), instructions, constants, env)?;
             // 包装点的结果类型 = 接口类型（值表用；不取具体实参类型）。
-            self.note_value_type(&result_reg, MonoType::TypeRef(iface.clone()));
+            self.note_value_type(
+                &result_reg,
+                MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&(iface.clone())))
+                        .expect("type name must be bare and non-empty"),
+                ),
+            );
             instructions.push(Instruction::CreateVariant {
                 dst: result_reg.clone(),
                 group,
@@ -227,7 +331,7 @@ impl AstToIrGenerator {
         if let Some(ty) = self.expr_value_type(expr) {
             self.note_value_type(&result_reg, ty);
         }
-        self.generate_expr_ir_inner(expr, result_reg, instructions, constants)
+        self.generate_expr_ir_inner(expr, result_reg, instructions, constants, env)
     }
 
     fn generate_expr_ir_inner(
@@ -236,6 +340,7 @@ impl AstToIrGenerator {
         result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
+        env: SynthEnv,
     ) -> Result<(), Diagnostic> {
         match expr {
             Expr::Lit(literal, _) => {
@@ -422,8 +527,21 @@ impl AstToIrGenerator {
             Expr::UnOp { op, expr, .. } => {
                 self.generate_un_op_expr_ir(op, expr, result_reg, instructions, constants)?;
             }
-            Expr::Lambda { params, body, .. } => {
-                self.generate_lambda_expr_ir(params, body, result_reg, instructions, constants)?;
+            Expr::Lambda {
+                params,
+                body,
+                plan_id,
+                ..
+            } => {
+                self.generate_lambda_expr_ir(
+                    params,
+                    body,
+                    env,
+                    *plan_id,
+                    result_reg,
+                    instructions,
+                    constants,
+                )?;
             }
             Expr::Borrow { expr, .. } => {
                 self.generate_borrow_expr_ir(expr, result_reg, instructions, constants)?;

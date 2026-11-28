@@ -12,12 +12,12 @@ use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::sema::passes::dead_code::DeadCodeAnalyzer;
 use crate::frontend::core::sema::SemanticProbe;
 use crate::frontend::core::sema::TypeCheckResult;
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::module::orchestrator;
 use crate::frontend::module::orchestrator::OrchestratorError;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::roles::{self, FileRole};
-use crate::frontend::module::symbol::SymbolTable;
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use crate::middle::ModuleIR;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -86,7 +86,7 @@ pub(in crate::driver) fn merge_embedded_std_ir(
 /// AST clone——原签名里的 PathBuf 本就未被使用）。
 ///
 /// 返回 `(限定名 → 绝对槽位号, 各文件的槽位基址)`。槽位号按发现顺序连续
-/// 分配；限定名用 `{module_key}.{name}`（与 `SymbolTable::qualify` 同源），
+/// 分配；限定名用 `{module_key}.{name}`（经 `DefPath::project` —— 拼接唯一实现），
 /// 使 `use lib.{value}` 解析到 `lib.value`。只登记**真正的值绑定**
 /// （非函数）——函数进函数表，不占全局槽位。
 pub(in crate::driver) fn allocate_global_slots(
@@ -102,7 +102,7 @@ pub(in crate::driver) fn allocate_global_slots(
             continue; // 上游失败（FailFast 下 run 循环已中止，防御）
         };
         for (name, _ty) in extract_global_defs(ast) {
-            layout.push((SymbolTable::qualify(&unit.key, &name), next_slot));
+            layout.push((DefPath::item(&unit.key, &name).project(), next_slot));
             next_slot += 1;
         }
     }
@@ -567,7 +567,7 @@ pub(in crate::driver) fn link_module_irs(
     // 入口函数仅在 main 为**函数**绑定时设置：值 main 的程序体就是初始化
     // 序列（求值即执行），无需入口调用——与 Script 同款执行形态（#356
     // 防双跑：初始化与入口调用绝不叠加）。
-    let entry_fn = format!("{}.main", entry_key);
+    let entry_fn = DefPath::item(entry_key, "main").project();
     if merged.functions.iter().any(|f| f.name == entry_fn) {
         merged.entry_function = Some(entry_fn);
     }
@@ -618,7 +618,7 @@ pub(in crate::driver) fn run_post_mono_dce(ir: &mut ModuleIR) -> Result<(), Diag
 /// rootless（无项目根）check 形态由 `ir_generation_check` 传单元键 +
 /// `with_script_mode(true)`（限定名与 Script 语义解耦）。因此本函数不再需要
 /// 「限定名 ⇄ 扁平名」的桥：请求名要么已与 IR 调用名同源（限定名），要么经
-/// `qualify(unit.key, name)` 兜底命中定义键——两条路径都落在同一张限定表上。
+/// `DefPath::item(unit.key, name).project()` 兜底命中定义键——两条路径都落在同一张限定表上。
 pub(in crate::driver) fn aggregate_instantiation_requests(
     units: &[Unit],
     unit_irs: &[Option<ModuleIR>],
@@ -671,7 +671,7 @@ pub(in crate::driver) fn aggregate_instantiation_requests(
             let raw = raw.filter(|r| program_functions.contains(r.as_str()));
             // 别名未命中时按单元键限定化——这正是 `qualify_names` 对**本单元**
             raw.or_else(|| {
-                let qualified = SymbolTable::qualify(&units[i].key, name);
+                let qualified = DefPath::item(&units[i].key, name).project();
                 program_functions
                     .contains(qualified.as_str())
                     .then_some(qualified)
@@ -694,7 +694,7 @@ pub(in crate::driver) fn aggregate_instantiation_requests(
             }
             // 所在函数名：裸名 → 本单元限定名，使 deferred 桶键与 merged IR 同源
             if let Some(bare) = request.containing_fn.as_deref() {
-                let qualified = SymbolTable::qualify(&units[i].key, bare);
+                let qualified = DefPath::item(&units[i].key, bare).project();
                 if top_level.contains(qualified.as_str()) {
                     request.containing_fn = Some(qualified);
                 }
@@ -962,7 +962,7 @@ fn resolve_import_module(
     name: &str,
     module_keys: &HashSet<String>,
 ) -> Option<String> {
-    let submodule = format!("{use_path}.{name}");
+    let submodule = DefPath::item(use_path, name).project();
     if module_keys.contains(&submodule) {
         return Some(submodule);
     }
@@ -1005,20 +1005,22 @@ pub(in crate::driver) fn collect_compilation_refs(
 
 /// 方法可达性标记（WBS 4.9.6 / #450 + WBS 4.9.7 / issue #464），按**定义单元**归因：
 ///
-/// - `by_unit`：定义单元键 → 该单元内**被决议命中**的 `(基名, 声明序)`；
-/// - `groups`：出现过决议条目的**名字组**（基名）——池的名字级豁免
-///   （`RefPool::field_names` 全局平铺）对这些组不成立，由驱动侧交给分析器
+/// - `by_unit`：定义单元键 → 该单元内**被决议命中**的 `(方法身份, 声明序)`；
+/// - `groups`：出现过决议条目的**名字组**（无模块归属的 [DefPath]，投影与
+///   `SymbolDef::name` 同形）——池的名字级豁免（`RefPool::field_names` 全局
+///   平铺）对这些组不成立，由驱动侧交给分析器
 ///   （`DeadCodeAnalyzer::set_resolved_groups`）；
-/// - 定义单元归属：`OverloadResolutions` 每单元一份（条目记在**记录方**单元），
-///   名字形如 `{Type}.{method}#k`——`{Type}` 是**定义侧**的裸类型名且**不带单元**
-///   （见 `sema/environment.rs` 的 `add_method_overload_with_params`）⇒ 一条
-///   条目可能指向**多个单元**的同名类型（同名类型跨单元，见 `typed_owners`）；
-///   故归因按「记录方能拼出该类型名的模块集合」给出，而不是单值反查；
+/// - 定义单元归属：决议名是 **IR 最终函数名**（WBS 4.9.10 D-8：
+///   `{模块键}.{Type}.{method}` + 需要时 `#{序}`），经投影索引换回身份后
+///   **按身份的模块段归因**——不再是「记录方能拼出该类型名的模块集合」那种
+///   猜测（同名类型跨单元时多值归因会把一处的决议记到另一处头上）；
+///   换回身份的换算只在 `method_key_of_definition` 一处（定义侧混编后缀在
+///   那里剥离，调用点不做字符串分段）；
 /// - 只读：经 `OverloadResolutions::iter`（不触达 `get`、不计入消费台账）。
 #[derive(Default)]
 pub(in crate::driver) struct MethodMarks {
-    pub by_unit: HashMap<String, HashSet<(String, usize)>>,
-    pub groups: HashSet<String>,
+    pub by_unit: HashMap<String, HashSet<(DefPath, usize)>>,
+    pub groups: HashSet<DefPath>,
     /// 定义单元键 → 该单元内被**算子派发**命中的 `Type.method` 组
     /// （WBS 3.20.3 / issue #505；整组——派发名不分重载候选）。
     /// 来源是 `TypeCheckResult::operator_dispatches`（RFC-011b span 键控
@@ -1034,9 +1036,10 @@ pub(in crate::driver) struct MethodMarks {
 /// ① 花括号项 `use M.{T}`：`T` 是调用方写出的裸名，也是 t19 注入面的来源——
 ///    候选真从这里来，归属**确定**；
 /// ② 内联别名 `use M.{T as X}` 与模块限定构造/访问 `ns.T`：调用点键仍是**定义侧**
-///    `T`（实测：两种形态的 `X(..).to()` / `ns.T(..).to()` 都落键 `T.to`），
-///    而 t19 的注入面按收窄规则**不**注入它们（`arms.rs::visible_method_overloads`
-///    规则②）⇒ 条目与定义单元不再一一对应。这些模块按**可能归属**并入：漏并会让
+///    `T`（实测：两种形态的 `X(..).to()` / `ns.T(..).to()` 都落键 `T.to`）——
+///    方法重载决议条目的归因已改为**按身份精确归因**（WBS 4.9.10 D-8：决议名带
+///    模块键，换回 `DefPath` 后模块段即定义单元），本函数只剩算子派发组在用；
+///    算子派发记录的类型名仍是定义侧裸名 ⇒ 这些模块按**可能归属**并入：漏并会让
 ///    「经别名/限定名真实被调用」的同名方法被 W1005 误报（误报防线，宁漏报方向）；
 /// ③ 记录方自身：本单元定义的类型（含自有键位不外并的形态）。
 ///
@@ -1076,6 +1079,7 @@ pub(in crate::driver) fn resolved_method_marks(
     units: &[Unit],
     asts: &[Option<Module>],
     type_results: &[Option<&TypeCheckResult>],
+    symbols: &crate::frontend::module::symbol::SymbolTable,
 ) -> MethodMarks {
     let module_keys: HashSet<String> = units.iter().map(|u| u.key.clone()).collect();
     // WBS 3.20.4 / issue #510：先**第一遍扫全部 type_results** 建全局实例化
@@ -1101,21 +1105,30 @@ pub(in crate::driver) fn resolved_method_marks(
             &recorder_unit,
             &module_keys,
         );
-        for (_, ir_name) in result.overload_resolutions.iter() {
-            let (base, ordinal) = split_overload_ir_name(ir_name);
-            let type_name = base.split('.').next().unwrap_or(&base);
-            // 名字面里没有这个类型名（记录方自有类型且未出现在 import/限定访问里）时，
-            // 归记录方自身——本地定义的候选由本单元现场登记，条目必来自本单元
-            let mut defining: HashSet<String> = owners.get(type_name).cloned().unwrap_or_default();
-            defining.insert(recorder_unit.clone());
-            for key in defining {
+        for (_, resolution) in result.overload_resolutions.iter() {
+            let ir_name = &resolution.target;
+            // 身份从**投影索引**读回（D-8 的 IR 最终名）：定义侧混编后缀 `#{序}`
+            // 由同一个 helper 剥离，这里不解析字符串分段。
+            let Some((identity, ordinal)) =
+                crate::frontend::core::sema::environment::method_key_of_definition(
+                    ir_name, symbols,
+                )
+            else {
+                // 无身份（名字不在投影索引里）⇒ 不产标记：宁漏报不误报，
+                // 且这种名字本就不该出现在决议表里（D-8 的判据自己会红）
+                continue;
+            };
+            // 归因面 = 身份的模块段（**精确**，不再按名字面猜集合）
+            marks
+                .by_unit
+                .entry(identity.module.clone())
+                .or_default()
+                .insert((identity.clone(), ordinal));
+            if let Some(owner) = identity.owner.as_deref() {
                 marks
-                    .by_unit
-                    .entry(key)
-                    .or_default()
-                    .insert((base.clone(), ordinal));
+                    .groups
+                    .insert(DefPath::method("", owner, &identity.name));
             }
-            marks.groups.insert(base);
         }
         // 算子派发（WBS 3.20.3 / issue #505）：`u[0]` / `u == t` 的具名决议
         // `{type_name, method}` 同样按**定义单元**归因——归因面与 overload
@@ -1127,20 +1140,25 @@ pub(in crate::driver) fn resolved_method_marks(
         // `inst_map`）展开成具体类型组（原组保留），再逐组走同一套归因：
         // 展开出的 "Vec3.add" 以其自身类型名查 `owners` 归到定义单元，
         // 原 "T.add" 照旧归记录方。
-        let dispatch_bases = result
+        // 结构化派发点 (类型名, 方法名)：类型名与成员名分别来自
+        // OperatorDispatch 的两个字段，展开也按字段走——不从拼接串里
+        // 切回首段（D64 §2.5：身份不得从名字串反解）。
+        let dispatch_entries = result
             .operator_dispatches
             .iter()
-            .map(|d| format!("{}.{}", d.type_name, d.method));
-        for base in expand_dispatch_groups(dispatch_bases, &inst_map) {
-            let type_name = base.split('.').next().unwrap_or(&base);
-            let mut defining: HashSet<String> = owners.get(type_name).cloned().unwrap_or_default();
+            .map(|d| (d.type_name.clone(), d.method.clone()));
+        for (type_name, method) in expand_dispatch_entries(dispatch_entries, &inst_map) {
+            // 名字组的键 = 声明域两段名的**唯一投影**（DefPath::project）。
+            let group = DefPath::method("", &type_name, &method).project();
+            let mut defining: HashSet<String> =
+                owners.get(type_name.as_str()).cloned().unwrap_or_default();
             defining.insert(recorder_unit.clone());
             for key in defining {
                 marks
                     .operator_by_unit
                     .entry(key)
                     .or_default()
-                    .insert(base.clone());
+                    .insert(group.clone());
             }
         }
     }
@@ -1276,30 +1294,21 @@ pub(in crate::driver) fn declared_type_param_names<'a>(
 /// 派发组按实例化映射展开（WBS 3.20.4 / issue #510，展开逻辑的**单点**，
 /// 两臂共用）：组 "{P}.{m}" 若 P 在映射中 ⇒ 追加全部 "{X}.{m}"（X ∈ map[P]）；
 /// **原组保留**——用户类型可能真叫 "T"，且展开是追加不是替换。
-pub(in crate::driver) fn expand_dispatch_groups(
-    groups: impl IntoIterator<Item = String>,
+pub(in crate::driver) fn expand_dispatch_entries(
+    entries: impl IntoIterator<Item = (String, String)>,
     map: &HashMap<String, HashSet<String>>,
-) -> HashSet<String> {
+) -> HashSet<(String, String)> {
     let mut expanded = HashSet::new();
-    for group in groups {
-        expanded.insert(group.clone());
-        if let Some((param, method)) = group.split_once('.') {
-            if let Some(type_names) = map.get(param) {
-                for type_name in type_names {
-                    expanded.insert(format!("{type_name}.{method}"));
-                }
+    for (type_name, method) in entries {
+        if let Some(type_names) = map.get(&type_name) {
+            for concrete in type_names {
+                expanded.insert((concrete.clone(), method.clone()));
             }
         }
+        // **原组保留**——用户类型可能真叫 "T"，且展开是追加不是替换。
+        expanded.insert((type_name, method));
     }
     expanded
-}
-
-/// `Type.method#k` → `(Type.method, k)`；无 `#` 后缀 ⇒ 声明序 0
-fn split_overload_ir_name(ir_name: &str) -> (String, usize) {
-    match ir_name.rsplit_once('#') {
-        Some((base, idx)) => (base.to_string(), idx.parse().unwrap_or(0)),
-        None => (ir_name.to_string(), 0),
-    }
 }
 
 /// manifest 声明面优先的池来源（#334「包内 use 图不可达的报警」）：对每个包目标

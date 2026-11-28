@@ -183,8 +183,8 @@ main = {
 ```yaoxiang
 // TODO: 修复 match bug 后取消注释
 // desc = match 1 {
-//     1 => "one",
-//     _ => "other"
+//     1 -> "one",
+//     _ -> "other"
 // }
 ```
 

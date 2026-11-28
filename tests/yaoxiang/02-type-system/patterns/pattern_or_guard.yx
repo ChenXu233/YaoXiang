@@ -14,15 +14,15 @@ main: () -> Void = {
     // 或模式：字面量
     x = 2
     t = match x {
-        1 | 2 => "低",
-        _ => "其他",
+        1 | 2 -> "低",
+        _ -> "其他",
     }
     assert(t == "低", "or matches first alternative")
 
     y = 5
     u = match y {
-        1 | 2 => "低",
-        _ => "其他",
+        1 | 2 -> "低",
+        _ -> "其他",
     }
     assert(u == "其他", "or falls through")
 
@@ -30,23 +30,23 @@ main: () -> Void = {
     // some(v) | none() 会报 E1033）
     a = Option(Int).some(9)
     label = match a {
-        some(_) | none() => "有形状",
+        some(_) | none() -> "有形状",
     }
     assert(label == "有形状", "variant or-pattern")
 
     // 守卫：命中
     b = 5
     size = match b {
-        n if n > 3 => "大",
-        _ => "小",
+        n if n > 3 -> "大",
+        _ -> "小",
     }
     assert(size == "大", "guard true arm")
 
     // 守卫：失败落下一臂
     c = 2
     size2 = match c {
-        n if n > 3 => "大",
-        _ => "小",
+        n if n > 3 -> "大",
+        _ -> "小",
     }
     assert(size2 == "小", "guard falls through")
 }

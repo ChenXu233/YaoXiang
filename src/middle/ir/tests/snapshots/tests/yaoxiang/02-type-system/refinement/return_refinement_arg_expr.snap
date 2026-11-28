@@ -25,15 +25,15 @@ module
   fn main() -> Void
     locals_total=3
     values_total=12
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
-    value v2: Refined { base: Int(64), constraint: BinOp { op: Gt, left: NamedVar("<const-expr>"), right: Lit(Int(0)) } } @block0
+    value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Generic { name: "String", args: [] } @block0
-    value v6: TypeRef("?") @block0
+    value v6: Never @block0
     value v7: Bool @block0
-    value v8: Refined { base: Int(64), constraint: BinOp { op: Gt, left: NamedVar("<const-expr>"), right: Lit(Int(0)) } } @block0
+    value v8: Int(64) @block0
     value v9: Int(64) @block0
     value v10: Int(64) @block0
     value v11: Generic { name: "String", args: [] } @block0
@@ -43,12 +43,14 @@ module
     Eq v1 <- v2, v3
     Load v5 <- string("shifted() == -5")
     Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
+    Drop v5
     Load v10 <- int(3)
     Call v8 <- string("grown") [v10] (def=d2)
     Load v9 <- int(4)
     Eq v7 <- v8, v9
     Load v11 <- string("grown(3) == 4")
     Call v6 <- string("std.assert.assert") [v7, v11] (def=d1)
+    Drop v11
     Ret v6
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

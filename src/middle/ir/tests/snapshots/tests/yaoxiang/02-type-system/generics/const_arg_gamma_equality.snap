@@ -15,9 +15,9 @@ module
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
-    value v4: TypeRef("?") @block0
+    value v4: Int(64) @block0
     value v5: Int(64) @block0
-    value v6: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
+    value v6: Fn { params: [Literal { name: "42", base_type: Int(64), value: Int(42) }], return_type: Int(64) } @block0
     value v7: Int(64) @block0
     value v8: Int(64) @block0
     Load %0 <- arg%0
@@ -42,9 +42,9 @@ module
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
-    value v4: TypeRef("?") @block0
+    value v4: Int(64) @block0
     value v5: Int(64) @block0
-    value v6: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
+    value v6: Fn { params: [Literal { name: "42", base_type: Int(64), value: Int(42) }], return_type: Int(64) } @block0
     value v7: Int(64) @block0
     value v8: Int(64) @block0
     Load %0 <- arg%0
@@ -73,9 +73,9 @@ module
     value v4: Int(64) @block0
     value v5: Int(64) @block0
     value v6: Int(64) @block0
-    value v7: TypeRef("?") @block0
+    value v7: Int(64) @block0
     value v8: Int(64) @block0
-    value v9: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
+    value v9: Fn { params: [Literal { name: "7", base_type: Int(64), value: Int(7) }], return_type: Int(64) } @block0
     value v10: Int(64) @block0
     value v11: Int(64) @block0
     Load %0 <- arg%0
@@ -103,14 +103,14 @@ module
     slot[0] y : Int(64) @depth1
     locals_total=4
     values_total=9
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Generic { name: "String", args: [] } @block0
-    value v5: TypeRef("?") @block0
+    value v5: Int(64) @block0
     value v6: Int(64) @block0
-    value v7: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
+    value v7: Fn { params: [Literal { name: "42", base_type: Int(64), value: Int(42) }], return_type: Int(64) } @block0
     value v8: Int(64) @block0
     Load %0 <- arg%0
     Load v2 <- %0
@@ -118,10 +118,12 @@ module
     Eq v1 <- v2, v3
     Load v4 <- string("y 应为 42 才有编译期证据")
     Call v0 <- string("std.assert.assert") [v1, v4] (def=d2)
+    Drop v4
     Load v6 <- int(42)
     Load v8 <- %0
     Call v7 <- string("f") [v8] (def=d1)
     CallDyn v5 <- v7 [v6]
+    Drop v7
     Ret v5
   fn main() -> Void
     slot[0] literal : Int(64) @depth1
@@ -133,7 +135,7 @@ module
     locals_total=9
     values_total=34
     value v0: Int(64) @block0
-    value v1: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
+    value v1: Fn { params: [Literal { name: "42", base_type: Int(64), value: Int(42) }], return_type: Int(64) } @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
@@ -141,27 +143,27 @@ module
     value v6: Int(64) @block0
     value v7: Int(64) @block0
     value v8: Int(64) @block0
-    value v9: TypeRef("?") @block0
+    value v9: Never @block0
     value v10: Bool @block0
     value v11: Int(64) @block0
     value v12: Int(64) @block0
     value v13: Generic { name: "String", args: [] } @block0
-    value v14: TypeRef("?") @block0
+    value v14: Never @block0
     value v15: Bool @block0
     value v16: Int(64) @block0
     value v17: Int(64) @block0
     value v18: Generic { name: "String", args: [] } @block0
-    value v19: TypeRef("?") @block0
+    value v19: Never @block0
     value v20: Bool @block0
     value v21: Int(64) @block0
     value v22: Int(64) @block0
     value v23: Generic { name: "String", args: [] } @block0
-    value v24: TypeRef("?") @block0
+    value v24: Never @block0
     value v25: Bool @block0
     value v26: Int(64) @block0
     value v27: Int(64) @block0
     value v28: Generic { name: "String", args: [] } @block0
-    value v29: TypeRef("?") @block0
+    value v29: Never @block0
     value v30: Bool @block0
     value v31: Int(64) @block0
     value v32: Int(64) @block0
@@ -170,6 +172,7 @@ module
     Load v2 <- int(42)
     Call v1 <- string("f") [v2] (def=d1)
     CallDyn %0 <- v1 [v0]
+    Drop v1
     Load v3 <- int(42)
     Call %1 <- string("guarded") [v3] (def=d3)
     Load v4 <- int(7)
@@ -186,26 +189,31 @@ module
     Eq v10 <- v11, v12
     Load v13 <- string("分支内等式证据与字面量同形")
     Call v9 <- string("std.assert.assert") [v10, v13] (def=d2)
+    Drop v13
     Load v16 <- %3
     Load v17 <- %0
     Eq v15 <- v16, v17
     Load v18 <- string("反向等式同义")
     Call v14 <- string("std.assert.assert") [v15, v18] (def=d2)
+    Drop v18
     Load v21 <- %4
     Load v22 <- int(7)
     Eq v20 <- v21, v22
     Load v23 <- string("合取第二项的等式可用")
     Call v19 <- string("std.assert.assert") [v20, v23] (def=d2)
+    Drop v23
     Load v26 <- %5
     Load v27 <- %0
     Eq v25 <- v26, v27
     Load v28 <- string("体内裸 assert 的等式可用")
     Call v24 <- string("std.assert.assert") [v25, v28] (def=d2)
+    Drop v28
     Load v31 <- %2
     Load v32 <- int(0)
     Eq v30 <- v31, v32
     Load v33 <- string("守卫不成立的分支不调用")
     Call v29 <- string("std.assert.assert") [v30, v33] (def=d2)
+    Drop v33
     Drop %5
     Drop %4
     Drop %2

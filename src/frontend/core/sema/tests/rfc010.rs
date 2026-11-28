@@ -14,6 +14,7 @@ use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::probe::TypeLevelNamespace;
+use crate::frontend::core::types::identity::DefPath;
 
 /// RFC-010：类型 base 的 `Point.get_x = get_x` 源码（方法登记走类型空间）。
 const TYPE_BASE_SRC: &str = r#"
@@ -42,7 +43,10 @@ fn test_semantic_dispatch_type_vs_value_base() {
     let mut checker = TypeChecker::new("test");
     checker.check_module(&r.module, &TypeLevelNamespace::scan_one(&r.module));
     assert!(
-        checker.env().method_bindings.contains_key("Point.get_x"),
+        checker
+            .env()
+            .method_bindings
+            .contains_key(&DefPath::method("", "Point", "get_x")),
         "类型 base 应登记类型空间方法"
     );
 
@@ -53,7 +57,10 @@ fn test_semantic_dispatch_type_vs_value_base() {
     let mut checker = TypeChecker::new("test");
     checker.check_module(&r.module, &TypeLevelNamespace::scan_one(&r.module));
     assert!(
-        !checker.env().method_bindings.contains_key("p.get_x"),
+        !checker
+            .env()
+            .method_bindings
+            .contains_key(&DefPath::method("", "p", "get_x")),
         "值 base 不应在 pass2 登记为方法（应走 pass3 schema 校验）"
     );
 }

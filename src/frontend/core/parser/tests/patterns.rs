@@ -42,8 +42,8 @@ fn test_match_range_pattern_parses_to_range_arm() {
     // Arrange：issue #405 原始夹具——`80..89 => "B"` 此前报 E0010
     let source = r#"
         r = match 85 {
-            80..89 => "B",
-            _ => "F",
+            80..89 -> "B",
+            _ -> "F",
         }
     "#;
 
@@ -74,8 +74,8 @@ fn test_match_range_pattern_negative_bounds_normalized() {
     // Arrange：负端点——词法器字面量恒非负，负值由 parser 归一化
     let source = r#"
         r = match x {
-            -5..-1 => "neg",
-            _ => "other",
+            -5..-1 -> "neg",
+            _ -> "other",
         }
     "#;
 
@@ -101,8 +101,8 @@ fn test_match_range_pattern_in_or_alternatives() {
     // Arrange：范围臂作或模式备选（RFC-010b 或模式收链不因范围臂变形）
     let source = r#"
         r = match x {
-            80..89 | 90..99 => "both",
-            _ => "other",
+            80..89 | 90..99 -> "both",
+            _ -> "other",
         }
     "#;
 
@@ -128,8 +128,8 @@ fn test_match_range_pattern_with_guard() {
     // Arrange：范围臂带守卫（`pat if cond => ...` 的守卫解包不因范围臂变形）
     let source = r#"
         r = match x {
-            80..89 if x > 85 => "high B",
-            _ => "other",
+            80..89 if x > 85 -> "high B",
+            _ -> "other",
         }
     "#;
 
@@ -150,8 +150,8 @@ fn test_match_range_pattern_non_literal_bound_rejected() {
     // Arrange：标识符端点——模式位标识符是绑定，无范围判定语义
     let source = r#"
         r = match x {
-            n..20 => "bad",
-            _ => "other",
+            n..20 -> "bad",
+            _ -> "other",
         }
     "#;
 
@@ -175,8 +175,8 @@ fn test_match_range_pattern_non_literal_upper_bound_rejected() {
     // 的调用点发射 E0010（见 nud.rs「range pattern upper bound」发射点）。
     let source = r#"
         r = match x {
-            80..n => "bad",
-            _ => "other",
+            80..n -> "bad",
+            _ -> "other",
         }
     "#;
 

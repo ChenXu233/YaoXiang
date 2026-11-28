@@ -1,4 +1,4 @@
-//! 控制流指令族：Nop / 跳转 / 分支 / Switch / Return
+//! 控制流指令族：Nop / 跳转 / 分支 / Return
 //!
 //! `execute_instr` 按指令族拆分的一部分。arm 体自原单函数逐字搬迁，
 //! 仅去掉外层 `match` 包裹并统一以 `return` 形式返回，语义不变。
@@ -26,8 +26,6 @@ impl Interpreter {
             | BytecodeInstr::Drop { .. }
             | BytecodeInstr::Release { .. }
             | BytecodeInstr::StackAlloc { .. }
-            | BytecodeInstr::TryBegin { .. }
-            | BytecodeInstr::TryEnd
             | BytecodeInstr::ArcDrop { .. }
             | BytecodeInstr::CloseUpvalue { .. } => {
                 self.call_stack[fi].advance();
@@ -82,38 +80,6 @@ impl Interpreter {
                     self.apply_jump(fi, *target)?;
                 } else {
                     self.call_stack[fi].advance();
-                }
-                Ok(StepOutcome::Continue)
-            }
-            BytecodeInstr::Switch { value, targets } => {
-                let val = self.force_slot(fi, *value)?;
-                let mut jumped = false;
-                for (case_val, target) in targets {
-                    if let Some(case_label) = case_val {
-                        // 注意：这里的 case_label 承载的是**比较值**而非跳转偏移
-                        // （编码期复用 Label 字段存 case 常量），故不能走 apply_jump。
-                        let case_offset = Self::decode_label_offset(*case_label);
-                        let matches = match &val {
-                            RuntimeValue::Int(n) => *n == case_offset as i64,
-                            RuntimeValue::Bool(b) => *b == (case_offset != 0),
-                            RuntimeValue::Enum { variant_id, .. } => {
-                                *variant_id == case_offset as u32
-                            }
-                            _ => false,
-                        };
-                        if matches {
-                            self.apply_jump(fi, *target)?;
-                            jumped = true;
-                            break;
-                        }
-                    }
-                }
-                if !jumped {
-                    if let Some((None, default_target)) = targets.last() {
-                        self.apply_jump(fi, *default_target)?;
-                    } else {
-                        self.call_stack[fi].advance();
-                    }
                 }
                 Ok(StepOutcome::Continue)
             }

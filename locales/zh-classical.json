@@ -99,6 +99,8 @@
     "example": "x = 1 @ 2;",
     "error_output": "error[E0011]: 意外之令牌\n --> example.yx:1:7\n  |\n1 | x = 1 @ 2;\n  |       ^ 意外之令牌 '@'"
   },
+  "E0011.branch_arrow.message": "=> 當改為 ->（match 之支箭用 ->，=> 唯用於 lambda）",
+  "E0011.branch_arrow.help": "改 match 支箭之 '=>' 為 '->'；'->' 乃支箭，'=>' 唯用於 lambda",
   "E0012": {
     "title": "语法有误",
     "message": "表达式或语句有语法之失",

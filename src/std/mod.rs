@@ -47,6 +47,7 @@ use crate::backends::common::{Handle, Heap, HeapValue, RuntimeValue};
 use crate::backends::interpreter::ffi::FfiRegistry;
 use crate::backends::ExecutorError;
 pub use crate::frontend::core::types::eval::dependent_types::{Effect, EffectSpec};
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 
 /// Type alias for native function call signature
@@ -346,7 +347,7 @@ pub trait StdModule {
         for export in self.type_families() {
             module.add_export(Export {
                 name: export.name.to_string(),
-                full_path: format!("{}.{}", self.module_path(), export.name),
+                full_path: DefPath::item(self.module_path(), export.name).project(),
                 kind: ExportKind::Type,
                 signature: format!("({}) -> Type", export.params.join(", ")),
                 mono_type: None,

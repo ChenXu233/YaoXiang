@@ -8,7 +8,7 @@ module
     values_total=5
     value v0: Int(64) @block0
     value v1: Int(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Never @block0
     value v3: Bool @block0
     value v4: Generic { name: "String", args: [] } @block0
     Load v0 <- int(1)
@@ -18,6 +18,7 @@ module
     Load v3 <- bool(true)
     Load v4 <- string("move completed — p2 should own the value")
     Call v2 <- string("std.assert.assert") [v3, v4] (def=d1)
+    Drop v4
     Drop %0
     Drop %1
     Ret v2

@@ -4,6 +4,7 @@
 
 mod const_data;
 mod error;
+mod identity;
 mod mono;
 mod solver;
 mod substitute;

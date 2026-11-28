@@ -13,6 +13,7 @@ use crate::frontend::core::sema::proof::budget::BudgetTracker;
 use crate::frontend::core::sema::TypeEnvironment;
 use crate::frontend::core::types::eval::dependent_types::DependentTypeEnv;
 use crate::frontend::core::types::eval::evaluator::{EvalConfig, Evaluator};
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::MonoType;
 use crate::std::StdModule;
 
@@ -195,7 +196,10 @@ fn test_istrue_true_evaluates_to_void() {
     let mut dep_env = DependentTypeEnv::new();
     crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env.types, &budget, &dep_env);
-    let ty = MonoType::TypeRef("IsTrue(true)".to_string());
+    let ty = MonoType::TypeRef(
+        Nominal::flat(AsRef::<str>::as_ref(&("IsTrue(true)")))
+            .expect("type name must be bare and non-empty"),
+    );
 
     // Act
     let result = evaluator.eval(&ty);
@@ -217,7 +221,10 @@ fn test_istrue_false_evaluates_to_never() {
     let mut dep_env = DependentTypeEnv::new();
     crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env.types, &budget, &dep_env);
-    let ty = MonoType::TypeRef("IsTrue(false)".to_string());
+    let ty = MonoType::TypeRef(
+        Nominal::flat(AsRef::<str>::as_ref(&("IsTrue(false)")))
+            .expect("type name must be bare and non-empty"),
+    );
 
     // Act
     let result = evaluator.eval(&ty);
@@ -239,7 +246,10 @@ fn test_istrue_unknown_preserves_expression() {
     let mut dep_env = DependentTypeEnv::new();
     crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env.types, &budget, &dep_env);
-    let ty = MonoType::TypeRef("IsTrue(x)".to_string());
+    let ty = MonoType::TypeRef(
+        Nominal::flat(AsRef::<str>::as_ref(&("IsTrue(x)")))
+            .expect("type name must be bare and non-empty"),
+    );
 
     // Act
     let result = evaluator.eval(&ty);
@@ -261,7 +271,10 @@ fn test_assert_true_evaluates_to_void() {
     let mut dep_env = DependentTypeEnv::new();
     crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env.types, &budget, &dep_env);
-    let ty = MonoType::TypeRef("Assert(true)".to_string());
+    let ty = MonoType::TypeRef(
+        Nominal::flat(AsRef::<str>::as_ref(&("Assert(true)")))
+            .expect("type name must be bare and non-empty"),
+    );
 
     // Act
     let result = evaluator.eval(&ty);
@@ -283,7 +296,10 @@ fn test_assert_false_evaluates_to_never() {
     let mut dep_env = DependentTypeEnv::new();
     crate::std::assert::AssertModule.register_type_families(&mut dep_env);
     let mut evaluator = Evaluator::new(&env.types, &budget, &dep_env);
-    let ty = MonoType::TypeRef("Assert(false)".to_string());
+    let ty = MonoType::TypeRef(
+        Nominal::flat(AsRef::<str>::as_ref(&("Assert(false)")))
+            .expect("type name must be bare and non-empty"),
+    );
 
     // Act
     let result = evaluator.eval(&ty);

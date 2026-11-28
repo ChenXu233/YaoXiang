@@ -3,7 +3,7 @@
 // 6.6.12：**IR 层不再持有语法层类型**。此前的最后一处载体 `FunctionBody::TypeDecl`
 // 改携 IR 原生的收窄形状 [`TypeDeclBody`]（字段表 + 字节码类型表项），语法层 `ast::Type`
 // 在 IR 里彻底消失（6.2 的四处载体、6.6.11 的两个零生产者指令变体之后的历史见
-// 09a §P6 6.2 / 6.6.11 / 6.6.12）。
+// 提交信息）。
 //
 // 本文件唯一的 AST 侧 import 是 [`Quantity`]（RFC-039 D62 / issue #533）：量词是**绑定
 // 事实**的值域（`Option<Quantity>` 与 `ast::Param::quantity` 是同一个事实），不是语法
@@ -12,13 +12,14 @@ use std::collections::HashMap;
 
 use crate::ast::Quantity;
 use crate::frontend::core::sema::MonoType;
-use crate::frontend::module::symbol::DefId;
+use crate::frontend::core::types::identity::DefId;
+use crate::frontend::core::types::identity::Nominal;
 use crate::util::span::Span;
 
 /// SSA 值标识：函数内稠密编号，单调递增、永不回滚（04-ssa.md §值标识方式）。
 ///
 /// 本批（7b.1a）只建立表示：生产构造点 0、无求值/分配语义；7b.2 起
-/// `next_temp_reg` 改产出 `Operand::Value`（09a §P7 7b.1a 契约 §三 占位 2）。
+/// `next_temp_reg` 改产出 `Operand::Value`（提交信息）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ValueId(pub u32);
 
@@ -256,13 +257,6 @@ pub enum Instruction {
     },
     // 注意：根据 RFC-008，await 不是关键字
     // CallAsync 和 Await 指令已移除，由运行时自动处理
-    TailCall {
-        func: Operand,
-        args: Vec<Operand>,
-        /// 静态调用目标的绑定身份（同 `Call::def`）
-        def: Option<DefId>,
-        span: Span,
-    },
     Ret {
         value: Option<Operand>,
         span: Span,
@@ -550,7 +544,7 @@ pub enum Instruction {
     ///   `verify_ssa` 检查、`normalize` 渲染前再排序）。
     ///
     /// 本批（7b.1a）只引入变体：lowering 生产构造点 0，translator 的消费臂是
-    /// 带不变量注释的占位，真翻译归 7b.3（09a §P7 7b.1a 契约 §二/§三）。
+    /// 带不变量注释的占位，真翻译归 7b.3（提交信息）。
     Phi {
         dst: Operand,
         incoming: Vec<(usize, Operand)>,
@@ -597,7 +591,6 @@ impl Instruction {
             Instruction::Call { span, .. } => *span,
             Instruction::CallVirt { span, .. } => *span,
             Instruction::CallDyn { span, .. } => *span,
-            Instruction::TailCall { span, .. } => *span,
             Instruction::Ret { span, .. } => *span,
             Instruction::Alloc { span, .. } => *span,
             Instruction::Free { span, .. } => *span,
@@ -733,12 +726,6 @@ impl Instruction {
                     f(d);
                 }
                 f(obj);
-                for a in args {
-                    f(a);
-                }
-            }
-            Instruction::TailCall { func, args, .. } => {
-                f(func);
                 for a in args {
                     f(a);
                 }
@@ -942,7 +929,6 @@ impl Instruction {
             | Instruction::Jmp { .. }
             | Instruction::JmpIf { .. }
             | Instruction::JmpIfNot { .. }
-            | Instruction::TailCall { .. }
             | Instruction::Ret { .. }
             | Instruction::Free { .. }
             | Instruction::StoreField { .. }
@@ -1011,11 +997,6 @@ impl Instruction {
             }
             Instruction::CallVirt { obj, args, .. } => {
                 let mut v = vec![obj];
-                v.extend(args);
-                v
-            }
-            Instruction::TailCall { func, args, .. } => {
-                let mut v = vec![func];
                 v.extend(args);
                 v
             }
@@ -1089,20 +1070,20 @@ pub struct BasicBlock {
 /// 1. 函数入口（下标 0）；
 /// 2. 每条 `Jmp` / `JmpIf` / `JmpIfNot` 的目标下标（越界目标跳过——那是
 ///    `verify` 的「jump 目标存在」判据该报的违规，不是本函数的职责）；
-/// 3. 每条跳转 / `Ret` / `TailCall` 之后的下一条指令。
+/// 3. 每条跳转 / `Ret` 之后的下一条指令。
 ///
 /// 块级出边只看块尾终结指令与指令布局（块之间按 `blocks` 顺序相邻，故「下一条
 /// 指令所属块」= 布局上的下一块）：
 /// - `Jmp` → 目标指令所属块；
 /// - `JmpIf` / `JmpIfNot` → 目标指令所属块 + 布局上的下一块（落空边）；
-/// - `Ret` / `TailCall` → 无出边；
+/// - `Ret` → 无出边；
 /// - 其余块尾（布局落空）→ 布局上的下一块；末块的落空不产生边。
 ///
 /// 边连的是块 `label`，所以「块内跳转」在切分后不存在（跳转目标必是 leader ⇒
 /// 必是新块首）；自环只来自「跳转目标正是本块块首」的真循环。跳转目标的
 /// **坐标不变**（仍是展平绝对指令下标），因此 `translator` 的
 /// `global_ir_index` 回填表、`verify` 的指令级 CFG 与 `.42` 字节码都不受影响
-/// （09a §P7 7b.3 契约 §二 第 1 条）。
+/// （提交信息）。
 pub fn partition_blocks(instructions: Vec<Instruction>) -> Vec<BasicBlock> {
     let total = instructions.len();
     if total == 0 {
@@ -1124,7 +1105,7 @@ pub fn partition_blocks(instructions: Vec<Instruction>) -> Vec<BasicBlock> {
             Instruction::JmpIf { target, .. } | Instruction::JmpIfNot { target, .. } => {
                 (Some(*target), true)
             }
-            Instruction::Ret { .. } | Instruction::TailCall { .. } => (None, true),
+            Instruction::Ret { .. } => (None, true),
             _ => (None, false),
         };
         if let Some(target) = target {
@@ -1171,7 +1152,7 @@ pub fn partition_blocks(instructions: Vec<Instruction>) -> Vec<BasicBlock> {
                 }
                 successors.extend(fallthrough);
             }
-            Some(Instruction::Ret { .. } | Instruction::TailCall { .. }) => {}
+            Some(Instruction::Ret { .. }) => {}
             _ => successors.extend(fallthrough),
         }
         successors.sort_unstable();
@@ -1218,7 +1199,7 @@ pub enum FunctionBody {
         /// 槽号由 lowering 既有的临时槽分配器（`next_temp` / `temp_high_water` /
         /// 三处语句级回收）给出——7b.2 不改分配语义，故这里原样记录，使 codegen 能还原
         /// 与改动前相同的字节码槽号（C4 行为等价）。7b.4 的线性扫描分配器接管后
-        /// 重算本表（09a §P7 7b.2 契约 §二 第 6 条）。
+        /// 重算本表（提交信息）。
         value_slots: Vec<usize>,
     },
     /// 返回值是类型 → {} 是类型字面量
@@ -1242,6 +1223,12 @@ pub struct TypeDeclBody {
     pub fields: Vec<TypeDeclField>,
     /// 该类型在字节码类型表（`BytecodeModule::type_table`）里的项
     pub self_type: MonoType,
+    /// 声明类型的**身份**（module + 定义名；RFC-039 D64）。
+    ///
+    /// 由 lower 按定义所在单元的模块键给出（单文件 = 平路径），是构造器
+    /// 合成面唯一可用的身份来源——codegen 不能把 IR 函数名（可能已限定）
+    /// 按点切分反解（D64 禁止按点处理身份串）。
+    pub identity: crate::frontend::core::types::identity::Nominal,
 }
 
 /// 类型声明的一个字段（IR 原生）。
@@ -1267,7 +1254,7 @@ pub struct TypeDeclField {
     ///
     /// SPEC `type-system.md:443`：函数类型字段不生成构造参数。载体必须能表达这个
     /// 区分；但 `translator::synthesize_constructor` 目前仍按历史行为把两类字段都算
-    /// 进构造参数（已知不一致，登记见 09a §P6 6.6.12——本轮不改行为）。
+    /// 进构造参数（已知不一致，登记见提交信息——本轮不改行为）。
     pub is_method: bool,
 }
 
@@ -1462,7 +1449,7 @@ impl ConstValue {
     /// 常量的单态类型（无稳定 `MonoType` 对应时 `None`）。
     ///
     /// 单一来源：lower 的值表类型推导与 verify 的类型一致判据共用本方法
-    /// （09a §P7 7b.2 契约 §二 第 2 条）。
+    /// （提交信息）。
     pub fn mono_type(&self) -> Option<MonoType> {
         match self {
             Self::Void => Some(MonoType::Void),
@@ -1471,7 +1458,8 @@ impl ConstValue {
             Self::Float(_) => Some(MonoType::Float(64)),
             Self::Char(_) => Some(MonoType::Char),
             Self::String(_) => Some(MonoType::Generic {
-                name: "String".to_string(),
+                name: Nominal::flat(AsRef::<str>::as_ref(&("String")))
+                    .expect("type name must be bare and non-empty"),
                 args: Vec::new(),
             }),
             // Bytes / 原生函数值 / FFI 引用无稳定 MonoType 对应（信息不足）。

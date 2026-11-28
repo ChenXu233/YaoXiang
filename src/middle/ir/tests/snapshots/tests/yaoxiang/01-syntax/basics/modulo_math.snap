@@ -3,14 +3,14 @@ module
     slot[0] folded : Int(64) @depth1
     locals_total=4
     values_total=64
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
     value v6: Generic { name: "String", args: [] } @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
     value v9: Int(64) @block0
     value v10: Int(64) @block0
@@ -18,7 +18,7 @@ module
     value v12: Int(64) @block0
     value v13: Int(64) @block0
     value v14: Generic { name: "String", args: [] } @block0
-    value v15: TypeRef("?") @block0
+    value v15: Never @block0
     value v16: Bool @block0
     value v17: Int(64) @block0
     value v18: Int(64) @block0
@@ -27,7 +27,7 @@ module
     value v21: Int(64) @block0
     value v22: Int(64) @block0
     value v23: Generic { name: "String", args: [] } @block0
-    value v24: TypeRef("?") @block0
+    value v24: Never @block0
     value v25: Bool @block0
     value v26: Int(64) @block0
     value v27: Int(64) @block0
@@ -37,14 +37,14 @@ module
     value v31: Int(64) @block0
     value v32: Int(64) @block0
     value v33: Generic { name: "String", args: [] } @block0
-    value v34: TypeRef("?") @block0
+    value v34: Never @block0
     value v35: Bool @block0
     value v36: Float(64) @block0
     value v37: Float(64) @block0
     value v38: Float(64) @block0
     value v39: Float(64) @block0
     value v40: Generic { name: "String", args: [] } @block0
-    value v41: TypeRef("?") @block0
+    value v41: Never @block0
     value v42: Bool @block0
     value v43: Float(64) @block0
     value v44: Float(64) @block0
@@ -55,12 +55,12 @@ module
     value v49: Int(64) @block0
     value v50: Int(64) @block0
     value v51: Int(64) @block0
-    value v52: TypeRef("?") @block0
+    value v52: Never @block0
     value v53: Bool @block0
     value v54: Int(64) @block0
     value v55: Int(64) @block0
     value v56: Generic { name: "String", args: [] } @block0
-    value v57: TypeRef("?") @block0
+    value v57: Never @block0
     value v58: Bool @block0
     value v59: Int(64) @block0
     value v60: Int(64) @block0
@@ -74,6 +74,7 @@ module
     Eq v1 <- v2, v3
     Load v6 <- string("10 % 3 == 1")
     Call v0 <- string("std.assert.assert") [v1, v6] (def=d0)
+    Drop v6
     Load v13 <- int(7)
     Neg v11 <- v13
     Load v12 <- int(3)
@@ -82,6 +83,7 @@ module
     Eq v8 <- v9, v10
     Load v14 <- string("-7 % 3 == 2")
     Call v7 <- string("std.assert.assert") [v8, v14] (def=d0)
+    Drop v14
     Load v19 <- int(7)
     Load v21 <- int(3)
     Neg v20 <- v21
@@ -91,6 +93,7 @@ module
     Eq v16 <- v17, v18
     Load v23 <- string("7 % -3 == -2")
     Call v15 <- string("std.assert.assert") [v16, v23] (def=d0)
+    Drop v23
     Load v30 <- int(7)
     Neg v28 <- v30
     Load v31 <- int(3)
@@ -101,6 +104,7 @@ module
     Eq v25 <- v26, v27
     Load v33 <- string("-7 % -3 == -1")
     Call v24 <- string("std.assert.assert") [v25, v33] (def=d0)
+    Drop v33
     Load v38 <- float(4620130267728707584)
     Load v39 <- float(4611686018427387904)
     Mod v36 <- v38, v39
@@ -108,6 +112,7 @@ module
     Eq v35 <- v36, v37
     Load v40 <- string("7.5 % 2.0 == 1.5")
     Call v34 <- string("std.assert.assert") [v35, v40] (def=d0)
+    Drop v40
     Load v47 <- float(4620130267728707584)
     Neg v45 <- v47
     Load v46 <- float(4611686018427387904)
@@ -116,6 +121,7 @@ module
     Eq v42 <- v43, v44
     Load v48 <- string("-7.5 % 2.0 == 0.5")
     Call v41 <- string("std.assert.assert") [v42, v48] (def=d0)
+    Drop v48
     Load v51 <- int(7)
     Neg v49 <- v51
     Load v50 <- int(3)
@@ -125,6 +131,7 @@ module
     Eq v53 <- v54, v55
     Load v56 <- string("const-folded -7 % 3 == 2")
     Call v52 <- string("std.assert.assert") [v53, v56] (def=d0)
+    Drop v56
     Load v61 <- int(5)
     Load v62 <- int(5)
     Mod v59 <- v61, v62
@@ -132,6 +139,7 @@ module
     Eq v58 <- v59, v60
     Load v63 <- string("5 % 5 == 0")
     Call v57 <- string("std.assert.assert") [v58, v63] (def=d0)
+    Drop v63
     Drop %0
     Ret v57
   init (locals=0)

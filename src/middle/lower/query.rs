@@ -6,9 +6,9 @@
 use super::AstToIrGenerator;
 use crate::ast::{self, Expr};
 use crate::frontend::core::sema::{MonoType, PolyType};
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::module::registry::QualifiedNameConcern;
 use crate::frontend::module::resolver::Resolver;
-use crate::frontend::module::ExportKind;
 use crate::middle::ir::ir::{ConstValue, Operand};
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 use crate::util::span::Span;
@@ -91,7 +91,7 @@ impl AstToIrGenerator {
         field: &str,
     ) -> Option<String> {
         let (head, fields) = flatten_namespace(expr)?;
-        if self.closure_captures.contains_key(head) || self.lookup_local(head).is_some() {
+        if self.lookup_upvalue(head).is_some() || self.lookup_local(head).is_some() {
             return None;
         }
         if !self.resolver().is_namespace(head) {
@@ -132,7 +132,7 @@ impl AstToIrGenerator {
 
     /// 查一个函数的**声明期形参名 + 必需下限**（供命名参数重排与「可选位放行」）。
     ///
-    /// 两个来源，按就近优先：
+    /// 两个来源，按就近/精确优先：
     /// 1. 本模块的 `fn_param_names`（定义与调用同文件）——同模块函数的形参表
     ///    不含可选位语义，故 `required_min` 取全长（全必需）
     /// 2. 模块注册表里的导出：优先用导出携带的 `param_names`（无必需下限信息，
@@ -141,7 +141,14 @@ impl AstToIrGenerator {
     ///    这层同源是 t14 的要点：ir_gen 曾硬编全必需位 ⇒ 合法省略可选位的命名调用
     ///    被共享判据误报 E1010（实测 `assert.assert(cond = 1 == 1)`）。
     ///
-    /// `full_path` 是解析后的限定名（如 `std.list.push`）；`leaf` 是短名。
+    /// **方法面的名字不从这里取**（WBS 4.9.10 D-3）：方法是类型成员、不占模块
+    /// 导出位，名字随重载决议载荷（`MethodResolution::param_names`）直达 IR 生成。
+    /// 旧「来源 2」（`method_param_info`：按 IR 调用名反查投影索引再回候选组）
+    /// 已随之删除——名字只有一条通路，不再有第二份来源。
+    ///
+    /// `full_path` 是解析后的限定名（如 `std.list.push`；跨单元方法形如
+    /// `lib.Point.scale_by`，由 typecheck 的方法身份直出，见 WBS 4.9.10 D-8）；
+    /// `leaf` 是短名。
     pub(in crate::middle) fn lookup_param_info(
         &self,
         full_path: &str,
@@ -158,6 +165,7 @@ impl AstToIrGenerator {
                 required_min,
             });
         }
+
         if let Some(names) = self.fn_param_names.get(leaf) {
             let names = names.clone();
             let required_min = names.len();
@@ -231,9 +239,12 @@ impl AstToIrGenerator {
     /// `ast::Type::runtime_value_params`（沿柯里链走到最内层值组、再剔除编译期位）。
     /// IR 只**渲染**声明写下的类型与名字，不参与判定（WBS 6.8.2 / D54 修复轮 F1）。
     ///
-    /// 一切「实现头第 i 位的声明信息」都从这里取：形参**类型**（`impl_param_types`）、
-    /// 形参**写出类型名**（`note_param_written_types`）、**调用侧可用名**
-    /// （`self.fn_param_names` 的登记）——同一 helper、同一顺序，不得各自再切一次。
+    /// 一切「实现头第 i 位的声明信息」都从这里取：形参**类型**（`impl_param_types`）与
+    /// **调用侧可用名**（`self.fn_param_names` 的登记）——同一 helper、同一顺序，
+    /// 不得各自再切一次。
+    ///
+    /// （形参「写出类型名」那条链已随 WBS 4.9.10 F1 退役：方法身份改由 typecheck 的
+    /// `ImportFace`（D-5/D-6）判定，IR 生成侧不再留任何「写出的类型名」存储。）
     /// SPEC §7.1 分类器的**真注入**：候选类型取 L3 权威表；类型命名空间与谓词集
     /// 由 `generate_module_ir` 入口从 AST 扫出，不使用保守假值。
     /// 实现头绑定序列第 i 位在**调用点实参序列**里的下标（SPEC §7.1「两条序列」）。
@@ -259,17 +270,35 @@ impl AstToIrGenerator {
             .collect();
         let bindable = self.declaration_runtime_param_slots(Some(ann), call_seq.len());
         // 两条序列等长 ⇒ 恒等映射（没有编译期值参数，或它们不与值参数同层）。只有确实
-        // 存在「不占绑定序列的编译期值参数」时才按下标重映射——否则柯里层/裸标识符形参
+        // 存在「不占绑定序列的编译期值参数」时才按下标重映射——否则柯里层/无标注形参
         // 的既有槽位顺序会被打乱（语料 `01-syntax/basics/statement-termination.yx` 实测
         // 因此 E6005）。
         if bindable.len() == call_seq.len() {
             return (0..bindable.len()).collect();
         }
-        bindable
-            .into_iter()
-            .enumerate()
-            .map(|(i, p)| call_seq.iter().position(|n| *n == p.name).unwrap_or(i))
-            .collect()
+        // 按名对位必须**带游标**：未命名形参（D53 的裸类型项）名字槽是空串，
+        // 多个空串用 `position` 会全落到第一个空名下标上（同签名里两个
+        // `Array(Int, N)` 位会得到同一个槽）。游标让同名/同空名的多个位按
+        // 声明序一位一位往后对。（未命名位不可能是编译期值参数——const 候选
+        // 要求形参有名，见 `classify_compile_time_value_params`。）
+        let mut out = Vec::with_capacity(bindable.len());
+        let mut cursor = 0usize;
+        for (i, p) in bindable.into_iter().enumerate() {
+            match call_seq
+                .iter()
+                .enumerate()
+                .skip(cursor)
+                .find(|(_, n)| **n == p.name)
+                .map(|(idx, _)| idx)
+            {
+                Some(idx) => {
+                    out.push(idx);
+                    cursor = idx + 1;
+                }
+                None => out.push(i),
+            }
+        }
+        out
     }
 
     pub(in crate::middle) fn declaration_runtime_param_slots(
@@ -380,7 +409,7 @@ impl AstToIrGenerator {
     // 原因：根据设计文档，不再需要复杂的类型名提取逻辑
     // 方法调用现在直接生成简单函数名（方法名）
 
-    /// 表达式结果的 `MonoType`（7b.2 值表类型来源，09a §P7 7b.2 契约 §二 第 2 条）。
+    /// 表达式结果的 `MonoType`（7b.2 值表类型来源，提交信息）。
     ///
     /// **只取已有可信来源，不新造推断**：变量取类型检查结果 / 绑定表的真实类型；
     /// 构造器调用取类型名；普通函数调用取绑定函数类型的返回类型；其余返回
@@ -400,12 +429,94 @@ impl AstToIrGenerator {
                 }
                 self.lookup_var_type(name).map(|poly| poly.body.clone())
             }
-            ast::Expr::Call { func, .. } => {
+            // 二元运算：结果类型由**运算类型规则**给出（不查表、不猜）。派发形态
+            // （`operator_dispatches` 命中）走边界的同一份结算，优先级最高。
+            ast::Expr::BinOp {
+                op,
+                left,
+                right,
+                span,
+                ..
+            } => {
+                if let Some(dispatch) = self.operator_dispatches.get(span) {
+                    return dispatch.result_type.clone();
+                }
+                use crate::ast::BinOp;
+                match op {
+                    // 谓词位恒 Bool（比较 / 逻辑 / 成员判定）
+                    BinOp::Eq
+                    | BinOp::Neq
+                    | BinOp::Lt
+                    | BinOp::Le
+                    | BinOp::Gt
+                    | BinOp::Ge
+                    | BinOp::And
+                    | BinOp::Or => Some(MonoType::Bool),
+                    // 区间：start/end/step 三槽的 Int 区间（#300）
+                    BinOp::Range => Some(MonoType::Generic {
+                        name: Nominal::flat(AsRef::<str>::as_ref(&("Range")))
+                            .expect("Range 是裸类型名"),
+                        args: vec![MonoType::Int(64)],
+                    }),
+                    // 赋值表达式：值 = 右值类型
+                    BinOp::Assign => self.expr_value_type(right),
+                    // 算术 / 位运算：两侧同型取该型；Int 与 Float 混合按 Float（数值提升）
+                    _ => {
+                        let l = self.expr_value_type(left);
+                        let r = self.expr_value_type(right);
+                        match (l, r) {
+                            (Some(l), Some(r)) if l == r => Some(l),
+                            (Some(MonoType::Int(_)), Some(MonoType::Float(_)))
+                            | (Some(MonoType::Float(_)), Some(MonoType::Int(_))) => {
+                                Some(MonoType::Float(64))
+                            }
+                            _ => None,
+                        }
+                    }
+                }
+            }
+            // 一元运算：取反恒 Bool，其余取子表达式类型
+            ast::Expr::UnOp {
+                op, expr: inner, ..
+            } => match op {
+                crate::ast::UnOp::Not => Some(MonoType::Bool),
+                crate::ast::UnOp::Neg | crate::ast::UnOp::Pos => self.expr_value_type(inner),
+                crate::ast::UnOp::Deref => self.expr_value_type(inner),
+            },
+            // 字面量的类型是可信来源（与值表落库走同一条映射）。
+            ast::Expr::Lit(literal, _) => {
+                crate::middle::lower::expr::lit::literal_const_value(literal).mono_type()
+            }
+            // 容器字面量：交给同一套结构推导（元素/分量类型逐位递归）。
+            ast::Expr::List(..) | ast::Expr::Tuple(..) | ast::Expr::Dict(..) => {
+                self.get_expr_mono_type(expr)
+            }
+            // 闭包结果类型：同一张表、同一身份形态（typecheck 在 lambda 推断处落表）。
+            // 命中即 `MakeClosure` 的 dst 类型 = 该 `Fn` 类型；未命中落显式未知。
+            ast::Expr::Lambda { plan_id, .. } => self
+                .type_result
+                .as_ref()
+                .and_then(|tr| tr.expr_result_types.get(plan_id))
+                .cloned(),
+            ast::Expr::Call { func, plan_id, .. } => {
+                // 调用点结果类型：sema 在 `infer_call_expr` 返回处落的表（同一节点的
+                // 同一 `PlanId`，RFC-039 D20）。限定名 / native / 方法 / 泛型调用的
+                // **最终**类型只有它有——按被调名反查原生签名取不到（#593）。
+                if let Some(ty) = self
+                    .type_result
+                    .as_ref()
+                    .and_then(|tr| tr.expr_result_types.get(plan_id))
+                {
+                    return Some(ty.clone());
+                }
                 let ast::Expr::Var(name, _) = func.as_ref() else {
                     return None;
                 };
                 if self.struct_definitions.contains_key(name) {
-                    return Some(MonoType::TypeRef(name.clone()));
+                    return Some(MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
+                            .expect("type name must be bare and non-empty"),
+                    ));
                 }
                 match self.lookup_var_type(name).map(|poly| &poly.body) {
                     Some(MonoType::Fn { return_type, .. }) => Some((**return_type).clone()),
@@ -487,34 +598,85 @@ impl AstToIrGenerator {
             };
         }
 
-        // 1. 尝试从表达式类型推导结构体名，精确查找
+        // 1a. 身份已知：按**身份**取该定义自己的字段序（a.T / b.T 同名不串味）
+        if let Some(identity) = self.get_expr_struct_identity(expr) {
+            if let Some(fields) = self.struct_fields_by_identity(&identity) {
+                if let Some(index) = Self::field_index_in(fields, field_name) {
+                    return Some(index);
+                }
+            }
+        }
+
+        // 1b. 写名/裸名视图（构造器与 AST 写名只有裸名时的既有路径）
         if let Some(type_name) = self.get_expr_struct_type_name(expr) {
             if let Some(fields) = self.struct_definitions.get(&type_name) {
-                for (i, field) in fields.iter().enumerate() {
-                    if field.name == field_name {
-                        return crate::frontend::core::types::mono::runtime_field_index(
-                            fields.iter().map(|f| f.quantity),
-                            i,
-                        );
-                    }
+                if let Some(index) = Self::field_index_in(fields, field_name) {
+                    return Some(index);
                 }
             }
         }
 
         // 2. 兜底：遍历所有结构体定义查找字段名（当类型推导不可用时）
         for fields in self.struct_definitions.values() {
-            for (i, field) in fields.iter().enumerate() {
-                if field.name == field_name {
-                    return crate::frontend::core::types::mono::runtime_field_index(
-                        fields.iter().map(|f| f.quantity),
-                        i,
-                    );
-                }
+            if let Some(index) = Self::field_index_in(fields, field_name) {
+                return Some(index);
             }
         }
 
         // 3. 未找到，返回 None
         None
+    }
+
+    /// 在字段表里定位字段并换算运行期槽下标（唯一换算点 runtime_field_index）。
+    fn field_index_in(
+        fields: &[crate::ast::StructField],
+        field_name: &str,
+    ) -> Option<usize> {
+        let i = fields.iter().position(|field| field.name == field_name)?;
+        crate::frontend::core::types::mono::runtime_field_index(
+            fields.iter().map(|f| f.quantity),
+            i,
+        )
+    }
+
+    /// 表达式的结构体**身份**（身份已知时）——字段索引按身份取表，不按裸名。
+    ///
+    /// 来源与 [`Self::get_expr_struct_type_name`] 同一批事实（局部变量类型、
+    /// 绑定类型、调用点结果类型），区别只在保留名义头而不是压成裸名；写名兜底
+    /// 用 `Nominal::flat`（含点的限定名不冒充身份）。
+    pub(in crate::middle) fn get_expr_struct_identity(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<Nominal> {
+        match expr {
+            ast::Expr::Var(name, _) => {
+                if let Some(mono) = self
+                    .type_result
+                    .as_ref()
+                    .and_then(|tr| tr.local_var_types.get(name))
+                {
+                    if let Some(identity) = Self::mono_nominal(mono) {
+                        return Some(identity.clone());
+                    }
+                }
+                if let Some(poly) = self.lookup_var_type(name) {
+                    if let Some(identity) = Self::mono_nominal(&poly.body) {
+                        return Some(identity.clone());
+                    }
+                }
+                let type_name = self.local_var_types.get(name)?;
+                Nominal::flat(Self::strip_ref_prefix(type_name))
+            }
+            // 构造调用：当前树没有「调用点结果类型」表，按**写名**反查身份
+            // （本单元本地键唯一；单文件平坦名回退平路径）。
+            ast::Expr::Call { func, .. } => match func.as_ref() {
+                ast::Expr::Var(name, _) => self
+                    .identity_for_written(name)
+                    .or_else(|| Nominal::flat(name)),
+                _ => None,
+            },
+            _ => None,
+        }
     }
 
     /// 从表达式推导其结构体类型名称
@@ -563,12 +725,12 @@ impl AstToIrGenerator {
     /// 从 MonoType 提取结构体类型名
     fn mono_type_to_struct_name(mono_type: &MonoType) -> Option<String> {
         match mono_type {
-            MonoType::TypeRef(name) => Some(name.clone()),
-            MonoType::Struct(st) => Some(st.name.clone()),
+            MonoType::TypeRef(name) => Some(name.clone().bare().to_string()),
+            MonoType::Struct(st) => Some(st.name.clone().bare().to_string()),
             // RFC-011 §4.2：泛型类型实例（`ValList(Int)`）— 方法绑定注册在类型名上
             // （`ValList.push`），故用 Generic 的名字取绑定；不给名字则方法调用
             // 落到 native 查找（`m.push` → “Native function not found”）。
-            MonoType::Generic { name, .. } => Some(name.clone()),
+            MonoType::Generic { name, .. } => Some(name.clone().bare().to_string()),
             // #266: &mut 令牌穿透——Ref 递归取 inner（m = &mut q 的类型是
             // Ref { mutable, inner: Point }，方法派发应基于 Point）
             MonoType::Ref { inner, .. } => Self::mono_type_to_struct_name(inner),
@@ -587,131 +749,6 @@ impl AstToIrGenerator {
         } else {
             t
         }
-    }
-
-    /// 类型注解里**写出**的类型名：`Temp` / `TempB` / `&TempB` → 名字部分。
-    /// 内建类型、函数类型、结构体字面量返回 None（不是「某个单元的类型名」）。
-    pub(in crate::middle) fn written_type_name_of(ty: &ast::Type) -> Option<&str> {
-        match ty {
-            ast::Type::Name { name, .. } | ast::Type::Generic { name, .. } => Some(name.as_str()),
-            ast::Type::Ref { inner, .. }
-            | ast::Type::Ptr(inner)
-            | ast::Type::Paren(inner)
-            | ast::Type::NamedParen { inner, .. } => Self::written_type_name_of(inner),
-            _ => None,
-        }
-    }
-
-    /// 构造器表达式**写出**的类型名——**纯语法提取**，不做单元归属判定。
-    ///
-    /// `T(..)` → `T`；`ns.T(..)` / `ns.sub.T(..)` → 调用点原样的点分写法。
-    /// 「这个名字是不是类型、属于哪个单元」一律交给
-    /// [`Self::imported_type_owner`]（**唯一**归属判定点）——此处只记录用户写出的
-    /// 名字，避免同一判定在两处各做一遍（WBS 4.9.8 修复轮 R2 / issue #465：上一版
-    /// 在这里产出「权威限定名」再被归属判定二次解析，首段经命名空间别名表改写，
-    /// 权威名丢失）。
-    pub(in crate::middle) fn constructor_written_type_name(
-        &self,
-        expr: &ast::Expr,
-    ) -> Option<String> {
-        let ast::Expr::Call { func, .. } = expr else {
-            return None;
-        };
-        match func.as_ref() {
-            ast::Expr::Var(name, _) => Some(name.clone()),
-            ast::Expr::FieldAccess { .. } => {
-                let (head, fields) = flatten_namespace(func)?;
-                Some(
-                    std::iter::once(head)
-                        .chain(fields)
-                        .collect::<Vec<_>>()
-                        .join("."),
-                )
-            }
-            _ => None,
-        }
-    }
-
-    /// 「这个限定名是**类型导出**」——注册表导出面的唯一判据。
-    fn is_type_export(
-        &self,
-        qualified: &str,
-    ) -> bool {
-        self.registry
-            .resolve_export(qualified)
-            .map(|export| matches!(export.kind, ExportKind::Type))
-            .unwrap_or(false)
-    }
-
-    /// 把「写出的名字」解析成**别的单元**的类型限定名（本单元自有类型 → None）。
-    ///
-    /// **归属判定的唯一来源**（WBS 4.9.8 修复轮 R2）。三条判据按序，命中即返回：
-    /// 1. **权威限定名**（`b.Temp` / `p.q.Temp`）：注册表里就存在该模块与该类型导出
-    ///    ⇒ **原样返回，绝不再解析**。模块键是权威身份，命名空间别名表不得改写它
-    ///    （R2 实测：`use other as p` 会把 `p.q.Temp` 二次解析成 `other.q.Temp`）；
-    /// 2. **本地名**（`TempB`）→ 导入名表 `use_aliases`（`use b.{Temp as TempB}` 的条目）；
-    /// 3. **命名空间前缀写法**（`io.X` / 用户模块别名 `m.T`）→ [`Resolver`] 的命名空间
-    ///    解析（与调用名限定化同一实现，不另起路径解析）。
-    ///
-    /// 解析结果必须是注册表的类型导出；否则不给归属（宁可不限定，不回错单元）。
-    fn imported_type_owner(
-        &self,
-        written: &str,
-    ) -> Option<String> {
-        let written = Self::strip_ref_prefix(written);
-        // 本单元自有类型：裸名就是定义侧名字，限定化留给 `qualify_names`
-        if self.declared_type_names.contains(written) {
-            return None;
-        }
-        // ① 权威限定名：精确命中即用，不再过命名空间/别名解析
-        if self.is_type_export(written) {
-            return Some(written.to_string());
-        }
-        // ② 本地名 → 导入名表（含 `use M.{T as X}` 的内联别名条目）
-        if let Some(qualified) = self.use_aliases.get(written) {
-            if self.is_type_export(qualified) {
-                return Some(qualified.clone());
-            }
-        }
-        // ③ 命名空间前缀写法（std 子模块 / 用户模块别名）
-        let (head, rest) = written.split_once('.')?;
-        let fields: Vec<&str> = rest.split('.').collect();
-        let qualified = self.resolver().resolve_namespace(head, &fields);
-        self.is_type_export(&qualified).then_some(qualified)
-    }
-
-    /// 方法派发名的**唯一判据**：把「定义侧名字」的裸类型前缀按接收者所属单元
-    /// 限定化（`Temp.tag` → `b.Temp.tag`），使跨单元同名类型的方法落回各自单元。
-    ///
-    /// `definition_name` 的形态有三处生产者（RFC-004 绑定 / D20 重载决议 / 裸名
-    /// 推导），前缀一律是 typecheck 与 `type_bindings` 共用的**定义侧裸类型名**；
-    /// 三者都经本函数产出最终调用名，判据只此一份（D3）。
-    /// 接收者类型名与定义名前缀对不上时原样返回（不是这个类型的方法面）。
-    pub(in crate::middle) fn method_dispatch_name(
-        &self,
-        recv: &ast::Expr,
-        definition_name: &str,
-    ) -> String {
-        let owner = match recv {
-            ast::Expr::Var(name, _) => self
-                .binding_written_type(name)
-                .and_then(|written| self.imported_type_owner(written)),
-            _ => self
-                .constructor_written_type_name(recv)
-                .and_then(|written| self.imported_type_owner(&written)),
-        };
-        let Some(owner) = owner else {
-            return definition_name.to_string();
-        };
-        let Some((prefix, rest)) = definition_name.split_once('.') else {
-            return definition_name.to_string();
-        };
-        // 定义侧前缀是裸类型名；只有它就是接收者类型的叶子名时才替换
-        // （重载混编序 `#k` 原样保留——决议选的是**候选序**，单元由接收者定）。
-        if owner.rsplit('.').next() != Some(prefix) {
-            return definition_name.to_string();
-        }
-        format!("{owner}.{rest}")
     }
 
     /// 声明期分类的量词投影（`TypeCheckResult.record_models` 是唯一来源）。
@@ -758,7 +795,10 @@ impl AstToIrGenerator {
     /// 其余（含 `Struct`/`NamedStruct`/`MetaType` 等）→ `Void`。
     pub(in crate::middle) fn type_decl_self_type(ast_type: &ast::Type) -> MonoType {
         match ast_type {
-            ast::Type::Name { name, .. } => MonoType::TypeRef(name.clone()),
+            ast::Type::Name { name, .. } => MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
+                    .expect("type name must be bare and non-empty"),
+            ),
             ast::Type::Tuple(types) => {
                 MonoType::make_tuple(types.iter().map(Self::type_decl_self_type).collect())
             }
@@ -774,14 +814,19 @@ impl AstToIrGenerator {
                     .collect(),
                 return_type: Box::new(Self::type_decl_self_type(return_type)),
             },
-            ast::Type::Generic { name, args, .. } => MonoType::TypeRef(format!(
-                "{}({})",
-                name,
-                args.iter()
-                    .map(|t| Self::type_decl_self_type(t).type_name())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )),
+            ast::Type::Generic { name, args, .. } => MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(
+                    &(format!(
+                        "{}({})",
+                        name,
+                        args.iter()
+                            .map(|t| Self::type_decl_self_type(t).type_name())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )),
+                ))
+                .expect("type name must be bare and non-empty"),
+            ),
             _ => MonoType::Void,
         }
     }
@@ -791,7 +836,7 @@ impl AstToIrGenerator {
     /// 剥掉透明包装（`Paren` / `NamedParen`）后再判——与 `From<ast::Type> for MonoType`
     /// 的透明口径一致（RFC-004 / RFC-027 §3）。SPEC `type-system.md:443`：函数类型字段
     /// 不生成构造参数；当前 `translator::synthesize_constructor` 仍把两类都算进构造参数
-    /// （已知不一致，登记见 09a §P6 6.6.12，本轮不改行为）。
+    /// （已知不一致，登记见提交信息，本轮不改行为）。
     pub(in crate::middle) fn field_is_method(ty: &ast::Type) -> bool {
         let mut t = ty;
         loop {
@@ -1015,7 +1060,10 @@ impl AstToIrGenerator {
             ast::Expr::Var(name, _) => {
                 crate::frontend::core::types::mono::MonoType::from_builtin_name(name)
                     .unwrap_or_else(|| {
-                        crate::frontend::core::types::mono::MonoType::TypeRef(name.clone())
+                        crate::frontend::core::types::mono::MonoType::TypeRef(
+                            Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
+                                .expect("type name must be bare and non-empty"),
+                        )
                     })
             }
             ast::Expr::Call { func, args, .. } => {
@@ -1026,14 +1074,23 @@ impl AstToIrGenerator {
                         // `Vec(List(Int))(…)` 直造形态的内层 `List(Int)` 走本臂
                         // 递归，不过归一会在 L3 IR 视图产出 `Generic{"List"}`，
                         // 与 L2 表示劈叉。
-                        name: MonoType::source_container_face(cname),
+                        name: Nominal::flat(AsRef::<str>::as_ref(
+                            &(MonoType::source_container_face(cname)),
+                        ))
+                        .expect("type name must be bare and non-empty"),
                         args: args.iter().map(Self::type_arg_of_expr_ir).collect(),
                     }
                 } else {
-                    MonoType::TypeRef("_".to_string())
+                    MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&("_")))
+                            .expect("type name must be bare and non-empty"),
+                    )
                 }
             }
-            _ => MonoType::TypeRef("_".to_string()),
+            _ => MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("_")))
+                    .expect("type name must be bare and non-empty"),
+            ),
         }
     }
 
@@ -1047,7 +1104,12 @@ impl AstToIrGenerator {
             return "_".to_string();
         };
         crate::frontend::core::types::mono::MonoType::from_builtin_name(name)
-            .unwrap_or_else(|| crate::frontend::core::types::mono::MonoType::TypeRef(name.clone()))
+            .unwrap_or_else(|| {
+                crate::frontend::core::types::mono::MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
+                        .expect("type name must be bare and non-empty"),
+                )
+            })
             .type_name()
     }
 
@@ -1147,7 +1209,8 @@ impl AstToIrGenerator {
             } => {
                 // #300 I 项：Range 是一等值（start/end/step 三槽），类型恒为 Range(Int)
                 Some(MonoType::Generic {
-                    name: "Range".into(),
+                    name: Nominal::flat(AsRef::<str>::as_ref(&("Range")))
+                        .expect("type name must be bare and non-empty"),
                     args: vec![MonoType::Int(64)],
                 })
             }
@@ -1157,7 +1220,6 @@ impl AstToIrGenerator {
                         return Some(mono_type.clone());
                     }
                 }
-
                 self.lookup_var_type(name)
                     .map(|poly_type| poly_type.body.clone())
             }
@@ -1175,7 +1237,23 @@ impl AstToIrGenerator {
                     _ => None,
                 }
             }
-            ast::Expr::List(_, _) => Some(MonoType::make_list(MonoType::Void)),
+            ast::Expr::List(items, _) => {
+                // 元素类型：逐元素取**已定**类型（`expr_value_type`），全部一致才采信。
+                // 拿不到一致类型时保留历史的 `Void` 占位（结构性查询需要容器形态）。
+                let mut element: Option<MonoType> = None;
+                let mut homogeneous = true;
+                for item in items {
+                    match (self.expr_value_type(item), &element) {
+                        (Some(ty), None) => element = Some(ty),
+                        (Some(ty), Some(prev)) if *prev == ty => {}
+                        _ => homogeneous = false,
+                    }
+                }
+                Some(MonoType::make_list(match (homogeneous, element) {
+                    (true, Some(ty)) => ty,
+                    _ => MonoType::Void,
+                }))
+            }
             // `Vec(Int)(...)` / `Array(Int, 3)(...)` 的静态类型。
             //
             // 链式取字段（`Vec(Int)().length`）走 `get_expr_mono_type` 判类型，
@@ -1194,7 +1272,8 @@ impl AstToIrGenerator {
                             && !self.declared_type_names.contains(cname)
                         {
                             return Some(MonoType::Generic {
-                                name: cname.clone(),
+                                name: Nominal::flat(AsRef::<str>::as_ref(&(cname.clone())))
+                                    .expect("type name must be bare and non-empty"),
                                 args: type_args.iter().map(Self::type_arg_of_expr_ir).collect(),
                             });
                         }
@@ -1273,9 +1352,9 @@ impl AstToIrGenerator {
         ty: &MonoType,
     ) -> Option<String> {
         match ty {
-            MonoType::TypeRef(n) => self.interface_from_name(n),
-            MonoType::Struct(s) if !s.name.is_empty() && Self::is_constraint_struct(s) => {
-                self.interface_from_name(&s.name)
+            MonoType::TypeRef(n) => self.interface_from_name(n.bare()),
+            MonoType::Struct(s) if !s.name.bare().is_empty() && Self::is_constraint_struct(s) => {
+                self.interface_from_name(s.name.bare())
             }
             _ => None,
         }

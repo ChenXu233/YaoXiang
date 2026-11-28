@@ -66,7 +66,7 @@ module
     values_total=24
     value v0: Void @block0
     value v1: Int(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Never @block0
     value v3: Bool @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
@@ -81,8 +81,8 @@ module
     value v14: Int(64) @block0
     value v15: Generic { name: "Vec", args: [Int(64)] } @block0
     value v16: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v17: TypeRef("?") @block0
-    value v18: TypeRef("?") @block0
+    value v17: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v18: Never @block0
     value v19: Bool @block0
     value v20: Int(64) @block0
     value v21: Int(64) @block0
@@ -93,11 +93,14 @@ module
     Call %0 <- string("mk") [v0, v1] (def=d1)
     Load v7 <- %0
     Move v6 <- v7
+    Drop v7
+    Drop v6
     Call v4 <- string("count") [v6] (def=d2)
     Load v5 <- int(1)
     Eq v3 <- v4, v5
     Load v8 <- string("generic return keeps concrete type")
     Call v2 <- string("std.assert.assert") [v3, v8] (def=d3)
+    Drop v8
     Drop %0
     AllocArray %1 size=int(3), elem=int(1)
     Load v9 <- int(1)
@@ -111,20 +114,25 @@ module
     StoreIndex %1[v14] <- v13
     Load v16 <- %1
     Move v15 <- v16
+    Drop v16
     MakeClosure v17 <- closure_0 env=[] (def=d4)
+    Drop v15
     Call %2 <- string("apply_to") [v15, v17] (def=d5)
+    Drop v17
     Drop %1
     Load v22 <- %2
     StringLength v20 <- v22
+    Drop v22
     Load v21 <- int(0)
     Eq v19 <- v20, v21
     Load v23 <- string("lambda return type inferred")
     Call v18 <- string("std.assert.assert") [v19, v23] (def=d3)
+    Drop v23
     Drop %2
     Drop %1
     Drop %0
     Ret v18
-  fn closure_0(Int(64)) -> Void
+  fn closure_0(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth2
     locals_total=4
     values_total=4

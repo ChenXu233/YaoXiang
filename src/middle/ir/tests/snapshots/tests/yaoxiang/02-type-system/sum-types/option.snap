@@ -15,11 +15,14 @@ module
     RcNew %0 <- v0
     Load v1 <- %0
     Call %1 <- string("std.weak.new") [v1] (def=d0)
+    Drop v1
     Load v2 <- %1
     Call %2 <- string("std.weak.upgrade") [v2] (def=d1)
+    Drop v2
     Load %3 <- %2
     Load v4 <- string("option roundtrip ok")
     Call v3 <- string("std.io.println") [v4] (def=d2)
+    Drop v4
     Drop %0
     Drop %3
     Ret v3

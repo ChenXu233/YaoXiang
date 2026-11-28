@@ -18,13 +18,17 @@
 mod call;
 mod expr;
 
+use crate::frontend::core::sema::environment::MethodOverloadCandidates;
+use crate::frontend::core::sema::import_face::ImportFace;
 use crate::frontend::core::sema::passes::overload;
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::core::types::{MonoType, PolyType, TypeConstraintSolver};
 use crate::middle::passes::mono::instance::InstantiationRequest;
 use std::collections::{HashMap, HashSet};
 
 use super::call_ownership::CallOwnershipTable;
 use super::scope::ScopeManager;
+use crate::frontend::core::types::identity::Nominal;
 
 /// 空的 Native 签名表（默认值）
 static EMPTY_SIGNATURES: std::sync::LazyLock<HashMap<String, MonoType>> =
@@ -32,6 +36,10 @@ static EMPTY_SIGNATURES: std::sync::LazyLock<HashMap<String, MonoType>> =
 
 /// 空的类型定义表（默认值）：与 `TypeEnvironment.types` 同型，判等判定点的 δ 表
 static EMPTY_POLY_TYPES: std::sync::LazyLock<HashMap<String, PolyType>> =
+    std::sync::LazyLock::new(HashMap::new);
+
+/// 空的方法绑定表（默认值）：键是方法身份，与 `TypeEnvironment.method_bindings` 同型
+static EMPTY_METHOD_BINDINGS: std::sync::LazyLock<HashMap<DefPath, MonoType>> =
     std::sync::LazyLock::new(HashMap::new);
 
 /// #387：native arity 区间表空缺省
@@ -103,6 +111,45 @@ pub(super) fn never_short_circuit(
     }
 }
 
+/// 算子派发点的 **IR 最终函数名**（WBS 4.9.10 D-8）：两个遍历器共用的唯一实现。
+///
+/// 判据按序，命中即返回——不做优先级推理：
+/// 1. 接收者是**绑定变量**且登记了类型身份（D-6）⇒ 身份定方法键 ⇒ 名字；
+///    跨单元**同名类型**的接收者只有这一档能区分（静态类型名是定义侧裸名）；
+/// 2. 否则按导入面解析定义侧裸类型名（D-5，`ImportFace` 是唯一解析实现）；
+/// 3. 都无身份 ⇒ 定义侧裸名 `{Type}.{method}`（D-1 的无模块投影：与既有名字逐字
+///    相同，重载/泛型特化的下游改写照旧）。
+///
+/// 为什么调用名必须在这里定：lower 侧曾按短名查 `short_to_qualified_map` 二次猜
+/// 单元，同名的两个单元谁先注册谁赢（静默错值）。身份只在 typecheck 侧可得，
+/// 故名字在记录派发点时一次定死，IR 直接消费。
+pub(super) fn operator_dispatch_name(
+    scope: &ScopeManager,
+    face: Option<&ImportFace>,
+    receiver: &crate::ast::Expr,
+    impl_type: &str,
+    method: &str,
+) -> String {
+    let identity = match receiver {
+        crate::ast::Expr::Var(name, _) => scope.type_identity(name),
+        _ => None,
+    };
+    let key = identity
+        .map(|type_path| DefPath::method(&type_path.module, &type_path.name, method))
+        .or_else(|| {
+            face.and_then(|face| {
+                face.method_key(
+                    crate::frontend::core::sema::import_face::WrittenTypeName::from_ast(impl_type),
+                    method,
+                )
+            })
+        });
+    match key {
+        Some(key) => crate::frontend::core::sema::environment::method_ir_name(&key, 0),
+        None => format!("{impl_type}.{method}"),
+    }
+}
+
 static EMPTY_GENERIC_TYPE_DEFS: std::sync::LazyLock<
     HashMap<String, crate::frontend::core::sema::environment::GenericTypeDef>,
 > = std::sync::LazyLock::new(HashMap::new);
@@ -170,7 +217,7 @@ pub struct ExpressionInferrer<'a> {
     /// **与 merged-IR 同源的限定名** `{module_key}.{f}`——ir_gen 的
     /// `qualify_names` 把每个模块的顶层函数重写为这一格式，下游 mono 消费
     /// merged_ir 时按名匹配泛型定义表；用裸 `f` 匹配不到 `lib.f`，请求被静默
-    /// 跳过。限定名拼接一律经 [`crate::frontend::module::symbol::SymbolTable::qualify`]（格式唯一所有者）。
+    /// 跳过。限定名拼接一律经 [`crate::frontend::core::types::identity::DefPath::project`]（唯一拼接实现）。
     ///
     /// None（测试直构 / 独立表达式推断）→ 限定调用不发请求，行为与注入前一致。
     module_namespaces: Option<&'a HashMap<String, String>>,
@@ -186,9 +233,11 @@ pub struct ExpressionInferrer<'a> {
     return_annotation_span: Option<crate::util::span::Span>,
     /// 当前嵌套的 `unsafe {}` 深度（RFC-010：unsafe 块内允许类型定义）
     unsafe_depth: usize,
-    /// 方法绑定表: "Type.method" -> MonoType(Fn)
+    /// 方法绑定表：方法身份 → MonoType(Fn)
     /// 用于方法调用语法糖解析: p.draw(screen) → Point.draw(p, screen)
-    method_bindings: &'a HashMap<String, MonoType>,
+    method_bindings: &'a HashMap<DefPath, MonoType>,
+    /// 导入面（D-5）：方法身份的唯一解析入口（`ImportFace::method_key`）
+    import_face: Option<&'a ImportFace>,
     /// RFC-011b: 接口实现登记表（运算符查询唯一判据，不经名字解析）
     interface_impl_registry:
         &'a HashMap<String, Vec<crate::frontend::core::sema::environment::InterfaceImplEntry>>,
@@ -199,6 +248,9 @@ pub struct ExpressionInferrer<'a> {
     /// 用于 TypeRef → Struct 解析（字段访问等）；6.9.3d 起同时是判等判定点的
     /// δ 展开表（`decide` 把它交给 `DefeqContext.types`）。
     type_defs: &'a HashMap<String, PolyType>,
+    /// `env.types` 的派生索引（身份→本地键）：由 StatementChecker 借用注入
+    /// （与 `type_defs` 同生命周期，不是第二份权威；本批 S3 只穿透不查询）。
+    type_identity_index: Option<&'a HashMap<Nominal, String>>,
     /// 泛型类型定义表
     /// 用于 List(1, 2, 3) 等泛型类型构造调用的实例化
     generic_type_defs:
@@ -206,16 +258,18 @@ pub struct ExpressionInferrer<'a> {
     /// RFC-011b：当前函数的约束形参（形参 → 接口名）——定义体内
     /// 约束类型上的运算符延迟派发依据
     current_fn_param_constraints: Option<&'a HashMap<String, String>>,
-    /// RFC-011a §3：重载候选签名与 IR 混编名（方法级重载决议）
-    method_overloads: Option<&'a HashMap<String, Vec<MonoType>>>,
-    method_overload_ir_names: Option<&'a HashMap<String, Vec<String>>>,
-    /// RFC-011a §3 / #452：重载候选的声明期形参名（与候选序一一对应，含接收者位）。
-    /// 命名实参按形参名绑定到候选参数位——决议与冲突判定都读它。
-    method_overload_param_names: Option<&'a HashMap<String, Vec<Vec<String>>>>,
+    /// RFC-011a §3 / #452：方法重载候选（方法身份 → 候选组）。
+    ///
+    /// 候选签名与声明期形参名**同组同序**（[`MethodOverloadCandidates`]）——
+    /// 决议按候选序取名、命名实参按形参名入槽，两者读同一组，不可能错位。
+    method_overloads: Option<&'a HashMap<DefPath, MethodOverloadCandidates>>,
     /// 期望类型（带注解绑定传入，方法重载按期望返回决议）
     current_expected: Option<MonoType>,
     /// RFC-011a §3：重载决议点（**调用点 PlanId** → 混编 IR 名；RFC-039 D20）
-    pub overload_resolutions: Vec<(crate::util::plan_id::PlanId, String)>,
+    pub overload_resolutions: Vec<(
+        crate::util::plan_id::PlanId,
+        crate::frontend::core::sema::types::MethodResolution,
+    )>,
     /// 实例化请求（收集遇到的所有泛型函数实例化需求）
     pub instantiation_requests: Vec<InstantiationRequest>,
     /// 泛型函数的声明序类型参数名：函数名 -> ["T", "Acc", ...]（由 StatementChecker 注入）。
@@ -224,18 +278,18 @@ pub struct ExpressionInferrer<'a> {
     /// 最近一次 `monomorphize` 解出的类型实参（按声明顺序），供紧随其后的
     /// `collect_instantiation_request` 取用。
     last_type_args: Vec<MonoType>,
-    /// FieldAccess 臂解析到的**方法绑定键**（`Box.get` 形态；与
-    /// `method_bindings` 的查找键同一构造）。写入纪律：FieldAccess 臂进体先
+    /// FieldAccess 臂解析到的**方法身份**（与 `method_bindings` / 重载候选表
+    /// 的键同一个 [`DefPath`]）。写入纪律：FieldAccess 臂进体先
     /// 清空、命中方法绑定时写入（臂是唯一生产者）。消费在**调用边界**：
     /// `infer_call_expr` 在 `infer_expr(func)` 之后立即 `take` 快照——被调方
     /// 是 FieldAccess 时快照值经参数传入调用点证据判定（E1113 的方法面，
     /// issue #538），否则丢弃。判定只消费快照、不读状态位——实参推断对状态
     /// 位的覆盖不影响本次判定，残留在各调用边界被清除。
-    last_method_binding_key: Option<String>,
+    last_method_binding_key: Option<DefPath>,
     /// RFC-011a §6 存在类型强制点（具体→存在包装点，ir_gen 按 span 查表注入包装）
     pub existential_coercions: Vec<super::existential::ExistentialCoercion>,
     /// RFC-011b: 运算符派发点（显式接口实现命中处，ir_gen 按 span 注入方法调用）
-    pub try_expr_impls: Vec<(crate::util::span::Span, String)>,
+    pub try_expr_impls: crate::frontend::core::sema::operator_interfaces::TryExprImpls,
     pub operator_dispatches:
         Vec<crate::frontend::core::sema::operator_interfaces::OperatorDispatch>,
     /// 依赖类型环境（效应查询）—— 由 StatementChecker 注入
@@ -264,6 +318,10 @@ pub struct ExpressionInferrer<'a> {
     /// #389：match scrutinee 推断类型（match 节点 span 键控）——IR 生成期
     /// generate_match_expr_ir 按 span 回查，替代对复合 scrutinee 的 AST 猜测
     pub match_scrutinee_types: HashMap<crate::util::span::Span, MonoType>,
+    /// 调用点结果类型（**调用点 `PlanId` 键控**，RFC-039 D20）：本推断器在
+    /// `infer_call_expr` 返回处落表，随委托回流 `StatementChecker`，最终由
+    /// `TypeCheckResult` 交给 IR 生成（`lower/query.rs::expr_value_type` 按同一身份回查）。
+    pub expr_result_types: HashMap<crate::util::plan_id::PlanId, MonoType>,
     /// WBS 3.4.1：编译期不可求值的 const 泛型约束（span + 约束描述）——
     /// 事实收集，经 StatementChecker 回收、checker 发射 W1063（先例同构：
     /// instantiation_requests 等字段的同一条汇聚链）。
@@ -297,13 +355,14 @@ impl<'a> ExpressionInferrer<'a> {
             expected_return_type: None,
             return_annotation_span: None,
             unsafe_depth: 0,
-            method_bindings: &EMPTY_SIGNATURES,
+            method_bindings: &EMPTY_METHOD_BINDINGS,
+            import_face: None,
             type_defs: &EMPTY_POLY_TYPES,
+
+            type_identity_index: None,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             current_fn_param_constraints: None,
             method_overloads: None,
-            method_overload_ir_names: None,
-            method_overload_param_names: None,
             current_expected: None,
             overload_resolutions: Vec::new(),
             instantiation_requests: Vec::new(),
@@ -320,6 +379,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             declared_call_site_params: &EMPTY_CALL_SITE_PARAMS,
             match_scrutinee_types: HashMap::new(),
+            expr_result_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             proof_fn_bases: &EMPTY_SIGNATURES,
             dep_env: None,
@@ -349,13 +409,14 @@ impl<'a> ExpressionInferrer<'a> {
             expected_return_type: None,
             return_annotation_span: None,
             unsafe_depth: 0,
-            method_bindings: &EMPTY_SIGNATURES,
+            method_bindings: &EMPTY_METHOD_BINDINGS,
+            import_face: None,
             type_defs: &EMPTY_POLY_TYPES,
+
+            type_identity_index: None,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             current_fn_param_constraints: None,
             method_overloads: None,
-            method_overload_ir_names: None,
-            method_overload_param_names: None,
             current_expected: None,
             overload_resolutions: Vec::new(),
             instantiation_requests: Vec::new(),
@@ -372,6 +433,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             declared_call_site_params: &EMPTY_CALL_SITE_PARAMS,
             match_scrutinee_types: HashMap::new(),
+            expr_result_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             proof_fn_bases: &EMPTY_SIGNATURES,
             dep_env: None,
@@ -402,13 +464,14 @@ impl<'a> ExpressionInferrer<'a> {
             expected_return_type: None,
             return_annotation_span: None,
             unsafe_depth: 0,
-            method_bindings: &EMPTY_SIGNATURES,
+            method_bindings: &EMPTY_METHOD_BINDINGS,
+            import_face: None,
             type_defs: &EMPTY_POLY_TYPES,
+
+            type_identity_index: None,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             current_fn_param_constraints: None,
             method_overloads: None,
-            method_overload_ir_names: None,
-            method_overload_param_names: None,
             current_expected: None,
             overload_resolutions: Vec::new(),
             instantiation_requests: Vec::new(),
@@ -425,6 +488,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             declared_call_site_params: &EMPTY_CALL_SITE_PARAMS,
             match_scrutinee_types: HashMap::new(),
+            expr_result_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             proof_fn_bases: &EMPTY_SIGNATURES,
             dep_env: None,
@@ -442,7 +506,7 @@ impl<'a> ExpressionInferrer<'a> {
         native_signatures: &'a HashMap<String, MonoType>,
         result_err: Option<MonoType>,
         expected_return_type: Option<MonoType>,
-        method_bindings: &'a HashMap<String, MonoType>,
+        method_bindings: &'a HashMap<DefPath, MonoType>,
     ) -> Self {
         Self {
             scope,
@@ -458,12 +522,13 @@ impl<'a> ExpressionInferrer<'a> {
             return_annotation_span: None,
             unsafe_depth: 0,
             method_bindings,
+            import_face: None,
             type_defs: &EMPTY_POLY_TYPES,
+
+            type_identity_index: None,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             current_fn_param_constraints: None,
             method_overloads: None,
-            method_overload_ir_names: None,
-            method_overload_param_names: None,
             current_expected: None,
             overload_resolutions: Vec::new(),
             instantiation_requests: Vec::new(),
@@ -480,6 +545,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             declared_call_site_params: &EMPTY_CALL_SITE_PARAMS,
             match_scrutinee_types: HashMap::new(),
+            expr_result_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             proof_fn_bases: &EMPTY_SIGNATURES,
             dep_env: None,
@@ -495,7 +561,7 @@ pub type ExprInferrer<'a> = ExpressionInferrer<'a>;
 
 /// 提取命名空间路径前缀：Var("io") → "io"，FieldAccess(FieldAccess(a,b),c) → "a.b.c"
 /// （FieldAccess 推断臂与 #317 方法调用探测共用）
-fn extract_namespace_path(expr: &crate::ast::Expr) -> Option<String> {
+pub(super) fn extract_namespace_path(expr: &crate::ast::Expr) -> Option<String> {
     match expr {
         crate::ast::Expr::Var(name, _) => Some(name.clone()),
         crate::ast::Expr::FieldAccess { expr, field, .. } => {
@@ -570,7 +636,7 @@ pub(super) fn is_ctor_reference(
 ) -> bool {
     match ty {
         MonoType::TypeRef(n) => {
-            generic_type_defs.contains_key(n) || is_builtin_generic_type_name(n)
+            generic_type_defs.contains_key(n.bare()) || is_builtin_generic_type_name(n.bare())
         }
         _ => false,
     }
@@ -636,8 +702,8 @@ pub(super) fn expand_ctor_applications(
                 .iter()
                 .map(|a| expand_ctor_applications(a, defs))
                 .collect();
-            if !is_builtin_generic_type_name(name) {
-                if let Some(def) = defs.get(name) {
+            if !is_builtin_generic_type_name(name.bare()) {
+                if let Some(def) = defs.get(name.bare()) {
                     let total = def.type_param_names.len() + def.poly.const_binders.len();
                     if expanded_args.len() == total {
                         if let Ok(inst) =
@@ -742,7 +808,10 @@ fn substitute_type_params_with_vars_walk(
     param_vars: &HashMap<String, MonoType>,
 ) -> MonoType {
     match ty {
-        MonoType::TypeRef(name) => param_vars.get(name).cloned().unwrap_or_else(|| ty.clone()),
+        MonoType::TypeRef(name) => param_vars
+            .get(name.bare())
+            .cloned()
+            .unwrap_or_else(|| ty.clone()),
         MonoType::Struct(s) => MonoType::Struct(crate::frontend::core::types::mono::StructType {
             fields: s
                 .fields
@@ -800,23 +869,51 @@ fn concrete_type_from_expr_arg(
     expr: &crate::ast::Expr,
     type_defs: &HashMap<String, PolyType>,
     generic_type_defs: &HashMap<String, crate::frontend::core::sema::environment::GenericTypeDef>,
+    import_face: Option<&crate::frontend::core::sema::import_face::ImportFace>,
+    identity_index: Option<&HashMap<crate::frontend::core::types::identity::Nominal, String>>,
 ) -> Option<MonoType> {
     match expr {
         crate::ast::Expr::Var(name, _) => {
+            // 写出名 → 名义类型（导入面唯一解析；未声明名保持平路径）。
+            let nominal = import_face
+                .and_then(|face| {
+                    face.type_identity(
+                        crate::frontend::core::sema::import_face::WrittenTypeName::from_ast(name),
+                    )
+                })
+                .unwrap_or_else(|| {
+                    Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
+                        .expect("type name must be bare and non-empty")
+                });
+            // 身份 → 本地表键；平路径裸名即本地键（与既有口径一致）。
+            let local_key = if nominal.module().is_empty() {
+                Some(name.as_str())
+            } else {
+                identity_index
+                    .and_then(|index| index.get(&nominal))
+                    .map(String::as_str)
+            };
             if is_builtin_type_name(name) {
                 // 内置**泛型**容器名（Vec / Array）是类型构造器：值位置是 Type
                 // 宇宙的值，类型实参位要的是构造器名（TypeRef）而非具体标量类型。
                 MonoType::from_builtin_name(name).or_else(|| {
-                    is_builtin_generic_type_name(name).then(|| MonoType::TypeRef(name.clone()))
+                    is_builtin_generic_type_name(name).then(|| {
+                        MonoType::TypeRef(
+                            Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
+                                .expect("type name must be bare and non-empty"),
+                        )
+                    })
                 })
-            } else if generic_type_defs.contains_key(name) {
+            } else if local_key.is_some_and(|key| generic_type_defs.contains_key(key)) {
                 // 泛型类型名（未实例化引用）作类型实参是**构造器引用**：
                 // `Holder(Box, Int)` 的 `Box` 要传构造器名（TypeRef），不是它
                 // 构造出的记录形态（记录形态会丢头部，无法再做构造器变量替换）。
                 // 泛型类型名同时登记在类型表里，故这一支必须排在 type_defs 之前。
-                Some(MonoType::TypeRef(name.clone()))
+                Some(MonoType::TypeRef(nominal))
             } else {
-                type_defs.get(name).map(|p| p.body.clone())
+                local_key
+                    .and_then(|key| type_defs.get(key))
+                    .map(|p| p.body.clone())
             }
         }
         _ => None,

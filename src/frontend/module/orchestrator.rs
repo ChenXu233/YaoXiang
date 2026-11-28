@@ -29,11 +29,11 @@ use crate::frontend::core::parser::{self, Module};
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::SemanticProbe;
 use crate::frontend::core::tokenize;
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::core::types::mono::MonoType;
 use crate::frontend::core::types::PolyType;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::roles;
-use crate::frontend::module::symbol::SymbolTable;
 use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 use crate::middle::ModuleIR;
 use crate::util::diagnostic::Diagnostic;
@@ -505,15 +505,35 @@ pub(crate) fn discover_with_used(entry: &Path) -> Result<Discovery, Orchestrator
 }
 
 /// 从 entry 向上找最近的含 yaoxiang.toml 的目录（项目根）。
+///
+/// 返回值恒为绝对路径。相对入口（`yaoxiang run main.yx`）的
+/// entry.parent() 是空路径；原样返回会让消费方的 canonicalize 失败并
+/// 退化为空路径，而 Path::starts_with("") 对任意路径恒真——「项目内文件」
+/// 判据随之全放行（#578：std 虚拟单元 <std/list> 被判成项目内文件，项目
+/// 模式 run 对 std 内部函数误报 23-25 条 W1001）。空路径按 cwd 处理；
+/// std::path::absolute 只做词法归一，不解析符号链接、不加 Windows
+/// verbatim 前缀，避免把 \\?\ 形态泄漏进错误渲染路径。
 pub(crate) fn find_project_root(entry: &Path) -> Option<PathBuf> {
     let mut dir = entry.parent();
     while let Some(d) = dir {
         if d.join("yaoxiang.toml").exists() {
-            return Some(d.to_path_buf());
+            return Some(absolute_dir(d));
         }
         dir = d.parent();
     }
     None
+}
+
+/// 目录的绝对形态（find_project_root 的唯一规范化点）。
+///
+/// 空路径 = cwd（相对入口的父目录形态）；其余交给 std::path::absolute
+/// ——它同时消掉 . 与 .. 组件，使「根 + 模块相对路径」拼出的发现路径
+/// 保持可读、可排序。
+fn absolute_dir(dir: &Path) -> PathBuf {
+    if dir.as_os_str().is_empty() {
+        return std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    }
+    std::path::absolute(dir).unwrap_or_else(|_| dir.to_path_buf())
 }
 
 /// 解析模块路径为文件：`a.b` → `<base>/a/b.yx` 或 `<base>/a/b/mod.yx`。
@@ -939,7 +959,7 @@ pub(crate) fn scan_use_refs(source: &str) -> Vec<UsePathRef> {
             i += 2; // 跳过 `.{`
             while let Some(TokenKind::Identifier(name)) = tokens.get(i).map(|t| &t.kind) {
                 paths.push(UsePathRef {
-                    path: format!("{prefix}.{name}"),
+                    path: DefPath::item(&prefix, name).project(),
                     span: tokens[i].span,
                 });
                 expanded = true;
@@ -1049,6 +1069,10 @@ pub(crate) fn extract_module_info(
     namespace: &crate::frontend::core::sema::probe::TypeLevelNamespace,
 ) -> ModuleInfo {
     let mut checker = TypeChecker::new(module_key);
+    // 单元键与限定开关（WBS 4.9.10 D-4/D-8）：Registry 面产出的是**跨单元**的
+    // 方法身份与 IR 名，与 lower 的多文件形态同源（单元键存在 ⇒ 限定）。
+    checker.env().unit_key = module_key.to_string();
+    checker.env().qualify_methods = true;
     // 编译期谓词 def（#524 甲案）：构建判据与第零遍同源（单源自由函数，
     // `predicate_resolver::collect_predicate_defs`）。H1：必须在 pass1 前补种，
     // 否则 Registry 面把谓词分类成 `Call{Pos,[v]}`（B.4 §四.1）。
@@ -1221,7 +1245,8 @@ fn make_export(
     };
     Export {
         name: name.to_string(),
-        full_path: SymbolTable::qualify(module_key, name),
+        // 限定名是路径的**投影**：拼接只在 `DefPath::project` 一处发生。
+        full_path: DefPath::item(module_key, name).project(),
         kind,
         signature: String::new(),
         mono_type: Some(ty),

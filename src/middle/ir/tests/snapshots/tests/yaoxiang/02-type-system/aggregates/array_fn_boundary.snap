@@ -22,7 +22,7 @@ module
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
-    value v6: TypeRef("?") @block0
+    value v6: Never @block0
     value v7: Bool @block0
     value v8: Int(64) @block0
     value v9: Int(64) @block0
@@ -40,10 +40,12 @@ module
     StoreIndex %0[v5] <- v2
     Load v10 <- %0
     Call v8 <- string("head_of") [v10] (def=d0)
+    Drop v10
     Load v9 <- int(10)
     Eq v7 <- v8, v9
     Load v11 <- string("Array(Int,3) passed to Array(Int,3) param")
     Call v6 <- string("std.assert.assert") [v7, v11] (def=d1)
+    Drop v11
     Ret v6
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

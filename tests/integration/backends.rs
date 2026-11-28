@@ -89,7 +89,6 @@ fn test_bytecode_module_add_function() {
         upvalue_count: 0,
         instructions: vec![],
         labels: std::collections::HashMap::new(),
-        exception_handlers: vec![],
         debug_map: std::collections::HashMap::new(),
     };
 

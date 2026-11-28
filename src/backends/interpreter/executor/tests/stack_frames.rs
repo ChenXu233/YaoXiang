@@ -51,7 +51,6 @@ fn make_named_function(
         upvalue_count: 0,
         instructions: instrs,
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     }
 }

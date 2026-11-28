@@ -159,7 +159,7 @@ fn make_proof_fn_module(
     body_expr: Expr,
 ) -> Module {
     let param = Param {
-        name: "x".into(),
+        name: "x".to_string(),
         ty: Some(builtin_ty("Int64")),
         is_mut: false,
         quantity: None,
@@ -189,6 +189,7 @@ fn make_proof_fn_module(
                     span: Span::dummy(),
                 }),
                 span: Span::dummy(),
+                plan_id: PlanId::UNPLANNED,
             })),
             is_mut: false,
             span: Span::dummy(),
@@ -221,7 +222,7 @@ fn test_execute_proof_fn_returns_true_for_valid_input() {
     let ast = make_proof_fn_module("IsPositive", body);
     let type_result = TypeCheckResult::default();
     let call = ProofFunctionCall {
-        func_name: "IsPositive".into(),
+        func_name: "IsPositive".to_string(),
         args: vec![ConstValue::Int(5)],
     };
 

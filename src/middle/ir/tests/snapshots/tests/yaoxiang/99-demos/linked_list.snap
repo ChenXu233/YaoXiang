@@ -32,14 +32,14 @@ module
     value v3: Int(64) @block0
     value v4: Struct(StructType { name: "Node", fields: [("value", Int(64)), ("next", Int(64))], methods: {}, interfaces: [] }) @block0
     value v5: Struct(StructType { name: "Node", fields: [("value", Int(64)), ("next", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v6: TypeRef("?") @block0
+    value v6: Never @block0
     value v7: Bool @block0
     value v8: Int(64) @block0
     value v9: Int(64) @block0
     value v10: Generic { name: "String", args: [] } @block0
-    value v11: TypeRef("?") @block0
+    value v11: Void @block0
     value v12: Int(64) @block0
-    value v13: TypeRef("?") @block0
+    value v13: Never @block0
     value v14: Bool @block0
     value v15: Generic { name: "String", args: [] } @block0
     Load v0 <- int(10)
@@ -51,6 +51,8 @@ module
     Load v4 <- %0
     Load v5 <- %1
     Call %2 <- string("sum_values") [v4, v5] (def=d1)
+    Drop v4
+    Drop v5
     Drop %0
     Drop %1
     Load v8 <- %2
@@ -58,11 +60,13 @@ module
     Eq v7 <- v8, v9
     Load v10 <- string("sum should be 30")
     Call v6 <- string("std.assert.assert") [v7, v10] (def=d2)
+    Drop v10
     Load v12 <- %2
     Call v11 <- string("std.io.println") [v12] (def=d3)
     Load v14 <- bool(true)
     Load v15 <- string("all passed")
     Call v13 <- string("std.assert.assert") [v14, v15] (def=d2)
+    Drop v15
     Drop %0
     Drop %1
     Drop %2

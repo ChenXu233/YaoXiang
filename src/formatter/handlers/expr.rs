@@ -162,6 +162,7 @@ pub fn format_expr(
             params,
             body,
             span: _,
+            plan_id: _,
         } => format_lambda(params, body, ctx, source_map),
         Expr::FString { segments, span: _ } => format_fstring(segments, ctx, source_map),
         Expr::Borrow {
@@ -354,26 +355,46 @@ pub(crate) fn format_call(
     super::delimited::format_delimited_list("(", ")", &all_args, Some(&func_str), ctx)
 }
 
+/// 渲染**一个形参项**（形参列表与签名参数列表共用的唯一实现）：
+/// `mut`? + 名字（有名才写）+ `: 类型`（有类型才写）。
+///
+/// 未命名形参（RFC-039 D53：`(Int, Int) -> Int` 的裸类型项，名字槽是空串）
+/// 只写类型：空名字槽不是可打印写法，写成 `(: Int)` 会产出无法再解析的源码。
+fn render_param(
+    name: &str,
+    is_mut: bool,
+    ty: Option<&Type>,
+    render_ty: &dyn Fn(&Type) -> String,
+) -> String {
+    let mut s = String::new();
+    if is_mut {
+        s.push_str("mut ");
+    }
+    match ty {
+        Some(ty) if name.is_empty() => s + &render_ty(ty),
+        Some(ty) => {
+            s.push_str(name);
+            s.push_str(": ");
+            s.push_str(&render_ty(ty));
+            s
+        }
+        None => {
+            s.push_str(name);
+            s
+        }
+    }
+}
+
 /// 格式化参数列表
 pub fn format_params(
     params: &[Param],
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
+    let render_ty = |ty: &Type| super::types::format_type(ty, ctx, source_map);
     let items: Vec<String> = params
         .iter()
-        .map(|p| {
-            let mut s = String::new();
-            if p.is_mut {
-                s.push_str("mut ");
-            }
-            s.push_str(&p.name);
-            if let Some(ty) = &p.ty {
-                s.push_str(": ");
-                s.push_str(&super::types::format_type(ty, ctx, source_map));
-            }
-            s
-        })
+        .map(|p| render_param(&p.name, p.is_mut, p.ty.as_ref(), &render_ty))
         .collect();
     super::delimited::format_delimited_list("(", ")", &items, None, ctx)
 }
@@ -387,20 +408,10 @@ pub fn format_decl_params(
     ctx: &FormatContext,
     source_map: &SourceMap,
 ) -> String {
+    let render_ty = |ty: &Type| format_signature_param_ty(ty, ctx, source_map);
     let items: Vec<String> = params
         .iter()
-        .map(|p| {
-            let mut s = String::new();
-            if p.is_mut {
-                s.push_str("mut ");
-            }
-            s.push_str(&p.name);
-            if let Some(ty) = &p.ty {
-                s.push_str(": ");
-                s.push_str(&format_signature_param_ty(ty, ctx, source_map));
-            }
-            s
-        })
+        .map(|p| render_param(&p.name, p.is_mut, p.ty.as_ref(), &render_ty))
         .collect();
     super::delimited::format_delimited_list("(", ")", &items, None, ctx)
 }
@@ -426,10 +437,11 @@ fn format_signature_param_ty(
 /// 首组切分规则：返回类型会消费签名参数时（裸 Fn 的 curried 嵌套组，或
 /// Paren/NamedParen 包 Fn——RFC-004 括号内是完整类型值，参数名不外拍但
 /// 括号内按名渲染要从剩余参数取），按 `params.len()` 切出首组；否则
-/// （非 curried）首组即全部 `decl_params`——HM 推断标注（如
-/// `(Int, Int) -> Int`）在 `Type::Fn.params` 里不带类型（parser 只收集
-/// `p.ty` 非空者，declarations.rs），按 `params.len()` 切分会把整组名字
-/// 丢进返回侧静默消失，渲染成 `() -> Int`（#423）。
+/// （非 curried）首组即全部 `decl_params`。
+///
+/// 形参项的渲染走 [`render_param`]：D53 之后裸类型项是**未命名带型参数**
+///（名字槽空串、`ty` 有值），必须只渲染类型——空名字槽写成 `: Int` 会产出
+/// 无法再解析的源码。
 pub fn format_fn_signature(
     decl_params: &[Param],
     fn_type: &Type,
@@ -494,16 +506,13 @@ fn format_return_with_names(
         let count = typed.len();
         let (group, rest) = split_params_at(params, count);
         if !group.is_empty() && group.len() == count {
+            let render_ty = |ty: &Type| super::types::format_type(ty, ctx, source_map);
             let named: Vec<String> = typed
                 .iter()
                 .zip(group.iter())
                 .filter_map(|(t, p)| {
                     let ty = t.ty.as_ref()?;
-                    Some(format!(
-                        "{}: {}",
-                        p.name,
-                        super::types::format_type(ty, ctx, source_map)
-                    ))
+                    Some(render_param(&p.name, p.is_mut, Some(ty), &render_ty))
                 })
                 .collect();
             let ret = format_return_with_names(return_type, rest, ctx, source_map);
@@ -532,16 +541,13 @@ fn format_paren_inner_with_names(
             let count = typed.len();
             let (group, rest) = split_params_at(params, count);
             if !group.is_empty() && group.len() == count {
+                let render_ty = |ty: &Type| super::types::format_type(ty, ctx, source_map);
                 let named: Vec<String> = typed
                     .iter()
                     .zip(group.iter())
                     .filter_map(|(t, p)| {
                         let ty = t.ty.as_ref()?;
-                        Some(format!(
-                            "{}: {}",
-                            p.name,
-                            super::types::format_type(ty, ctx, source_map)
-                        ))
+                        Some(render_param(&p.name, p.is_mut, Some(ty), &render_ty))
                     })
                     .collect();
                 let ret = format_return_with_names(return_type, rest, ctx, source_map);
@@ -594,14 +600,14 @@ fn format_match_expr(
         if line_len > ctx.options.line_width && pattern_len > 10 {
             // pattern 过长，换行
             result.push_str(&format!(
-                "{}{}\n{}    => {},\n",
+                "{}{}\n{}    -> {},\n",
                 inner_indent, pattern_str, inner_indent, body_str
             ));
         } else {
             // 对齐 pattern
             let padding = " ".repeat(max_pattern_len.saturating_sub(pattern_len));
             result.push_str(&format!(
-                "{}{}{} => {},\n",
+                "{}{}{} -> {},\n",
                 inner_indent, pattern_str, padding, body_str
             ));
         }
@@ -731,6 +737,35 @@ pub fn format_block(
             let single_line = format!("{{ {} }}", stmt_str);
 
             // 检查单行格式是否超过行宽
+            if ctx.indent_width() + single_line.len() <= ctx.options.line_width {
+                return single_line;
+            }
+        }
+    }
+
+    // §6.2 单行代码块（多语句）：源里块体在同一行且无内部注释时，保持单行
+    // 并用 `; ` 分隔——「同行多语句用分号」（syntax.md §3.1）的 formatter 面。
+    if block.stmts.len() > 1
+        && source_map
+            .block_close_offset(block.span.start.offset)
+            .is_some()
+    {
+        let first_line = block.stmts[0].span.start.line;
+        let all_on_first_line = block.stmts.iter().all(|s| s.span.start.line == first_line);
+        let close = source_map
+            .block_close_offset(block.span.start.offset)
+            .unwrap_or(usize::MAX);
+        let comment_inside = source_map
+            .comments
+            .iter()
+            .any(|c| c.span.start.offset > block.span.start.offset && c.span.end.offset <= close);
+        if all_on_first_line && !comment_inside {
+            let parts: Vec<String> = block
+                .stmts
+                .iter()
+                .map(|stmt| super::stmt::format_stmt(&stmt.kind, &inner_ctx, source_map))
+                .collect();
+            let single_line = format!("{{ {} }}", parts.join("; "));
             if ctx.indent_width() + single_line.len() <= ctx.options.line_width {
                 return single_line;
             }

@@ -24,22 +24,22 @@ Result: (T: Type, E: Type) -> Type = {
 
 Result.is_failure: (T: Type, E: Type) -> ((self: &Result(T, E)) -> Bool) = (self) => {
     match self {
-        err(_) => true,
-        ok(_) => false,
+        err(_) -> true,
+        ok(_) -> false,
     }
 }
 
 Result.success: (T: Type, E: Type) -> ((self: &Result(T, E)) -> T) = (self) => {
     match self {
-        ok(v) => v,
-        err(_) => assert.assert(false),
+        ok(v) -> v,
+        err(_) -> assert.assert(false),
     }
 }
 
 Result.residual: (T: Type, E: Type) -> ((self: &Result(T, E)) -> E) = (self) => {
     match self {
-        err(e) => e,
-        ok(_) => assert.assert(false),
+        err(e) -> e,
+        ok(_) -> assert.assert(false),
     }
 }
 

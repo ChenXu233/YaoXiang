@@ -12,6 +12,32 @@ interface PromptConfig {
 }
 
 /**
+ * 字段级规则：与语言风格无关，任何目标语言都必须遵守。
+ *
+ * 错误码条目的 `title` 是**诊断标题**——标签式短名，在终端里独占一行，
+ * 用户按它检索。此前没有这条规则时，新增的码由模型自行决定大小写，于是同一张
+ * 表里出现 `Invalid character` 与 `unterminated string` 两种写法。
+ */
+export const FIELD_RULES = [
+  '字段级规则（对所有目标语言生效）：',
+  '- 错误码条目的 title 是诊断标题（标签式短名）：有大小写的语言统一句首大写、其余小写（如 `Invalid character`），不要小写开头；',
+  '- title 不带句末标点，保持简短（不超过 6 个词）。',
+].join('\n');
+
+/**
+ * 把语言风格指令与字段级规则合成最终提示词。
+ *
+ * 分两层是刻意的：`resolveLanguagePrompt` 只管「译成什么风格」（喵语 / 文言文），
+ * 字段级规则管「某些字段必须长什么样」，与语言无关，因此两者都要在。
+ *
+ * @param languagePrompt 语言风格指令
+ * @returns 送进模型的完整提示词
+ */
+export function composePrompt(languagePrompt: string): string {
+  return `${languagePrompt}\n\n${FIELD_RULES}`;
+}
+
+/**
  * 解析语言特定的 prompt
  *
  * 读 `config.languages[lang].prompt`——`i18n.config.json` 里语言配置挂在

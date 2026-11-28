@@ -1,5 +1,5 @@
 //! 基本块切分与块级 CFG 判据 — 基于 04-ssa.md §目标设计「`Phi` 作为新
-//! `Instruction` 变体」三条构造约束之二与 09a §P7 7b.3 契约 §二 第 1 条
+//! `Instruction` 变体」三条构造约束之二
 //!
 //! 04 §目标设计：`Phi` 的 `incoming` 键是**前驱块 label**，前驱集由
 //! `BasicBlock.successors` 反推（`11 号不变量 `Phi` 一致性` / 07 §第一层」）。

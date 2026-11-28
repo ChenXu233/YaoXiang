@@ -4,20 +4,20 @@ title: 'Control Flow'
 
 # Control Flow
 
-In the previous chapter you learned how to define functions. Now let's learn how to give code the
-ability to "make decisions" and "repeat execution"—this is **control flow**.
+In the previous chapter, you learned how to define functions. Now, let's learn how to give code the
+ability to "make decisions" and "execute repeatedly"—this is **control flow**.
 
-YaoXiang provides five control flow structures, each with its own purpose:
+YaoXiang provides five control-flow constructs, each serving a different purpose:
 
-| Control Flow         | Purpose            | One-sentence description                          |
-| -------------------- | ------------------ | ------------------------------------------------- |
-| `if-else-if-else`    | Conditional branch | Choose an execution path based on a condition     |
-| `for`                | Iteration loop     | Process each element of a collection one by one   |
-| `while`              | Conditional loop   | Keep looping as long as the condition holds       |
-| `break` / `continue` | Loop control       | Exit the loop early or skip the current iteration |
-| `match`              | Pattern matching   | Branch based on the structure of a value          |
+| Control flow         | Purpose               | One-sentence description                           |
+| -------------------- | --------------------- | -------------------------------------------------- |
+| `if-else-if-else`    | Conditional branching | Select an execution path based on a condition      |
+| `for`                | Iteration loop        | Process each element in a collection one at a time |
+| `while`              | Conditional loop      | Keep looping as long as the condition holds        |
+| `break` / `continue` | Loop control          | Exit the loop early or skip the current iteration  |
+| `match`              | Pattern matching      | Branch based on the structure of a value           |
 
-A quick taste:
+Get a quick feel for them:
 
 ```yaoxiang
 score = 72
@@ -32,31 +32,31 @@ for i in 0..5 {
     print(i)
 }
 
-// while conditional loop
+// while is a conditional loop
 mut n = 3
 while n > 0 {
     print(n)
     n = n - 1
 }
 
-// match pattern matching
+// match performs pattern matching
 description = match number {
-    0 => "零",
-    1 => "一",
-    _ => "其他",
+    0 -> "零",
+    1 -> "一",
+    _ -> "其他",
 }
 print(description)
 ```
 
-All of these control flow structures can be used as **expressions**—they can compute a value. This
-is an important difference between YaoXiang and many traditional languages.
+All of these control-flow constructs can be used as **expressions**—they can compute a value. This
+is an important distinction between YaoXiang and many traditional languages.
 
-The following sections will dive into each control flow structure one by one. Reading them in order
-is recommended, as they form a natural progression.
+The following chapters will take a closer look at each control-flow construct. We recommend reading
+them in order, because there is a natural progression from one to the next.
 
-## Sections
+## Chapters
 
-- [Conditional branch if-elif-else](if-elif-else.md) — Conditional checks and branch selection
+- [Conditional branching if-elif-else](if-elif-else.md) — Condition checks and branch selection
 - [for loop](for.md) — Iterating over ranges and collections
-- [while loop](while.md) — Conditional looping and accumulation
-- [match pattern matching](match.md) — Branching by the structure of a value
+- [while loop](while.md) — Conditional loops and accumulation
+- [match pattern matching](match.md) — Branching according to the structure of a value

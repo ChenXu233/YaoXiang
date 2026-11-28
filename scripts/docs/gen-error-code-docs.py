@@ -1,27 +1,43 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""错误码文档生成器（批次 B：错误码文档归一）
+"""错误码文档生成器（中英双语）。
 
 数据源（唯一权威）：
   1. `src/util/diagnostic/codes/*.rs` —— `define_codes!` 注册表单源宏（code / category /
      span_exempt / 构造函数名 / 参数名 / 条目上方中文注释）。
-  2. `locales/zh.json` —— 用户可见文案的唯一权威（title / template / help）。
-  3. `src/**` —— 扫描每个码是否真有发射点（`ErrorCodeDefinition::<fn>(` 调用，
+  2. `locales/<lang>.json` —— 用户可见文案的唯一权威（title / template / message / help）。
+  3. `scripts/docs/error-code-strings.json` —— 页面散文（标题 / 说明 / 表头 / 章节标题 /
+     提示语）的唯一权威，分 `zh` / `en` 两套；需要插值的地方用 `{name}` 占位。
+  4. `src/**` —— 扫描每个码是否真有发射点（`ErrorCodeDefinition::<fn>(` 调用，
      以及 std 层 `error_new("EXXXX", …)` 字面量）。
 
+命令行：
+
+    python scripts/docs/gen-error-code-docs.py [--lang {zh,en}] [--out-root DIR]
+
+  --lang zh（默认）：locale 取 `locales/zh.json`，散文取串表的 `zh` 段，
+                     输出根默认 `docs/src`。
+  --lang en         ：locale 取 `locales/en.json`，散文取串表的 `en` 段，
+                     输出根默认 `docs/src/en`。
+  --out-root DIR    ：覆盖输出根。产物路径恒为 `<DIR>/reference/…`。
+
 输出（全部 UTF-8 无 BOM + LF）：
-  docs/src/reference/error-code/index.md              全量清单页
-  docs/src/reference/error-code/E0xxx.md … E8xxx.md  分族页
-  docs/src/reference/warning-code/warning-codes.md    警告码页
+
+  <root>/reference/error-code/index.md              全量清单页
+  <root>/reference/error-code/E0xxx.md … E8xxx.md  分族页
+  <root>/reference/warning-code/warning-codes.md    警告码页
+  <root>/reference/package/error-codes.md          包管理器错误页
 
 本文件重跑幂等：同样输入必得同样输出。改文案请改 `locales/*.json`，改码表请改
-`define_codes!` 注册表，然后重跑：
+`define_codes!` 注册表，改页面散文请改 `scripts/docs/error-code-strings.json`，然后重跑：
 
-    python scripts/docs/gen-error-code-docs.py
+    python scripts/docs/gen-error-code-docs.py --lang zh
+    python scripts/docs/gen-error-code-docs.py --lang en
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import re
@@ -32,22 +48,49 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 CODES_DIR = ROOT / "src" / "util" / "diagnostic" / "codes"
 SRC_DIR = ROOT / "src"
-ZH_JSON = ROOT / "locales" / "zh.json"
-DOCS = ROOT / "docs" / "src" / "reference"
+LOCALE_DIR = ROOT / "locales"
+STRINGS_JSON = ROOT / "scripts" / "docs" / "error-code-strings.json"
 
-# 分族页元数据：文件前缀 -> (category, 页面标题, 页面说明)
+# 每种语言的数据源与默认输出根（`--lang` / `--out-root` 可覆盖）
+LANGS = {
+    "zh": {"locale": "zh.json", "out_root": ROOT / "docs" / "src"},
+    "en": {"locale": "en.json", "out_root": ROOT / "docs" / "src" / "en"},
+}
+
+# 当前语言与其散文串表（main() 里按 --lang 填好）
+LANG = "zh"
+STRINGS: dict = {}
+
+# 散文串表里的占位符形如 `{name}`
+PLACEHOLDER_RE = re.compile(r"\{(\w+)\}")
+
+# 分族页元数据：文件前缀 -> (category, 串表里的标题 key, 串表里的说明 key)
 FAMILIES = OrderedDict(
     [
-        ("E0xxx", ("Lexer / Parser", "词法与语法分析错误", "词法分析器（Lexer）与语法分析器（Parser）阶段产生的错误。")),
-        ("E1xxx", ("TypeCheck", "类型检查错误", "类型检查阶段产生的错误，涵盖类型匹配、模式匹配、泛型实例化、接口约束与 `?` 错误传播等。")),
-        ("E2xxx", ("Semantic", "语义分析错误", "语义分析阶段产生的错误，涵盖作用域、变量生命周期、所有权与函数签名解析等。")),
-        ("E4xxx", ("Generic", "泛型与特质错误", "泛型约束、特质系统与常量求值相关的错误。")),
-        ("E5xxx", ("Module", "模块与导入错误", "模块系统与导入解析相关的错误。")),
-        ("E6xxx", ("Runtime", "运行时错误", "程序运行期（VM / std 原生函数）产生的错误。")),
-        ("E7xxx", ("Io", "I/O 与系统错误", "I/O 操作与系统调用失败产生的错误。")),
-        ("E8xxx", ("Internal", "内部编译器错误", "编译器内部错误，通常表示编译器自身的缺陷。遇到此类错误请提交 issue。")),
+        ("E0xxx", ("Lexer / Parser", "family.E0xxx.title", "family.E0xxx.desc")),
+        ("E1xxx", ("TypeCheck", "family.E1xxx.title", "family.E1xxx.desc")),
+        ("E2xxx", ("Semantic", "family.E2xxx.title", "family.E2xxx.desc")),
+        ("E4xxx", ("Generic", "family.E4xxx.title", "family.E4xxx.desc")),
+        ("E5xxx", ("Module", "family.E5xxx.title", "family.E5xxx.desc")),
+        ("E6xxx", ("Runtime", "family.E6xxx.title", "family.E6xxx.desc")),
+        ("E7xxx", ("Io", "family.E7xxx.title", "family.E7xxx.desc")),
+        ("E8xxx", ("Internal", "family.E8xxx.title", "family.E8xxx.desc")),
     ]
 )
+
+# 码号体系表：族前缀 -> (类别, 注册码计数前缀)。「含义」列取自串表。
+SYSTEM_ROWS = [
+    ("E0xxx", "`Lexer` / `Parser`", "E0"),
+    ("E1xxx", "`TypeCheck`", "E1"),
+    ("E2xxx", "`Semantic`", "E2"),
+    ("E3xxx", "`Codegen`", "E3"),
+    ("E4xxx", "`Generic`", "E4"),
+    ("E5xxx", "`Module`", "E5"),
+    ("E6xxx", "`Runtime`", "E6"),
+    ("E7xxx", "`Io`", "E7"),
+    ("E8xxx", "`Internal`", "E8"),
+    ("W1xxx", "`Warning`", "W1"),
+]
 
 # `define_codes!` 条目：("EXXXX", Category, span_exempt, fn_name(args) => .chain...)
 ENTRY_RE = re.compile(
@@ -87,34 +130,6 @@ PKG_VARIANT_RE = re.compile(
     re.M,
 )
 
-# `PackageError` 变体的中文说明。源码 doc 注释是英文（且部分含 RFC 编号），
-# 用户可见文案只能给英文 `Display`，因此这里补一层中文释义作为文档正文。
-PKG_VARIANT_ZH = {
-    "ProjectExists": "目标目录已存在（`yx init` 不会覆盖）",
-    "NotProject": "当前目录不是 YaoXiang 项目：找不到 `yaoxiang.toml`",
-    "DependencyNotFound": "依赖未在 `yaoxiang.toml` 中声明",
-    "DependencyAlreadyExists": "依赖已在 `yaoxiang.toml` 中声明",
-    "DependencyInstallFailed": "一个或多个依赖安装失败",
-    "InvalidManifest": "`yaoxiang.toml` 格式非法或内容不完整",
-    "Cache": "全局包缓存读写失败（RFC-014 Phase 3）",
-    "NotWorkspace": "当前不在工作区内：任一 `yaoxiang.toml` 都缺 `[workspace]` 段（RFC-014c）",
-    "MemberMissing": "工作区成员的清单文件缺失（RFC-014c）",
-    "MemberInvalid": "工作区成员的清单无法解析或不合规（RFC-014c）",
-    "NestedWorkspace": "嵌套工作区不被支持：成员自带 `[workspace]` 段（RFC-014c）",
-    "PackageTooLarge": "源码包超过 20 MiB 上限（RFC-014a）",
-    "ChecksumMismatch": "校验和不符：下载内容与锁文件记录不一致（RFC-014a）",
-    "InvalidPackage": "包归档非法：缺清单、路径逃逸、条目类型不合法等（RFC-014a）",
-    "Network": "网络请求失败（GitHub 适配器，RFC-014a Phase 4）",
-    "RateLimited": "命中 API 速率限制（RFC-014a decision 6）",
-    "RegistryDeferred": "官方注册表尚未开放：改用 `publish --github` 或 `--dry-run`（RFC-014a decision 1）",
-    "VersionAlreadyExists": "该版本的 Release 已存在（RFC-014a 发布校验）",
-    "AuthFailed": "认证失败：凭据缺失、无效或被拒（RFC-014a）",
-    "PublishTarget": "发布目标仓库无法解析",
-    "TestsFailed": "发布前置测试未通过（RFC-014a 发布校验第 3 步）",
-    "Io": "底层 I/O 失败：磁盘空间、权限、文件占用等",
-    "Toml": "TOML 序列化 / 反序列化失败（锁文件与清单均适用）",
-}
-
 
 def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -128,6 +143,21 @@ def write_md(path: Path, body: str) -> None:
         text += "\n"
     with open(path, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(text)
+
+
+def t(key: str, **kw) -> str:
+    """取当前语言的散文文案，并替换 `{name}` 占位符。
+
+    占位符在串表里写成 `{name}`；缺 key 或缺参数一律报错（不静默产出半成品）。
+    """
+    try:
+        text = STRINGS[LANG][key]
+    except KeyError as exc:
+        raise KeyError(f"散文串表缺 key: {LANG}.{key}") from exc
+    missing = [m.group(1) for m in PLACEHOLDER_RE.finditer(text) if m.group(1) not in kw]
+    if missing:
+        raise KeyError(f"散文串表 {LANG}.{key} 缺占位符参数: {', '.join(missing)}")
+    return PLACEHOLDER_RE.sub(lambda m: str(kw[m.group(1)]), text)
 
 
 def rust_sources() -> list[Path]:
@@ -205,9 +235,9 @@ def _source_name(body_lines: list[str], idx: int) -> str:
     return ""
 
 
-def load_locale_codes() -> tuple[dict, set[str]]:
+def load_locale_codes(locale_json: Path) -> tuple[dict, set[str]]:
     """返回 (code -> {title, message, template, help, ...}, 全部含 code 条目的键集合)。"""
-    data = json.loads(read_text(ZH_JSON))
+    data = json.loads(read_text(locale_json))
     codes: dict[str, dict] = {}
     for key, value in data.items():
         if not isinstance(value, dict) or not CODE_KEY_RE.fullmatch(key):
@@ -322,13 +352,16 @@ def inline(text: str) -> str:
 
 
 def yes_no(flag: bool) -> str:
-    return "是" if flag else "否"
+    return t("yes") if flag else t("no")
 
 
 def emission_cell(where: list[str]) -> str:
     if not where:
-        return "⚠ 暂未发射"
-    return f"✅ {len(where)} 处"
+        return t("emit.none")
+    if len(where) == 1:
+        # 英文的复数：单数用独立键，避免出现「✅ 1 sites」。
+        return t("emit.count_one", count=1)
+    return t("emit.count", count=len(where))
 
 
 def table(headers: list[str], rows: list[list[str]]) -> str:
@@ -339,23 +372,12 @@ def table(headers: list[str], rows: list[list[str]]) -> str:
     return "\n".join(out)
 
 
-GEN_NOTE = (
-    # 注意：这里刻意用行内代码而不是 markdown 链接。VitePress 的
-    # ignoreDeadLinks: false 会对站内/跨根链接做构建期校验，而
-    # scripts/ 在 docs/src/ 之外，任何指向它的相对链接都会让构建失败。
-    " 本页由 `scripts/docs/gen-error-code-docs.py` "
-    "从 `src/util/diagnostic/codes/` 的 `define_codes!` 注册表与 `locales/zh.json` 生成，请勿手工编辑。"
-    "改文案请改 `locales/*.json`，改码表请改 `define_codes!`，然后重跑 "
-    "`python scripts/docs/gen-error-code-docs.py`。"
-)
-
-
 def code_title(code: str, info: dict, entry: dict | None) -> str:
     if info.get("title"):
         return info["title"]
     if entry and entry.get("src_name"):
         return entry["src_name"]
-    return "（locales 无条目）"
+    return t("title.missing")
 
 
 def build_index(entries, locale_codes, emissions, std_codes) -> str:
@@ -365,67 +387,80 @@ def build_index(entries, locale_codes, emissions, std_codes) -> str:
 
     lines = [
         "---",
-        "title: '错误码'",
-        "description: 'YaoXiang 编译器与标准库的全部诊断码索引'",
+        f"title: '{t('index.frontmatter.title')}'",
+        f"description: '{t('index.frontmatter.description')}'",
         "---",
         "",
-        "# 错误码参考",
+        f"# {t('index.h1')}",
         "",
-        GEN_NOTE,
+        t("gen.note"),
         "",
-        "YaoXiang 的每个诊断都带一个稳定码号（如 `E1001`），便于检索、"
-        "在 issue 中引用、以及在 CI 里按码过滤。诊断的用户可见文案（标题 / 模板 / 帮助）"
-        "由 `locales/*.json` 提供，可用 `yx explain <码号>` 在终端查看。",
+        t("index.intro"),
         "",
-        "## 码号体系",
+        t("index.h.system"),
         "",
-        "码号由前缀（族）与四位序号组成，族即编译器阶段：",
+        t("index.system.lead"),
         "",
         table(
-            ["族前缀", "类别", "含义", "注册码数"],
             [
-                ["`E0xxx`", "`Lexer` / `Parser`", "词法与语法分析错误", str(_count(entries, "E0"))],
-                ["`E1xxx`", "`TypeCheck`", "类型检查错误", str(_count(entries, "E1"))],
-                ["`E2xxx`", "`Semantic`", "语义分析错误", str(_count(entries, "E2"))],
-                ["`E3xxx`", "`Codegen`", "代码生成错误（含 IR 层一致性检查）", str(_count(entries, "E3"))],
-                ["`E4xxx`", "`Generic`", "泛型、特质与常量求值错误", str(_count(entries, "E4"))],
-                ["`E5xxx`", "`Module`", "模块与导入错误", str(_count(entries, "E5"))],
-                ["`E6xxx`", "`Runtime`", "运行时错误（VM 与 std 原生函数）", str(_count(entries, "E6"))],
-                ["`E7xxx`", "`Io`", "I/O 与系统错误", str(_count(entries, "E7"))],
-                ["`E8xxx`", "`Internal`", "内部编译器错误（编译器自身的缺陷）", str(_count(entries, "E8"))],
-                ["`W1xxx`", "`Warning`", "警告（码族属 W，默认发射级别 warn 不阻止编译；例外 `W1090` 发射级别为 error，会阻止编译）", str(_count(entries, "W1"))],
+                t("index.system.hdr.family"),
+                t("index.system.hdr.category"),
+                t("index.system.hdr.meaning"),
+                t("index.system.hdr.count"),
+            ],
+            [
+                [
+                    f"`{fam}`",
+                    category,
+                    t(f"index.system.meaning.{fam}"),
+                    str(_count(entries, prefix)),
+                ]
+                for fam, category, prefix in SYSTEM_ROWS
             ],
         ),
         "",
-        "`E3xxx` 族此前未在任何文档中列出，现已并入本页；其码在 IR 生成期与入口点检查时产生。",
+        t("index.system.e3note"),
         "",
-        "## 统计",
+        t("index.h.stats"),
         "",
-        f"- `define_codes!` 注册表：**{len(entries)}** 项（{len(reg_e)} 个 `E` 码 + {len(reg_w)} 个 `W` 码）。",
-        f"- std 层运行时码：**{len(std_codes)}** 个（不在 `define_codes!` 注册表内，见下节）。",
-        f"- 合计 **{total}** 个诊断码。",
-        f"- 其中 **{sum(1 for e in entries if not emissions.get(e['code']))}** 个注册码当前"
-        "在非测试代码里没有发射点，标注为「暂未发射」——它们的码号仍然保留，"
-        "但用户暂时无法触发。",
+        t("index.stats.registry", count=len(entries), e=len(reg_e), w=len(reg_w)),
+        t("index.stats.std", count=len(std_codes)),
+        t("index.stats.total", count=total),
+        t("index.stats.no_emit", count=sum(1 for e in entries if not emissions.get(e["code"]))),
         "",
-        "## 速查：按码号前缀检索",
+        t("index.h.quick"),
         "",
     ]
 
     prefix_rows = []
-    for fam, (cat, title, _desc) in FAMILIES.items():
-        page = f"分族页：[`{fam}`](./{fam}.md)"
-        prefix_rows.append([f"`{fam}`", f"`{cat}`", title, page])
-    prefix_rows.append(["`W1xxx`", "`Warning`", "警告", "[`W1xxx`](../warning-code/warning-codes.md)"])
-    lines.append(table(["族前缀", "类别", "含义", "详情"], prefix_rows))
+    for fam, (cat, _title_key, _desc_key) in FAMILIES.items():
+        page = t("index.quick.details.family", fam=fam)
+        prefix_rows.append([f"`{fam}`", f"`{cat}`", t(f"family.{fam}.title"), page])
+    prefix_rows.append([
+        "`W1xxx`",
+        "`Warning`",
+        t("index.quick.meaning.W1xxx"),
+        t("index.quick.details.W1xxx"),
+    ])
+    lines.append(
+        table(
+            [
+                t("index.quick.hdr.family"),
+                t("index.quick.hdr.category"),
+                t("index.quick.hdr.meaning"),
+                t("index.quick.hdr.details"),
+            ],
+            prefix_rows,
+        )
+    )
+
     lines += [
         "",
-        "`E3xxx` 族暂无独立分族页，全部码列在下方全量清单中。",
+        t("index.quick.e3note"),
         "",
-        "## 全量码清单",
+        t("index.h.all"),
         "",
-        "「模板」列取自 `locales/zh.json`，即诊断正文里替换参数后的形态；"
-        "「发射点」指该码在非测试代码中的实际调用处数量。",
+        t("index.all.lead"),
         "",
     ]
 
@@ -443,53 +478,69 @@ def build_index(entries, locale_codes, emissions, std_codes) -> str:
             ]
         )
     lines.append(
-        table(["码号", "中文名", "类别", "span 豁免", "模板", "发射点"], rows)
+        table(
+            [
+                t("index.all.hdr.code"),
+                t("index.all.hdr.name"),
+                t("index.all.hdr.category"),
+                t("index.all.hdr.span"),
+                t("index.all.hdr.template"),
+                t("index.all.hdr.emit"),
+            ],
+            rows,
+        )
     )
 
     lines += [
         "",
-        "## std 层运行时码",
+        t("index.h.std"),
         "",
-        "下列码**不在 `define_codes!` 注册表内**：它们由标准库原生函数在运行期经 "
-        "`error_new(\"码号\", …)` 构造，因此不出现在 `ErrorCodeDefinition::find()` 的查询结果里，"
-        "但 `locales/*.json` 有对应文案，用户终端上仍可能看到。",
+        t("index.std.lead"),
         "",
     ]
     std_rows = []
     for s in std_codes:
         where = s.get("where", [])
-        sample = "、".join(f"`{w}`" for w in where[:2])
-        more = f" 等 {len(where)} 处" if len(where) > 2 else ""
+        sample = t("emit.sep").join(f"`{w}`" for w in where[:2])
+        more = t("emit.more", count=len(where)) if len(where) > 2 else ""
         std_rows.append(
             [
                 f"`{s['code']}`",
                 esc(s.get("title", "")),
-                "std 运行时",
+                t("index.std.category"),
                 inline(esc(s.get("template", ""))),
                 f"{sample}{more}",
             ]
         )
-    lines.append(table(["码号", "中文名", "类别", "模板", "发射点"], std_rows))
+    lines.append(
+        table(
+            [
+                t("index.std.hdr.code"),
+                t("index.std.hdr.name"),
+                t("index.std.hdr.category"),
+                t("index.std.hdr.template"),
+                t("index.std.hdr.emit"),
+            ],
+            std_rows,
+        )
+    )
 
     lines += [
         "",
-        "## 标记说明",
+        t("index.h.legend"),
         "",
-        "- **span 豁免**：为 `true` 时该诊断允许没有源码位置（内部错误、运行期诊断等）。"
-        "非豁免码在既无显式 `.at()` 又无 walk 上下文时会被拒绝"
-        "（debug 构建 panic，release 落 `E8001`）。",
-        "- **发射点 ⚠ 暂未发射**：该码在注册表中保留，但当前非测试代码里没有调用处，"
-        "用户无法触发。码号不回收，避免旧产物里的诊断被复用成别的含义。",
-        "- **std 层运行时码**：见上一节，不参与注册表统计。",
+        t("index.legend.span"),
+        t("index.legend.no_emit"),
+        t("index.legend.std"),
         "",
-        "## 查看单个码",
+        t("index.h.explain"),
         "",
         "```bash",
         "yx explain E1001",
         "yx explain E1001 --json",
         "```",
         "",
-        "## 在 Rust 代码中查询",
+        t("index.h.rust"),
         "",
         "```rust",
         "use yaoxiang::util::diagnostic::{ErrorCodeDefinition, I18nRegistry};",
@@ -520,29 +571,35 @@ def build_family(fam: str, cat: str, title: str, desc: str, entries, locale_code
 
     lines = [
         "---",
-        f"title: '{fam}：{title}'",
+        f"title: '{t('family.frontmatter.title', fam=fam, title=title)}'",
         f"description: '{desc}'",
         "---",
         "",
-        f"# {fam}：{title}",
+        f"# {t('family.h1', fam=fam, title=title)}",
         "",
-        GEN_NOTE,
+        t("gen.note"),
         "",
         desc,
         "",
-        f"本族共 **{len(fam_entries)}** 个码，全部在 `define_codes!` 注册表中，"
-        f"类别为 `{cat}`。完整索引见[错误码首页](./index.md)。",
+        t("family.summary", count=len(fam_entries), cat=cat),
         "",
     ]
     if not fam_entries:
-        lines.append("::: warning 暂缺\n本族在注册表中没有条目。\n:::\n")
+        lines.append(t("family.empty"))
         return "\n".join(lines)
 
     lines += [
-        "## 码一览",
+        t("family.h.list"),
         "",
         table(
-            ["码号", "中文名", "类别", "span 豁免", "模板", "发射点"],
+            [
+                t("family.list.hdr.code"),
+                t("family.list.hdr.name"),
+                t("family.list.hdr.category"),
+                t("family.list.hdr.span"),
+                t("family.list.hdr.template"),
+                t("family.list.hdr.emit"),
+            ],
             [
                 [
                     f"`{e['code']}`",
@@ -556,32 +613,32 @@ def build_family(fam: str, cat: str, title: str, desc: str, entries, locale_code
             ],
         ),
         "",
-        "## 逐码说明",
+        t("family.h.detail"),
         "",
     ]
     for e in fam_entries:
         info = locale_codes.get(e["code"], {})
         name = code_title(e["code"], info, e)
-        lines.append(f"### {e['code']}：{name}")
+        lines.append(t("family.detail.h3", code=e["code"], name=name))
         lines.append("")
-        lines.append(f"- **类别**：`{e['category']}`")
-        lines.append(f"- **span 豁免**：{'是' if e['span_exempt'] else '否'}")
-        lines.append(f"- **构造函数**：`ErrorCodeDefinition::{e['fn']}({', '.join(e['params'])})`")
+        lines.append(t("family.detail.category", cat=e["category"]))
+        lines.append(t("family.detail.span", value=yes_no(e["span_exempt"])))
+        lines.append(t("family.detail.constructor", fn=e["fn"], params=", ".join(e["params"])))
         if info.get("template"):
-            lines.append(f"- **模板**：{inline(esc(info['template']))}")
+            lines.append(t("family.detail.template", value=inline(esc(info["template"]))))
         if info.get("message") and info.get("message") != info.get("template"):
-            lines.append(f"- **消息**：{esc(info['message'])}")
+            lines.append(t("family.detail.message", value=esc(info["message"])))
         if info.get("help"):
-            lines.append(f"- **帮助**：{esc(info['help'])}")
+            lines.append(t("family.detail.help", value=esc(info["help"])))
         where = emissions.get(e["code"], [])
         if where:
-            sample = "、".join(f"`{w}`" for w in where[:3])
-            more = f" 等 {len(where)} 处" if len(where) > 3 else ""
-            lines.append(f"- **发射点**：{sample}{more}")
+            sample = t("emit.sep").join(f"`{w}`" for w in where[:3])
+            more = t("emit.more", count=len(where)) if len(where) > 3 else ""
+            lines.append(t("family.detail.emit", sample=sample, more=more))
         else:
-            lines.append("- **发射点**：⚠ 暂未发射（注册表中保留该码，但非测试代码里没有调用处，用户无法触发）")
+            lines.append(t("family.detail.no_emit"))
         if e["src_name"] and e["src_name"] != name:
-            lines.append(f"- **源码注释名**：{esc(e['src_name'])}")
+            lines.append(t("family.detail.src_name", value=esc(e["src_name"])))
         lines.append("")
 
     return "\n".join(lines)
@@ -591,7 +648,8 @@ def collect_package_variants() -> list[dict]:
     """解析 `src/package/error.rs` 的 `PackageError` thiserror 变体。
 
     包管理器错误不带 `E`/`W` 码号（它们是 CLI 层错误，不是编译器诊断），
-    但同样需要文档。变体名 / `#[error("…")]` 格式串 / doc 注释均取自源码。
+    但同样需要文档。变体名 / `#[error("…")]` 格式串 / doc 注释均取自源码；
+    变体的含义说明取自散文串表（`pkg.<变体名>`）。
     """
     text = read_text(PKG_ERROR_RS)
     body = text.split("pub enum PackageError {", 1)[1].rsplit("\n}", 1)[0]
@@ -608,121 +666,97 @@ def collect_package_variants() -> list[dict]:
                 "name": name,
                 "format": json.loads(m.group("fmt")),
                 "doc": " ".join(doc_lines),
-                "zh": PKG_VARIANT_ZH.get(name, ""),
+                "meaning": t(f"pkg.{name}"),
             }
         )
-    # 未登记中文释义的变体视为生成器待补，打印出来便于发现
-    missing_zh = [v["name"] for v in out if not v["zh"]]
-    if missing_zh:
-        print(f"  ! PackageError 变体缺中文释义: {', '.join(missing_zh)}", file=sys.stderr)
+    # 未登记释义的变体视为生成器待补，打印出来便于发现
+    missing = [v["name"] for v in out if not v["meaning"]]
+    if missing:
+        print(t("stats.pkg_missing", names=", ".join(missing)), file=sys.stderr)
     return out
 
 
 def build_package_errors(variants: list[dict]) -> str:
     lines = [
         "---",
-        "title: '包管理器错误'",
-        "description: '包管理器错误的类型与处理方式'",
+        f"title: '{t('pkg.frontmatter.title')}'",
+        f"description: '{t('pkg.frontmatter.description')}'",
         "---",
         "",
-        "# 包管理器错误",
+        f"# {t('pkg.h1')}",
         "",
-        "> 本页由 `scripts/docs/gen-error-code-docs.py` "
-        "从 `src/package/error.rs` 的 `PackageError` 枚举生成，请勿手工编辑。",
-        "改文案请改该文件里的 `#[error(\"…\")]` 格式串，然后重跑 "
-        "`python scripts/docs/gen-error-code-docs.py`。",
+        t("pkg.note.quote"),
+        t("pkg.note.cont"),
         "",
-        "包管理器（`yx install` / `add` / `rm` / `update` / `publish` / `cache` / `workspace`）的错误",
-        "**不带 `E` 码号**：它们是 `thiserror` 定义的 Rust 枚举 `PackageError`，",
-        "在 CLI 层以 `Error: <格式串渲染结果>` 的形式打印，不进入编译器的诊断渲染管线。",
-        f"当前共 **{len(variants)}** 个变体，定义在 `src/package/error.rs`。",
-        "编译器诊断码请见[错误码参考](../error-code/index.md)。",
+        t("pkg.intro.1"),
+        t("pkg.intro.2"),
+        t("pkg.intro.3"),
+        t("pkg.intro.4", count=len(variants)),
+        t("pkg.intro.5"),
         "",
-        "## 变体一览",
+        t("pkg.h.list"),
         "",
         table(
-            ["变体", "错误文案（`Display`，英文即实际输出）", "含义"],
             [
-                [f"`{v['name']}`", inline(esc(v["format"])), esc(v["zh"])]
+                t("pkg.list.hdr.variant"),
+                t("pkg.list.hdr.text"),
+                t("pkg.list.hdr.meaning"),
+            ],
+            [
+                [f"`{v['name']}`", inline(esc(v["format"])), esc(v["meaning"])]
                 for v in variants
             ],
         ),
         "",
-        "## 逐变体说明",
+        t("pkg.h.detail"),
         "",
     ]
     for v in variants:
         lines += [
-            f"### `{v['name']}`",
+            t("pkg.detail.h3", name=v["name"]),
             "",
-            f"- **含义**：{esc(v['zh'])}",
-            f"- **文案**：`{esc(v['format'])}`",
-            f"- **源码 doc**：`{esc(v['doc'])}`",
+            t("pkg.detail.meaning", value=esc(v["meaning"])),
+            t("pkg.detail.text", value=esc(v["format"])),
+            t("pkg.detail.doc", value=esc(v["doc"])),
             "",
         ]
 
     lines += [
-        "## 处理方式",
+        t("pkg.h.fix"),
         "",
-        "按族归类排查：",
+        t("pkg.fix.lead"),
         "",
         table(
-            ["症状", "相关变体", "处理方式"],
+            [
+                t("pkg.fix.hdr.symptom"),
+                t("pkg.fix.hdr.variants"),
+                t("pkg.fix.hdr.action"),
+            ],
             [
                 [
-                    "找不到 `yaoxiang.toml`",
-                    "`NotProject` / `NotWorkspace`",
-                    "在项目根目录内执行命令；工作区场景确认任一 `yaoxiang.toml` 含 `[workspace]` 段",
-                ],
-                [
-                    "清单 / 锁文件解析失败",
-                    "`InvalidManifest` / `Toml`",
-                    "校验 `yaoxiang.toml` 与 `yaoxiang.lock` 的 TOML 语法",
-                ],
-                [
-                    "依赖增删异常",
-                    "`DependencyNotFound` / `DependencyAlreadyExists` / `DependencyInstallFailed`",
-                    "用 `yx list` 查看现有依赖；已存在则先 `yx rm` 再重装",
-                ],
-                [
-                    "工作区成员异常",
-                    "`MemberMissing` / `MemberInvalid` / `NestedWorkspace`",
-                    "核对 `[workspace] members` 路径；嵌套工作区不被支持，需拍平结构",
-                ],
-                [
-                    "发布 / 网络类",
-                    "`Network` / `RateLimited` / `AuthFailed` / `RegistryDeferred` / `VersionAlreadyExists` / `PublishTarget` / `TestsFailed`",
-                    "官方注册表尚未开放，发布请显式加 `--github` 或 `--dry-run`；限流待重试；凭据问题先检查 token",
-                ],
-                [
-                    "包内容 / 缓存",
-                    "`PackageTooLarge` / `InvalidPackage` / `ChecksumMismatch` / `Cache`",
-                    "源码包上限 20 MiB；校验和不符说明下载损坏，清理缓存后重试",
-                ],
-                [
-                    "底层 I/O",
-                    "`Io`",
-                    "检查磁盘空间、文件权限、文件是否被占用",
-                ],
+                    t(f"pkg.fix.r{i}.symptom"),
+                    t(f"pkg.fix.r{i}.variants"),
+                    t(f"pkg.fix.r{i}.action"),
+                ]
+                for i in range(1, 8)
             ],
         ),
         "",
-        "## 常见问题",
+        t("pkg.h.faq"),
         "",
-        "### Q：安装依赖失败怎么办？",
+        t("pkg.faq.q1"),
         "",
-        "1. 检查网络连接",
-        "2. 确认依赖名称与版本约束正确",
-        "3. 尝试 `yx update` 刷新索引",
+        t("pkg.faq.a1.1"),
+        t("pkg.faq.a1.2"),
+        t("pkg.faq.a1.3"),
         "",
-        "### Q：vendor 目录损坏怎么办？",
+        t("pkg.faq.q2"),
         "",
-        "清理缓存后重新安装：`yx cache clean`，再 `yx install`。",
+        t("pkg.faq.a2"),
         "",
-        "### Q：发布时提示官方注册表未开放？",
+        t("pkg.faq.q3"),
         "",
-        "这是预期行为（RFC-014a decision 1）。改用 `yx publish --github` 发布到 GitHub Release，"
-        "或加 `--dry-run` 先做本地校验。",
+        t("pkg.faq.a3"),
     ]
     return "\n".join(lines)
 
@@ -731,37 +765,40 @@ def build_warnings(entries, locale_codes, emissions) -> str:
     w_entries = sorted((e for e in entries if e["code"].startswith("W")), key=lambda e: e["code"])
     lines = [
         "---",
-        "title: '警告码'",
-        "description: '编译器警告码及说明'",
+        f"title: '{t('warn.frontmatter.title')}'",
+        f"description: '{t('warn.frontmatter.description')}'",
         "---",
         "",
-        "# 警告码",
+        f"# {t('warn.h1')}",
         "",
-        GEN_NOTE,
+        t("gen.note"),
         "",
-        "警告码以 `W` 开头，提示代码中可能存在的问题；默认发射级别为 warn，不会阻止编译。"
-        "例外：`W1090` 的发射级别为 error（2026-10-13 用户裁决的同码升 E，见其条目说明），"
-        "触发即计入 error_count 并改变退出码，会阻止编译。"
-        f"当前注册表共 **{len(w_entries)}** 个警告码，完整索引见[错误码首页](../error-code/index.md)。",
+        t("warn.intro", count=len(w_entries)),
         "",
-        "## 配置",
+        t("warn.h.config"),
         "",
-        "可以通过 `yaoxiang.toml` 配置死代码警告的行为：",
+        t("warn.config.lead"),
         "",
         "```toml",
         "[lint]",
-        '# 死代码警告级别：off | warn | deny',
+        t("warn.config.toml_comment"),
         'dead-code = "warn"',
         "```",
         "",
-        "- `off`：禁用警告",
-        "- `warn`：显示警告（默认）",
-        "- `deny`：将警告视为错误，阻止编译",
+        t("warn.config.off"),
+        t("warn.config.warn"),
+        t("warn.config.deny"),
         "",
-        "## 码一览",
+        t("warn.h.list"),
         "",
         table(
-            ["码号", "中文名", "span 豁免", "模板", "发射点"],
+            [
+                t("warn.list.hdr.code"),
+                t("warn.list.hdr.name"),
+                t("warn.list.hdr.span"),
+                t("warn.list.hdr.template"),
+                t("warn.list.hdr.emit"),
+            ],
             [
                 [
                     f"`{e['code']}`",
@@ -774,61 +811,92 @@ def build_warnings(entries, locale_codes, emissions) -> str:
             ],
         ),
         "",
-        "## 逐码说明",
+        t("warn.h.detail"),
         "",
     ]
     for e in w_entries:
         info = locale_codes.get(e["code"], {})
         name = code_title(e["code"], info, e)
-        lines.append(f"### {e['code']}：{name}")
+        lines.append(t("warn.detail.h3", code=e["code"], name=name))
         lines.append("")
-        lines.append(f"- **类别**：`{e['category']}`")
-        lines.append(f"- **span 豁免**：{'是' if e['span_exempt'] else '否'}")
+        lines.append(t("warn.detail.category", cat=e["category"]))
+        lines.append(t("warn.detail.span", value=yes_no(e["span_exempt"])))
         if info.get("template"):
-            lines.append(f"- **模板**：{inline(esc(info['template']))}")
+            lines.append(t("warn.detail.template", value=inline(esc(info["template"]))))
         if info.get("help"):
-            lines.append(f"- **帮助**：{esc(info['help'])}")
+            lines.append(t("warn.detail.help", value=esc(info["help"])))
         where = emissions.get(e["code"], [])
         if where:
-            sample = "、".join(f"`{w}`" for w in where[:3])
-            more = f" 等 {len(where)} 处" if len(where) > 3 else ""
-            lines.append(f"- **发射点**：{sample}{more}")
+            sample = t("emit.sep").join(f"`{w}`" for w in where[:3])
+            more = t("emit.more", count=len(where)) if len(where) > 3 else ""
+            lines.append(t("warn.detail.emit", sample=sample, more=more))
         else:
-            lines.append("- **发射点**：⚠ 暂未发射（注册表中保留该码，但非测试代码里没有调用处）")
+            lines.append(t("warn.detail.no_emit"))
         lines.append("")
 
     lines += [
-        "## 警告级别",
+        t("warn.h.levels"),
         "",
         table(
-            ["级别", "效果"],
             [
-                ["`off`", "完全禁用此类警告"],
-                ["`warn`", "显示警告但继续编译（默认）"],
-                ["`deny`", "将警告视为错误，阻止编译"],
+                t("warn.levels.hdr.level"),
+                t("warn.levels.hdr.effect"),
+            ],
+            [
+                ["`off`", t("warn.levels.off")],
+                ["`warn`", t("warn.levels.warn")],
+                ["`deny`", t("warn.levels.deny")],
             ],
         ),
         "",
-        "## 与错误码的区别",
+        t("warn.h.vserror"),
         "",
-        "- **错误（`E` 前缀）**：阻止编译，必须修复。",
-        "- **警告（`W` 前缀）**：提示潜在问题；默认发射级别为 warn，可选择修复。"
-        "例外：`W1090` 发射级别为 error，触发即计入 error_count 并改变退出码，"
-        "会阻止编译，必须修复（见其条目说明）。",
+        t("warn.vserror.error"),
+        t("warn.vserror.warning"),
         "",
-        "## 死代码告警的判定口径",
+        t("warn.h.deadcode"),
         "",
-        "`W1001`–`W1005` 报的是**未使用的私有**（非 `pub`）函数 / 类型 / 变量 / 方法。"
-        "`pub` 声明是对外接口，编译器无从得知外部是否有消费者，因此永不触发这些告警"
-        "（#321 定案 B）。若看到「未使用」的告警，去掉对应的 `pub` 即可消除；"
-        "反过来，需要被外部调用的声明请保留 `pub`。",
+        t("warn.deadcode"),
     ]
     return "\n".join(lines)
 
 
+def _display_path(path: Path) -> str:
+    """输出文件清单用仓库内相对路径；根在仓库外时退回绝对路径。"""
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(ROOT).as_posix()
+    except ValueError:
+        return resolved.as_posix()
+
+
 def main() -> int:
+    global LANG, STRINGS
+
+    parser = argparse.ArgumentParser(
+        description="生成错误码 / 警告码 / 包管理器错误的中英双语参考页。",
+    )
+    parser.add_argument(
+        "--lang",
+        choices=sorted(LANGS),
+        default="zh",
+        help="页面语言：zh 取 locales/zh.json 与串表 zh 段，en 取 locales/en.json 与串表 en 段。",
+    )
+    parser.add_argument(
+        "--out-root",
+        default=None,
+        help="输出根目录；产物路径恒为 <DIR>/reference/…。默认按语言取 docs/src 与 docs/src/en。",
+    )
+    args = parser.parse_args()
+
+    LANG = args.lang
+    STRINGS = json.loads(read_text(STRINGS_JSON))
+    locale_json = LOCALE_DIR / LANGS[LANG]["locale"]
+    out_root = Path(args.out_root).resolve() if args.out_root else LANGS[LANG]["out_root"]
+    docs_root = out_root / "reference"
+
     entries, failures = collect_registrations()
-    locale_codes, _all = load_locale_codes()
+    locale_codes, _all = load_locale_codes(locale_json)
     emissions = scan_emissions(entries)
     str_hits = scan_str_emissions(entries)
     # 合并两类发射点：构造函数直调 + 码号字符串间接发射
@@ -844,18 +912,32 @@ def main() -> int:
     std_codes = find_std_layer_codes(registered, locale_codes, str_hits)
 
     # ---- 输出 ----
-    write_md(DOCS / "error-code" / "index.md", build_index(entries, locale_codes, emissions, std_codes))
-    for fam, (cat, title, desc) in FAMILIES.items():
+    written: list[Path] = []
+    index_path = docs_root / "error-code" / "index.md"
+    write_md(index_path, build_index(entries, locale_codes, emissions, std_codes))
+    written.append(index_path)
+    for fam, (cat, _title_key, _desc_key) in FAMILIES.items():
+        fam_path = docs_root / "error-code" / f"{fam}.md"
         write_md(
-            DOCS / "error-code" / f"{fam}.md",
-            build_family(fam, cat, title, desc, entries, locale_codes, emissions),
+            fam_path,
+            build_family(
+                fam,
+                cat,
+                t(f"family.{fam}.title"),
+                t(f"family.{fam}.desc"),
+                entries,
+                locale_codes,
+                emissions,
+            ),
         )
-    write_md(
-        DOCS / "warning-code" / "warning-codes.md",
-        build_warnings(entries, locale_codes, emissions),
-    )
+        written.append(fam_path)
+    warn_path = docs_root / "warning-code" / "warning-codes.md"
+    write_md(warn_path, build_warnings(entries, locale_codes, emissions))
+    written.append(warn_path)
     pkg_variants = collect_package_variants()
-    write_md(DOCS / "package" / "error-codes.md", build_package_errors(pkg_variants))
+    pkg_path = docs_root / "package" / "error-codes.md"
+    write_md(pkg_path, build_package_errors(pkg_variants))
+    written.append(pkg_path)
 
     # ---- 自校验统计 ----
     reg_e = [e for e in entries if e["code"].startswith("E")]
@@ -863,39 +945,34 @@ def main() -> int:
     no_emit = [e for e in entries if not emissions.get(e["code"])]
     missing_locale = [e["code"] for e in entries if e["code"] not in locale_codes]
 
-    print("=== 错误码文档生成统计 ===")
-    print(f"define_codes! 注册条目           : {len(entries)}")
-    print(f"  其中 E 码 / W 码               : {len(reg_e)} / {len(reg_w)}")
+    print(t("stats.title"))
+    print(t("stats.entries", count=len(entries)))
+    print(t("stats.e_w", e=len(reg_e), w=len(reg_w)))
     for fam in FAMILIES:
         n = sum(1 for e in entries if e["code"][0] == "E" and e["code"][1] == fam[1])
-        print(f"    {fam:<6}: {n} 个  ({FAMILIES[fam][0]})")
-    print(f"    {'W1xxx':<6}: {len(reg_w)} 个  (Warning)")
-    print(f"std 层运行时码（error_new 发射）  : {len(std_codes)}  -> {', '.join(s['code'] for s in std_codes)}")
-    print(f"诊断码合计                      : {len(entries) + len(std_codes)}")
-    print(f"有发射点的注册码                : {len(entries) - len(no_emit)}")
-    print(f"暂未发射的注册码                : {len(no_emit)}")
+        print(t("stats.family", fam=fam.ljust(6), count=n, cat=FAMILIES[fam][0]))
+    print(t("stats.family", fam="W1xxx".ljust(6), count=len(reg_w), cat="Warning"))
+    print(t("stats.std", count=len(std_codes), codes=", ".join(s["code"] for s in std_codes)))
+    print(t("stats.total", count=len(entries) + len(std_codes)))
+    print(t("stats.emitted", count=len(entries) - len(no_emit)))
+    print(t("stats.no_emit", count=len(no_emit)))
     if no_emit:
-        print(f"  -> {', '.join(e['code'] for e in no_emit)}")
-    print(f"locales/zh.json 无条目的注册码  : {len(missing_locale)}"
+        print(t("stats.no_emit_list", codes=", ".join(e["code"] for e in no_emit)))
+    print(t("stats.missing_locale", count=len(missing_locale))
           + (f" -> {', '.join(missing_locale)}" if missing_locale else ""))
-    print(f"locales 有条目但未注册的码（全部）: {', '.join(sorted(set(locale_codes) - registered))}")
-    print(f"PackageError 变体（无码号）       : {len(pkg_variants)}")
-    print(f"重复注册的码                    : {dupes if dupes else '无'}")
-    print(f"注册表解析失败行                : {len(failures)}")
+    print(t("stats.unregistered", codes=", ".join(sorted(set(locale_codes) - registered))))
+    print(t("stats.pkg", count=len(pkg_variants)))
+    print(t("stats.dupes", value=dupes if dupes else t("stats.none")))
+    print(t("stats.failures", count=len(failures)))
     for f in failures:
-        print(f"  ! {f['file']} {f['statics']}: {f['line'][:90]}")
+        print(t("stats.failure_line", file=f["file"], statics=f["statics"], line=f["line"][:90]))
     if failures:
-        print("!! 存在解析失败行，注册表可能已变更，请更新本生成器。", file=sys.stderr)
+        print(t("stats.fatal"), file=sys.stderr)
         return 1
 
-    print("输出文件:")
-    for rel in [
-        "docs/src/reference/error-code/index.md",
-        *[f"docs/src/reference/error-code/{f}.md" for f in FAMILIES],
-        "docs/src/reference/warning-code/warning-codes.md",
-        "docs/src/reference/package/error-codes.md",
-    ]:
-        print(f"  {rel}")
+    print(t("stats.outputs"))
+    for path in written:
+        print(f"  {_display_path(path)}")
     return 0
 
 

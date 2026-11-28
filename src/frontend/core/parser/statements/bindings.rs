@@ -69,6 +69,7 @@ pub fn parse_method_bind(
                 params,
                 body: Box::new(Block { stmts: body, span }),
                 span,
+                plan_id: state.alloc_plan_id(),
             })),
             is_mut: false,
             span,

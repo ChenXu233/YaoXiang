@@ -12,6 +12,7 @@ use super::TypeLevelError;
 use super::TypeLevelResult;
 use crate::frontend::core::sema::proof::budget::BudgetTracker;
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::mono::PolyType;
 use crate::frontend::core::types::{ConstValue, MonoType};
 
@@ -232,7 +233,7 @@ impl<'a> Evaluator<'a> {
     ) -> Result<MonoType, EvalError> {
         match ty {
             // 处理类型引用
-            MonoType::TypeRef(name) => self.eval_type_ref(name, depth),
+            MonoType::TypeRef(name) => self.eval_type_ref(name.bare(), depth),
 
             // 精化类型：只归约基类型——约束由 Layer 3 处理
             MonoType::Refined { base, .. } => self.eval_with_depth(base, depth + 1),
@@ -299,9 +300,18 @@ impl<'a> Evaluator<'a> {
             "Char" => Some(MonoType::Char),
             "String" => Some(MonoType::make_string()),
             "Never" => Some(MonoType::Never),
-            "True" => Some(MonoType::TypeRef("True".to_string())),
-            "False" => Some(MonoType::TypeRef("False".to_string())),
-            s => Some(MonoType::TypeRef(s.to_string())),
+            "True" => Some(MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("True")))
+                    .expect("type name must be bare and non-empty"),
+            )),
+            "False" => Some(MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("False")))
+                    .expect("type name must be bare and non-empty"),
+            )),
+            s => Some(MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&(s)))
+                    .expect("type name must be bare and non-empty"),
+            )),
         }
     }
 
@@ -324,7 +334,10 @@ impl<'a> Evaluator<'a> {
         }
 
         // 类型引用本身
-        Ok(MonoType::TypeRef(name.to_string()))
+        Ok(MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&(name)))
+                .expect("type name must be bare and non-empty"),
+        ))
     }
 
     /// 尝试求值类型族调用

@@ -22,14 +22,14 @@ module
   fn main() -> Void
     locals_total=3
     values_total=14
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
     value v6: Generic { name: "String", args: [] } @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
     value v9: Int(64) @block0
     value v10: Int(64) @block0
@@ -43,6 +43,7 @@ module
     Eq v1 <- v2, v3
     Load v6 <- string("named args bind by declared name")
     Call v0 <- string("std.assert.assert") [v1, v6] (def=d1)
+    Drop v6
     Load v11 <- int(2)
     Load v12 <- int(1)
     Call v9 <- string("f") [v11, v12] (def=d0)
@@ -50,6 +51,7 @@ module
     Eq v8 <- v9, v10
     Load v13 <- string("positional form is equivalent")
     Call v7 <- string("std.assert.assert") [v8, v13] (def=d1)
+    Drop v13
     Ret v7
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

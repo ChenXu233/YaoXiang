@@ -1,6 +1,6 @@
 //! 6.9.5-B.1b / T05：`TypeDeclField.quantity` 的直读判据（AST → IR）
 //!
-//! 规范锚：RFC-039 D62 / issue #536（B 路线，H0=B）；09a §P6 6.9.5-B.1
+//! 规范锚：RFC-039 D62 / issue #536（B 路线，H0=B）。
 //! 契约 §五 T05（IR quantity 直读）。
 //!
 //! **为什么直驱构造 AST**：B.1a 保证 parser 产出 `quantity: None`，witness 的

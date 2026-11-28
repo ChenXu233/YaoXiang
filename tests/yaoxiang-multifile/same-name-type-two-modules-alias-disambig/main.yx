@@ -1,0 +1,16 @@
+// same-name-type-two-modules-alias-disambig/main.yx
+// 覆盖: RFC-029 #244 / modules §2.4 两模块同名类型经**别名**导入消歧
+// 验证: use a.{Temp as TempA} + use b.{Temp as TempB}：
+//       TempA(2.0).tag_of() = 2.0（模块 a）、TempB(2.0).tag_of() = 20.0（模块 b）
+//       （P0 形态 11b/11c 同形：方法派发按身份的模块归属各自落地）
+// 状态: ✅ 可运行（run 退出码 0）
+use std.assert
+use a.{Temp as TempA}
+use b.{Temp as TempB}
+
+main = () => {
+    x = TempA(2.0)
+    y = TempB(2.0)
+    assert.assert(x.tag_of() == 2.0, "TempA.tag_of 应派发到模块 a（2.0 × 1 = 2.0）")
+    assert.assert(y.tag_of() == 20.0, "TempB.tag_of 应派发到模块 b（2.0 × 10 = 20.0）")
+}

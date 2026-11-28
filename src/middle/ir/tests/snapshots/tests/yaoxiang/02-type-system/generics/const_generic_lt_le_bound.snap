@@ -8,7 +8,7 @@ module
     values_total=5
     value v0: Void @block0
     value v1: Int(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Never @block0
     value v3: Bool @block0
     value v4: Generic { name: "String", args: [] } @block0
     Load v0 <- void
@@ -17,6 +17,7 @@ module
     Load v3 <- bool(true)
     Load v4 <- string("Capped(Int, 3) with N < 100 and N <= 100 compiled and ran")
     Call v2 <- string("std.assert.assert") [v3, v4] (def=d1)
+    Drop v4
     Drop %0
     Ret v2
   init (locals=0)
