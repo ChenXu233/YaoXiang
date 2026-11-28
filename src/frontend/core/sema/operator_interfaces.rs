@@ -597,6 +597,41 @@ fn bind_template_self(
     }
 }
 
+/// 约束方法派发的**最终 IR 名**（D64）：类型的身份投影。
+///
+/// 用户类型从名义头取 (module, 定义名) 直接投影成 `{module}.{Type}.{method}`
+/// （单文件 module="" 即 `Type.method`，与既有 IR 名逐字相同）；原语/内建
+/// 无名义身份，沿用 `operator_type_display` 的规范名 + 方法名（FFI 背书名）。
+/// 类型定义模块与泛型函数定义模块**不同**时同样正确——模块取自类型身份，
+/// 不取自泛型函数的所属单元（E1106 成因 B）。
+pub fn operator_method_dispatch_name(
+    concrete: &MonoType,
+    method: &str,
+) -> String {
+    let mut cur = concrete;
+    while let MonoType::Ref { inner, .. } = cur {
+        cur = inner;
+    }
+    let identity = match cur {
+        MonoType::Struct(s) => Some(&s.name),
+        MonoType::Enum(e) => Some(&e.name),
+        MonoType::Generic { name, .. } => Some(name),
+        MonoType::TypeRef(name) => Some(name),
+        _ => None,
+    };
+    match identity {
+        Some(nominal) if !nominal.module().is_empty() => {
+            crate::frontend::core::types::identity::DefPath::method(
+                nominal.module(),
+                nominal.bare(),
+                method,
+            )
+            .project()
+        }
+        _ => format!("{}.{}", operator_type_display(concrete), method),
+    }
+}
+
 /// 约束泛型运算符派发的具体类型显示名（mono 改写 `T.add` → `Vec3.add` /
 /// `Int.add` 与 E1106 诊断共用）：原语用规范大写名（与 FFI 背书条目一致），
 /// 用户类型用名义名。

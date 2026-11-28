@@ -114,42 +114,45 @@ impl AstToIrGenerator {
             }
         };
 
-        // 接收者类型名 → 四个方法的目标名。
-        // 优先按 span 查 typecheck 记录的实现类型名（接收者是任意表达式时
-        // 这是唯一来处）；退回表达式类型推导（局部变量形态）。
-        let base_name = self.try_expr_impls.get(&span).cloned().or_else(|| {
+        // 接收者**类型身份** → 四个方法的目标名。
+        // 优先按 span 查 typecheck 记录的实现身份（接收者是任意表达式时这是
+        // 唯一来处）；退回表达式类型推导（局部变量形态）。
+        let base_identity = self.try_expr_impls.get(&span).cloned().or_else(|| {
             self.get_expr_mono_type(expr).and_then(|ty| {
                 let mut ty = ty;
                 while let crate::frontend::core::types::MonoType::Ref { inner, .. } = ty {
                     ty = *inner;
                 }
                 match ty {
-                    crate::frontend::core::types::MonoType::Generic { name, .. } => {
-                        Some(name.bare().to_string())
-                    }
-                    crate::frontend::core::types::MonoType::Struct(s) => {
-                        Some(s.name.bare().to_string())
-                    }
-                    crate::frontend::core::types::MonoType::TypeRef(n) => {
-                        Some(n.bare().to_string())
-                    }
+                    crate::frontend::core::types::MonoType::Generic { name, .. } => Some(name),
+                    crate::frontend::core::types::MonoType::Struct(s) => Some(s.name),
+                    crate::frontend::core::types::MonoType::TypeRef(n) => Some(n),
                     _ => None,
                 }
             })
         });
-        let method_names = base_name.map(|base| {
+        let method_names = base_identity.map(|base| {
             use crate::frontend::core::sema::operator_interfaces::TRY_METHODS;
             // 名字集合的唯一真相源是 `TRY_METHODS`（typecheck 侧注册同表）；
             // 此处不再手抄一遍，否则改名时两边静默漂移。
-            // std 面按**方法身份**取限定名（D-1：投影是唯一拼接实现），
-            // 其余保持定义侧裸键；base 是定义侧裸类型名（#465 同族）。
+            // 用户类型按身份投影（多文件 `{模块}.{Type}.{method}`，单文件裸键）；
+            // std 已声明类型同样按身份投影——两者同一判据，不查「是不是 std」。
             let names: Vec<String> = TRY_METHODS
                 .iter()
                 .map(|m| {
-                    self.registry
-                        .std_method_path(&base, m)
-                        .map(|path| path.project())
-                        .unwrap_or_else(|| format!("{}.{}", base, m))
+                    if base.module().is_empty() {
+                        self.registry
+                            .std_method_path(base.bare(), m)
+                            .map(|path| path.project())
+                            .unwrap_or_else(|| format!("{}.{}", base.bare(), m))
+                    } else {
+                        crate::frontend::core::types::identity::DefPath::method(
+                            base.module(),
+                            base.bare(),
+                            m,
+                        )
+                        .project()
+                    }
                 })
                 .collect();
             // TRY_METHODS 恒为四元（见 operator_interfaces.rs 定义）

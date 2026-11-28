@@ -102,6 +102,7 @@ fn type_decl_fn(name: &str) -> FunctionIR {
             body: TypeDeclBody {
                 fields: Vec::new(),
                 self_type: MonoType::Void,
+                identity: crate::frontend::core::types::identity::Nominal::anonymous(),
             },
         },
     }

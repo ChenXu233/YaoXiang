@@ -174,7 +174,7 @@ test_cross_unit_same_named_method_definitions_keep_bare_names	src/driver/tests/m
 test_cross_unit_same_named_type_alias_dispatch_uses_defining_unit	src/driver/tests/method_dispatch.rs	assert_eqx2 assertx3 is_nonex1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_cross_unit_same_named_type_qualified_dispatch_uses_defining_unit	src/driver/tests/method_dispatch.rs	assertx3 is_nonex1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_cross_unit_distinct_type_names_keep_their_own_dispatch	src/driver/tests/method_dispatch.rs	assertx2 is_nonex1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
-test_cross_unit_same_named_type_operator_arms_dispatch_use_defining_unit	src/driver/tests/method_dispatch.rs	assert_eqx2 assertx4 is_nonex1 expectx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
+test_cross_unit_same_named_type_operator_arms_dispatch_use_defining_unit	src/driver/tests/method_dispatch.rs	assert_eqx3 assertx4 is_nonex1 expectx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_local_type_operator_arms_keep_own_dispatch	src/driver/tests/method_dispatch.rs	assertx3 is_nonex1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_use_order_does_not_change_cross_unit_dispatch	src/driver/tests/method_dispatch.rs	assertx1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_swapped_method_bodies_follow_the_defining_unit	src/driver/tests/method_dispatch.rs	assertx1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
@@ -193,7 +193,7 @@ test_resolved_method_marks_read_leaves_consumption_ledger_untouched	src/driver/t
 test_operator_dispatched_methods_not_reported_unused_cross_unit	src/driver/tests/method_unused.rs	expectx1 helperx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_operator_dispatched_methods_not_reported_unused_single_file	src/driver/tests/method_unused.rs	expectx1 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_operator_interface_declared_without_use_still_reports_unused_method	src/driver/tests/method_unused.rs	expectx1 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
-test_operator_dispatch_cross_unit_run_values_unchanged	src/driver/tests/method_unused.rs	assertx3 is_nonex1 expectx2	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
+test_operator_dispatch_cross_unit_run_values_unchanged	src/driver/tests/method_unused.rs	assertx4 is_nonex1 expectx2	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
 test_constrained_generic_dispatched_method_not_reported_unused_single_file	src/driver/tests/method_unused.rs	assertx1 expectx1 helperx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_constrained_generic_dispatched_method_not_reported_unused_cross_unit	src/driver/tests/method_unused.rs	expectx1 helperx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_constrained_generic_without_instantiation_still_reports_unused_method	src/driver/tests/method_unused.rs	expectx1 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
@@ -242,7 +242,7 @@ test_ref_pool_credits_consumption_to_the_imported_module_only	src/driver/tests/r
 test_ref_pool_excludes_test_role_references	src/driver/tests/ref_pool.rs	expectx2 helperx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_print_user_struct_with_to_string_keeps_fallback_repr	src/driver/tests/short_name_dispatch_pins.rs	assertx3 is_nonex1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_print_int_variable_uses_zero_cost_to_string_dispatch	src/driver/tests/short_name_dispatch_pins.rs	assertx3 is_nonex1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
-test_aliased_imported_user_try_type_rejected_by_e1082	src/driver/tests/short_name_dispatch_pins.rs	assertx1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_aliased_imported_user_try_type_dispatch_uses_definition_identity	src/driver/tests/short_name_dispatch_pins.rs	assertx3 is_nonex1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_local_user_try_type_dispatch_keeps_module_qualified_names	src/driver/tests/short_name_dispatch_pins.rs	assertx3 is_nonex1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_imported_user_try_type_dispatch_keeps_defining_unit_names	src/driver/tests/short_name_dispatch_pins.rs	assertx3 is_nonex1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_imported_user_try_type_question_propagates_payload	src/driver/tests/short_name_dispatch_pins.rs	assertx2 is_nonex1 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
@@ -1435,13 +1435,8 @@ test_substitute_no_match_returns_original	src/frontend/core/types/tests/substitu
 test_substitute_generic_params_too_few	src/frontend/core/types/tests/substitute.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_substitute_with_map_no_match	src/frontend/core/types/tests/substitute.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_substitute_generic_params_matching	src/frontend/core/types/tests/substitute.rs	assert_eqx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_rebind_nominal_refs_renames_fn_params_and_return	src/frontend/core/types/tests/substitute.rs	matchesx2 assertx2 expectx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_rebind_nominal_refs_keeps_generic_head_and_struct_name	src/frontend/core/types/tests/substitute.rs	assert_eqx2 matchesx1 assertx1 expectx3	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_rebind_nominal_refs_empty_map_is_identity	src/frontend/core/types/tests/substitute.rs	assert_eqx1 expectx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_rebind_nominal_refs_unknown_names_pass_through	src/frontend/core/types/tests/substitute.rs	matchesx1 assertx1 expectx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_rebind_nominal_refs_keeps_generic_head_in_rebind_table	src/frontend/core/types/tests/substitute.rs	assert_eqx1 matchesx1 assertx1 expectx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_rebind_nominal_refs_leaves_solver_and_primitive_variants_untouched	src/frontend/core/types/tests/substitute.rs	assert_eqx3 expectx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
-test_rebind_nominal_refs_rebinds_struct_interfaces	src/frontend/core/types/tests/substitute.rs	assert_eqx2 expectx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_resolve_nominal_identities_promotes_flat_names_through_resolver	src/frontend/core/types/tests/substitute.rs	matchesx2 assertx2 expectx4	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_resolve_nominal_identities_keeps_existing_identity	src/frontend/core/types/tests/substitute.rs	assert_eqx1 expectx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_term_env_rejects_runtime_name	src/frontend/core/types/tests/terms.rs	assertx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_normalize_symbolic_failure_carries_name	src/frontend/core/types/tests/terms.rs	assert_eqx1 match_panicx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_normalize_budget_exhaustion_is_unproven	src/frontend/core/types/tests/terms.rs	assert_eqx1 match_panicx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
@@ -2225,7 +2220,7 @@ test_check_vendor_dependency_importable	tests/integration/check.rs	assert_eqx1 e
 test_check_vendor_missing_dependency_reports_e5001	tests/integration/check.rs	assertx1 helperx1	证明	spec-shaped 判据面（语料/集成/格式化/runner），走进程边界	留
 test_check_two_entries_sharing_module_reports_it_once	tests/integration/check.rs	assert_eqx3 expectx1 helperx1	证明	spec-shaped 判据面（语料/集成/格式化/runner），走进程边界	留
 test_check_unsatisfied_constraint_generic_reports_e1106	tests/integration/check.rs	assert_eqx1 assertx3 is_okx1 unwrapx1 helperx3	证明	spec-shaped 判据面（语料/集成/格式化/runner），走进程边界	留
-test_check_constraint_dispatch_cross_module_miss_reports_candidates	tests/integration/check.rs	assertx2 helperx1	证明	spec-shaped 判据面（语料/集成/格式化/runner），走进程边界	留
+test_check_constraint_dispatch_cross_module_resolves_defining_unit	tests/integration/check.rs	assertx2 helperx1	证明	spec-shaped 判据面（语料/集成/格式化/runner），走进程边界	留
 test_check_predicate_application_arg_not_collected_as_const	tests/integration/check.rs	assert_eqx1 expectx1 helperx1	证明	spec-shaped 判据面（语料/集成/格式化/runner），走进程边界	留
 test_check_terminates_measure_arg_not_collected_as_const	tests/integration/check.rs	assert_eqx1 expectx1 helperx1	证明	spec-shaped 判据面（语料/集成/格式化/runner），走进程边界	留
 test_check_multifile_predicate_arg_not_misreplaced	tests/integration/check.rs	assertx1 expectx1	证明	spec-shaped 判据面（语料/集成/格式化/runner），走进程边界	留

@@ -213,8 +213,8 @@ pub struct AstToIrGenerator {
     /// 猜单元：同名类型分属两单元时谁先注册谁赢，静默错值）。
     pub(super) operator_dispatches:
         HashMap<Span, crate::frontend::core::sema::operator_interfaces::OperatorDispatch>,
-    /// RFC-011b：`?` 表达式的 Try 实现类型名（span 键控）
-    pub(super) try_expr_impls: HashMap<Span, String>,
+    /// RFC-011b：`?` 表达式的 Try 实现**类型身份**（span 键控）
+    pub(super) try_expr_impls: HashMap<Span, crate::frontend::core::types::identity::Nominal>,
     /// RFC-011a §3：方法级重载决议（**调用点 PlanId** 键控 → 混编 IR 名；
     /// RFC-039 D20 / WBS 4.5.2）。消费经 `OverloadResolutions::get`（命中即
     /// 记账），故本字段携带决议表本体（含消费台账），结算读的是同一份账。
@@ -379,7 +379,7 @@ impl AstToIrGenerator {
             try_expr_impls: type_result
                 .try_expr_impls
                 .iter()
-                .map(|(span, name)| (*span, name.clone()))
+                .map(|(span, identity)| (*span, identity.clone()))
                 .collect(),
             overload_resolutions: type_result.overload_resolutions.clone(),
             method_def_ir_names: type_result.method_def_ir_names.clone(),

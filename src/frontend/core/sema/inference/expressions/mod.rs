@@ -282,7 +282,10 @@ pub struct ExpressionInferrer<'a> {
     /// RFC-011a §6 存在类型强制点（具体→存在包装点，ir_gen 按 span 查表注入包装）
     pub existential_coercions: Vec<super::existential::ExistentialCoercion>,
     /// RFC-011b: 运算符派发点（显式接口实现命中处，ir_gen 按 span 注入方法调用）
-    pub try_expr_impls: Vec<(crate::util::span::Span, String)>,
+    pub try_expr_impls: Vec<(
+        crate::util::span::Span,
+        crate::frontend::core::types::identity::Nominal,
+    )>,
     pub operator_dispatches:
         Vec<crate::frontend::core::sema::operator_interfaces::OperatorDispatch>,
     /// 依赖类型环境（效应查询）—— 由 StatementChecker 注入
@@ -862,9 +865,26 @@ fn concrete_type_from_expr_arg(
     expr: &crate::ast::Expr,
     type_defs: &HashMap<String, PolyType>,
     generic_type_defs: &HashMap<String, crate::frontend::core::sema::environment::GenericTypeDef>,
+    import_face: Option<&crate::frontend::core::sema::import_face::ImportFace>,
+    identity_index: Option<&HashMap<crate::frontend::core::types::identity::Nominal, String>>,
 ) -> Option<MonoType> {
     match expr {
         crate::ast::Expr::Var(name, _) => {
+            // 写出名 → 名义类型（导入面唯一解析；未声明名保持平路径）。
+            let nominal = import_face
+                .and_then(|face| face.type_identity(name))
+                .unwrap_or_else(|| {
+                    Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
+                        .expect("type name must be bare and non-empty")
+                });
+            // 身份 → 本地表键；平路径裸名即本地键（与既有口径一致）。
+            let local_key = if nominal.module().is_empty() {
+                Some(name.as_str())
+            } else {
+                identity_index
+                    .and_then(|index| index.get(&nominal))
+                    .map(String::as_str)
+            };
             if is_builtin_type_name(name) {
                 // 内置**泛型**容器名（Vec / Array）是类型构造器：值位置是 Type
                 // 宇宙的值，类型实参位要的是构造器名（TypeRef）而非具体标量类型。
@@ -876,17 +896,16 @@ fn concrete_type_from_expr_arg(
                         )
                     })
                 })
-            } else if generic_type_defs.contains_key(name) {
+            } else if local_key.is_some_and(|key| generic_type_defs.contains_key(key)) {
                 // 泛型类型名（未实例化引用）作类型实参是**构造器引用**：
                 // `Holder(Box, Int)` 的 `Box` 要传构造器名（TypeRef），不是它
                 // 构造出的记录形态（记录形态会丢头部，无法再做构造器变量替换）。
                 // 泛型类型名同时登记在类型表里，故这一支必须排在 type_defs 之前。
-                Some(MonoType::TypeRef(
-                    Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
-                        .expect("type name must be bare and non-empty"),
-                ))
+                Some(MonoType::TypeRef(nominal))
             } else {
-                type_defs.get(name).map(|p| p.body.clone())
+                local_key
+                    .and_then(|key| type_defs.get(key))
+                    .map(|p| p.body.clone())
             }
         }
         _ => None,

@@ -605,9 +605,66 @@ impl TypeEnvironment {
         self.types.get(name)
     }
 
-    /// `env.types` 的派生索引（身份→本地键）；本批只用于穿透到子检查器。
+    /// `env.types` 的派生索引（身份→本地键）；穿透到子检查器与消费者查询。
     pub fn type_identity_index(&self) -> &HashMap<Nominal, String> {
         &self.type_identity_index
+    }
+
+    /// 名义类型 → 本地表键（身份→本地键；平路径裸名即键）。
+    ///
+    /// 带模块身份未登记 = 查不到（不回落裸名：同名不同模块正是裸名重合面）。
+    pub fn local_type_key<'a>(
+        &'a self,
+        nominal: &'a Nominal,
+    ) -> Option<&'a str> {
+        if nominal.module().is_empty() {
+            return Some(nominal.bare());
+        }
+        self.type_identity_index.get(nominal).map(String::as_str)
+    }
+
+    /// 名义类型 → `env.types` 表项（L3-1b 消费入口）。
+    pub fn get_type_by_nominal(
+        &self,
+        nominal: &Nominal,
+    ) -> Option<&PolyType> {
+        self.local_type_key(nominal)
+            .and_then(|key| self.types.get(key))
+    }
+
+    /// 名义类型 → 和类型变体表（本地键由 [`Self::local_type_key`] 同一索引给出）。
+    pub fn sum_type_by_nominal(
+        &self,
+        nominal: &Nominal,
+    ) -> Option<&Vec<SumVariantDef>> {
+        self.local_type_key(nominal)
+            .and_then(|key| self.sum_types.get(key))
+    }
+
+    /// 名义类型 → 泛型类型定义模板（同一本地键口径）。
+    pub fn generic_type_def_by_nominal(
+        &self,
+        nominal: &Nominal,
+    ) -> Option<&GenericTypeDef> {
+        self.local_type_key(nominal)
+            .and_then(|key| self.generic_type_defs.get(key))
+    }
+
+    /// 名义类型 → 记录模型（同一本地键口径）。
+    pub fn record_model_by_nominal(
+        &self,
+        nominal: &Nominal,
+    ) -> Option<&crate::frontend::core::sema::record_model::RecordModel> {
+        self.local_type_key(nominal)
+            .and_then(|key| self.record_models.get(key))
+    }
+
+    /// 写出类型名 → 类型身份（导入面唯一解析；未声明名返回 None）。
+    pub fn type_identity(
+        &self,
+        written: &str,
+    ) -> Option<Nominal> {
+        self.import_face.type_identity(written)
     }
 
     /// 语义解析 base：是类型还是值（issue #180 F 组）。

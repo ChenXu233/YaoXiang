@@ -248,7 +248,12 @@ impl ModuleRegistry {
                 continue;
             }
             for (name, export) in &module.exports {
-                if export.kind == ExportKind::Type {
+                // D64「凡有模块且经 TypeDefinition 声明的类型一律携带模块」：
+                // 判据是**有声明**（mono_type 来自 yx 声明），不是 kind==Type。
+                // 幻名与类型族导出（std 的 File / Error / IsTrue / Assert）同样是
+                // ExportKind::Type，但 mono_type=None——它们不构成类型身份，
+                // 不进本基线（保持平路径）。
+                if export.kind == ExportKind::Type && export.mono_type.is_some() {
                     out.push((name.clone(), path.clone()));
                 }
             }
@@ -510,7 +515,11 @@ impl ModuleRegistry {
             REGISTERING_EMBEDDED.with(|f| f.set(true));
             for (file, _) in crate::std::yx_sources::STD_YX_FILES {
                 let use_path = file.strip_suffix(".yx").unwrap_or(file).replace('/', ".");
-                if let Some(mut info) = crate::std::yx_sources::embedded_std_module_info(&use_path)
+                // 基線 = 現已注册的 native + 先前嵌入 std（不含本模块）——
+                // 嵌入模块间无前向引用，注册顺序即依赖序。
+                let baseline = self.clone();
+                if let Some(mut info) =
+                    crate::std::yx_sources::embedded_std_module_info(&use_path, &baseline)
                 {
                     // 导出粒度判据的数据源（#493）：嵌入源里定义的每个导出都是
                     // **纯 yx 实现**——先整体标记，再走下面的合并/注册（两条分支

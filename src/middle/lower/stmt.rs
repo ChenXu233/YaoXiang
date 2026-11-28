@@ -7,7 +7,7 @@ use super::scope::NestedBodyGuard;
 use super::AstToIrGenerator;
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
-use crate::frontend::core::types::identity::DefPath;
+use crate::frontend::core::types::identity::{DefPath, Nominal};
 use crate::middle::ir::ir::{
     ConstValue, FunctionBody, FunctionIR, Instruction, Operand, TypeDeclBody, TypeDeclField,
 };
@@ -164,6 +164,11 @@ impl AstToIrGenerator {
                                     .collect()
                             },
                             self_type: Self::type_decl_self_type(definition),
+                            // 定义侧身份（D64）：本单元声明的类型名 + 单元键；
+                            // 单文件（module_key=None）为平路径。与 typecheck 的
+                            // `add_type_definition` 同一开关（单元键存在 ⇒ 限定）。
+                            identity: Nominal::item(self.module_key.as_deref().unwrap_or(""), name)
+                                .expect("declared type name must be bare and non-empty"),
                         },
                     },
                 }))

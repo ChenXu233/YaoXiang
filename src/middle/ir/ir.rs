@@ -1243,6 +1243,12 @@ pub struct TypeDeclBody {
     pub fields: Vec<TypeDeclField>,
     /// 该类型在字节码类型表（`BytecodeModule::type_table`）里的项
     pub self_type: MonoType,
+    /// 声明类型的**身份**（module + 定义名；RFC-039 D64）。
+    ///
+    /// 由 lower 按定义所在单元的模块键给出（单文件 = 平路径），是构造器
+    /// 合成面唯一可用的身份来源——codegen 不能把 IR 函数名（可能已限定）
+    /// 按点切分反解（D64 禁止按点处理身份串）。
+    pub identity: crate::frontend::core::types::identity::Nominal,
 }
 
 /// 类型声明的一个字段（IR 原生）。

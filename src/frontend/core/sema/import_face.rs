@@ -31,6 +31,9 @@ pub struct TypeOrigin {
     pub module: String,
     /// 定义侧类型裸名（内联别名时与本地名不同）
     pub target: String,
+    /// 该名字是否**经 TypeDefinition 声明**（D64）：只有已声明类型构成类型
+    /// 身份；幻名（std 的 File / Error 等类型族导出）不是身份，保持平路径。
+    pub declared: bool,
 }
 
 /// 导入面：类型名 → 来源，加整体导入的命名空间前缀。
@@ -63,6 +66,7 @@ impl ImportFace {
                     TypeOrigin {
                         module: own_module.to_string(),
                         target: name.clone(),
+                        declared: true,
                     },
                 );
             }
@@ -85,6 +89,12 @@ impl ImportFace {
             let origin = TypeOrigin {
                 module: use_path.clone(),
                 target: target.clone(),
+                // 幻名（类型族导出）没有 `mono_type`——D64：从未声明的名字
+                // 不构成类型身份（显式导入也不改变这一点）。
+                declared: exports
+                    .get(target)
+                    .and_then(|export| export.mono_type.as_ref())
+                    .is_some(),
             };
             let register =
                 |name: &str, face: &mut Self, origin: &TypeOrigin| match face.types.get(name) {
@@ -116,6 +126,7 @@ impl ImportFace {
                 TypeOrigin {
                     module: module_key,
                     target: type_name,
+                    declared: true,
                 },
             );
         }
@@ -218,15 +229,40 @@ impl ImportFace {
         Some(DefPath::item(&origin.module, &origin.target))
     }
 
+    /// 写出类型名 → **类型身份**（L3-1b）：类型表示层身份的唯一解析实现。
+    ///
+    /// 只解析**经 TypeDefinition 声明**的类型（D64）：本单元声明 / 花括号导入
+    /// 的已声明类型 / std 的已声明类型（Result、Option、Iter、Json、Spanned、
+    /// StrSpanned）。幻名（File / Error）、类型族（IsTrue / Assert）、内建名、
+    /// 类型参数一律返回 None——调用方保持平路径，它们不是类型身份。
+    pub fn type_identity(
+        &self,
+        written: &str,
+    ) -> Option<Nominal> {
+        // 注解里的类型名是标识符；带点形态不是本入口的域（AST 类型位置会把
+        // 点号解析成 const 表达式，identity 无从谈起）。
+        if written.contains('.') {
+            return None;
+        }
+        let origin = self.type_origin(written)?;
+        if !origin.declared {
+            return None;
+        }
+        Nominal::from_def_path(&DefPath::item(&origin.module, &origin.target))
+    }
+
     /// **唯一有上下文的 AST 类型 → MonoType 入口**（L3-1b1a）。
     ///
-    /// 本批与 `MonoType::from` 同义（身份解析留到下一批）；有上下文的调用点
-    /// 必须走这里，env-free 的点保持 `MonoType::from`，不得再写第二套转换。
+    /// 有上下文的调用点必须走这里；env-free 的点保持 `MonoType::from`，
+    /// 不得再写第二套转换。身份解析复用 [`Self::type_identity`]。
     pub fn mono_from_annotation(
         &self,
         ty: &crate::ast::Type,
     ) -> crate::frontend::core::types::MonoType {
-        crate::frontend::core::types::MonoType::from(ty.clone())
+        let mono = crate::frontend::core::types::MonoType::from(ty.clone());
+        crate::frontend::core::types::substitute::resolve_nominal_identities(&mono, &|w| {
+            self.type_identity(w)
+        })
     }
 
     /// 命名空间前缀（`use lib` 的 `lib` / `use lib as l` 的 `l`）→ 模块键
@@ -287,6 +323,7 @@ mod tests {
             TypeOrigin {
                 module: "b".to_string(),
                 target: "Temp".to_string(),
+                declared: true,
             },
         );
         let identity = Nominal::item("b", "Temp").expect("identity must be valid");

@@ -163,8 +163,14 @@ impl<'a> ExpressionInferrer<'a> {
     ) -> Option<Vec<MonoType>> {
         let is_type_arg = |i: usize| -> bool {
             matches!(arg_types.get(i), Some(MonoType::MetaType { .. }))
-                || concrete_type_from_expr_arg(&args[i], self.type_defs, self.generic_type_defs)
-                    .is_some()
+                || concrete_type_from_expr_arg(
+                    &args[i],
+                    self.type_defs,
+                    self.generic_type_defs,
+                    self.import_face,
+                    self.type_identity_index,
+                )
+                .is_some()
         };
         let type_slot = |i: usize| -> MonoType {
             if is_type_arg(i) {

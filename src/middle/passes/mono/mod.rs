@@ -1389,37 +1389,30 @@ impl Monomorphizer {
                         let prefix = format!("{pn}.");
                         if name.starts_with(&prefix) {
                             if let Some(concrete) = type_args.get(i) {
+                                // 派发名 = **类型身份**的投影（D64）：具体类型的
+                                // 名义头直接给出定义模块，不按泛型所属单元猜前缀
+                                //（E1106 成因 B：类型与泛型定义不同模块时猜不中）。
+                                let method = &name[prefix.len()..];
+                                let dispatch =
+                                    crate::frontend::core::sema::operator_interfaces::operator_method_dispatch_name(
+                                        concrete, method,
+                                    );
                                 let display = crate::frontend::core::sema::operator_interfaces::operator_type_display(concrete);
-                                let bare = format!("{}.{}", display, &name[prefix.len()..]);
-                                match Self::qualify_deferred_method(
-                                    &bare,
-                                    &generic.name,
-                                    &self.all_function_names,
-                                ) {
-                                    Some(qualified) => *name = qualified,
-                                    // #519（2026-11-01 甲案续篇）：用户类型的
-                                    // 方法派发未命中不再回退裸名——裸名进 IR
-                                    // 的下场是运行期 E6006 FunctionNotFound，
-                                    // 根因不可见；首个未命中即报 E1106
-                                    //（fail-fast，与 mono 既有
-                                    // ir_instantiation_failed 同形）。
-                                    // 例外（原语背书放行）：类型头是原语规范名
-                                    // 时（[`PRIMITIVE_DISPLAY_NAMES`]），派发
-                                    // 目标只能落在运行期 FFI 背书或原生指令
-                                    // 路径——IR 函数表看不到它们，「不在表内」
-                                    // 不构成「约束未满足」的证据；保持既有
-                                    // 回退（运行期缺失时仍是 E6006，与改造前
-                                    // 一致，D59 C 类不改成功程序）。
-                                    None => {
-                                        let type_head = bare.split('.').next().unwrap_or("");
-                                        if PRIMITIVE_DISPLAY_NAMES.contains(&type_head) {
-                                            *name = bare;
-                                        } else {
-                                            return Err(
-                                                self.dispatch_miss_diagnostic(&bare, *call_span)
-                                            );
-                                        }
-                                    }
+                                let bare = format!("{}.{}", display, method);
+                                if self.all_function_names.contains(&dispatch) {
+                                    *name = dispatch;
+                                } else if PRIMITIVE_DISPLAY_NAMES.contains(&display.as_str()) {
+                                    // 原语背书放行：派发目标只能落在运行期 FFI
+                                    // 背书或原生指令路径——IR 函数表看不到它们，
+                                    // 「不在表内」不构成「约束未满足」的证据
+                                    //（D59 C 类：不改成功程序）。
+                                    *name = dispatch;
+                                } else {
+                                    // #519（2026-11-01 甲案续篇）：用户类型的派发
+                                    // 未命中不再回退裸名——裸名进 IR 的下场是
+                                    // 运行期 E6006，根因不可见；首个未命中即报
+                                    // E1106（fail-fast）。
+                                    return Err(self.dispatch_miss_diagnostic(&bare, *call_span));
                                 }
                             }
                         }
@@ -1446,47 +1439,18 @@ impl Monomorphizer {
         }))
     }
 
-    /// 约束泛型运算符派发名的多文件限定（4.10.3）：`operator_type_display`
-    /// 给用户类型的**裸名义名**（`Vec3`），而多文件合并函数表中用户方法
-    /// 按定义单元键限定（`lib.Vec3.add`）——类型的定义模块在 MonoType 里
-    /// 已丢失，无法从类型实参还原。确定性解析（与 `resolve_generic_name`
-    /// 同一形态，不做后缀猜测）：表内精确命中（原生背书 `Int.add`、单文件
-    /// 裸名表）直接用；否则试「泛型所属单元键」限定名并**查表验证**，命中
-    /// 才采用；都不中返回 `None`——调用点按 #519（2026-11-01 用户裁决甲案
-    /// 续篇）报 E1106，不再回退裸名（裸名进 IR ⇒ 运行期 E6006，根因不可见）。
-    /// 已知缺口：类型与泛型定义**不同模块**时限定名仍无法还原（需 MonoType
-    /// 携带定义模块，属 P6 类型身份收敛）；该缺口现在以 E1106 成因 B 显性化
-    /// （WBS 3.18），不再静默。
-    fn qualify_deferred_method(
-        bare: &str,
-        generic_name: &str,
-        table: &std::collections::HashSet<String>,
-    ) -> Option<String> {
-        if table.contains(bare) {
-            return Some(bare.to_string());
-        }
-        // 泛型所属单元键（首段切分，与 `resolve_generic_name` 的容器模块
-        // 规则同源：`lib.sum` → `lib`，方法派生 `lib.Point.get_x` → `lib`）
-        if let Some((module, _)) = generic_name.split_once('.') {
-            let qualified = DefPath::item(module, bare).project();
-            if table.contains(&qualified) {
-                return Some(qualified);
-            }
-        }
-        None
-    }
-
     /// 约束方法派发改写未命中的 E1106 诊断（#519 / 2026-11-01 用户裁决甲案
     /// 续篇 / WBS 3.20.7）。仅用户类型派发未命中进入本函数（原语类型头由
-    /// 改写点放行，见 [`PRIMITIVE_DISPLAY_NAMES`]）。成因按全程序函数表的
-    /// 后缀命中**提示性**区分——后缀判据不区分同名异型类型，也不能看见
-    /// 函数表之外的实现来源（如 extern 体），故 detail 只做观测陈述，
-    /// 归因句写成可能性而非断言（#519 批次复审修正）：
-    /// - 无任何以 `.{bare}` 结尾的键 ⇒ 成因 A：全表无同名方法登记，通常
-    ///   即约束未满足（类型未实现约束要求的运算符接口）；
-    /// - 存在其他单元键下的同名方法条目 ⇒ 成因 B：方法在表里，但其定义
-    ///   单元键无法从类型实参还原（跨模块类型身份缺口，WBS 3.18）；同名
-    ///   异型时该条目与本派发无关，随诊断如实说明。
+    /// 改写点放行，见 [`PRIMITIVE_DISPLAY_NAMES`]）。派发名 = 类型身份的
+    /// 投影（[crate::frontend::core::sema::operator_interfaces::
+    /// operator_method_dispatch_name]），未命中即该身份下确无实现登记。
+    /// detail 对全程序函数表做后缀命中**提示性**观测——后缀判据不区分同名
+    /// 异型类型，也不能看见函数表之外的实现来源（如 extern 体），故归因句
+    /// 写成可能性而非断言（#519 批次复审修正）：
+    /// - 无任何以 `.{bare}` 结尾的键 ⇒ 全表无同名方法登记，通常即约束未
+    ///   满足（类型未实现约束要求的运算符接口）；
+    /// - 存在其他类型/单元键下的同名方法条目 ⇒ 同名异型条目与本派发无关，
+    ///   仅作观测陈述。
     ///
     /// 候选取字典序前 3 个（`HashSet` 迭代无序，诊断必须确定性）。
     fn dispatch_miss_diagnostic(
@@ -1511,7 +1475,7 @@ impl Monomorphizer {
                 .collect::<Vec<_>>()
                 .join(", ");
             format!(
-                "函数表中存在其他单元键下的同名方法条目：{listed}——若该实现确属本类型，则为类型定义模块身份在单态化期丢失、无法还原限定名（WBS 3.18）；同名异型时该条目与本派发无关"
+                "函数表中存在其他类型/单元键下的同名方法条目：{listed}——派发名按类型身份投影，命中条目未必属本类型（同名异型时与本派发无关）"
             )
         };
         ErrorCodeDefinition::constraint_dispatch_failed(bare, &detail)
@@ -1569,6 +1533,8 @@ impl Monomorphizer {
                     })
                     .collect(),
                 self_type: body.self_type.substitute(&name_map),
+                // 特化不改变声明类型的身份（同一类型定义的具体实例）
+                identity: body.identity.clone(),
             },
             _ => return None,
         };
