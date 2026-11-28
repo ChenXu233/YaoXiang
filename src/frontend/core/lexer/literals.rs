@@ -662,6 +662,7 @@ impl TripleQuoted {
     fn token(
         self,
         value: &str,
+        anchors: &[FStringAnchor],
     ) -> (TokenKind, Option<Literal>) {
         match self {
             TripleQuoted::String => (
@@ -669,7 +670,7 @@ impl TripleQuoted {
                 Some(Literal::String(value.to_string())),
             ),
             TripleQuoted::FString => (
-                TokenKind::FStringLiteral(make_fstring_token(value.to_string())),
+                TokenKind::FStringLiteral(make_fstring_token(value.to_string(), anchors)),
                 None,
             ),
         }
@@ -685,12 +686,18 @@ impl TripleQuoted {
 
 /// 普通多行串与多行 f-string 的唯一扫描骨架。开头的三引号已由调用方消费；
 /// 内容原样收集（换行属于内容），遇到未转义的三引号结束。
+///
+/// f-string 形态下，每个「`{` 且下一字符不是 `{`」的插值开括号记录一条锚点
+/// （[`FStringAnchor`]，#574）：`advance` 已消费 `{`，`lexer.position()` 恰是
+/// 紧随其后的源文件绝对位置。多行 f-string 的插值内容同样原样收集（花括号
+/// 序列保留、无括号深度跟踪），切段端按「`{` 且下一字符不是 `{`」查锚点。
 fn scan_triple_quoted(
     lexer: &mut super::tokenizer::Lexer<'_>,
     kind: TripleQuoted,
 ) -> Option<Token> {
     let start_pos = lexer.position();
     let mut value = String::new();
+    let mut anchors: Vec<FStringAnchor> = Vec::new();
 
     while let Some(c) = lexer.advance() {
         if c == '"' {
@@ -703,7 +710,7 @@ fn scan_triple_quoted(
                 lexer.advance(); // consume second quote
                 lexer.advance(); // consume third quote
 
-                let (token_kind, literal) = kind.token(&value);
+                let (token_kind, literal) = kind.token(&value, &anchors);
                 return Some(Token {
                     kind: token_kind,
                     span: Span::new(
@@ -722,6 +729,12 @@ fn scan_triple_quoted(
         } else if c == '\\' {
             decode_escape(lexer, &mut value, kind.escape_mode());
         } else {
+            if matches!(kind, TripleQuoted::FString)
+                && c == '{'
+                && lexer.peek_public().copied() != Some('{')
+            {
+                anchors.push((value.len(), lexer.position()));
+            }
             value.push(c);
         }
     }
@@ -900,6 +913,57 @@ fn split_format_spec(s: &str) -> (String, Option<String>) {
     (s.to_string(), None)
 }
 
+/// 插值开括号的扫描期锚点：raw 内 `{` 的字节偏移 → 紧随其后的源文件绝对位置。
+///
+/// raw 是转义解码后的内容，raw 偏移与源偏移会错位（如文本段的 `\n` 两字符解码
+/// 成一字符）；只有扫描器在消费 `{` 的当下才拿得到源文件绝对位置，故锚点必须
+/// 在扫描期记录、切段期查用（#574：插值子词法的 base 不允许事后从 raw 反推）。
+/// 「插值开括号」两侧判据一致：扫描器与 [`split_fstring_segments`] 都以
+/// 「`{` 且下一字符不是 `{`」界定，因此切段端遇到的每个开括号必有锚点
+/// （扫描器还会为插值内部的嵌套 `{` 多记几条，查用时按偏移命中即可）。
+type FStringAnchor = (usize, Position);
+
+/// 从「紧随插值开括号」的绝对位置走到 trim 后表达式首字符。
+///
+/// 插值内容与源文本逐字对应（转义只在文本段解码，见 scan_fstring /
+/// scan_triple_quoted 的插值收集路径），故 expr 缓冲的前导空白可按字符
+/// 逐一推进位置：换行使 line 前进、column 归一，其余空白 column 前进。
+fn position_after_leading_whitespace(
+    start: Position,
+    leading: &str,
+) -> Position {
+    let mut pos = start;
+    for c in leading.chars() {
+        if c == '\n' {
+            pos.line += 1;
+            pos.column = 1;
+        } else {
+            pos.column += 1;
+        }
+        pos.offset += c.len_utf8();
+    }
+    pos
+}
+
+/// 按开括号的 raw 偏移取扫描期锚点。锚点按扫描顺序（即 raw 偏移升序）记录，
+/// 二分命中；查不到只可能是两侧「插值开括号」判据失配（内部不变量被破坏），
+/// 回退哑位置并把症状留在诊断位置上，不 panic。
+fn anchor_after_open(
+    anchors: &[FStringAnchor],
+    open_offset: usize,
+) -> Position {
+    match anchors.binary_search_by_key(&open_offset, |a| a.0) {
+        Ok(i) => anchors[i].1,
+        Err(_) => {
+            debug_assert!(
+                false,
+                "interpolation open at raw offset {open_offset} has no scanner anchor"
+            );
+            Position::dummy()
+        }
+    }
+}
+
 /// RFC-012 / #402: 词法期切分 f-string 内容（唯一事实源）。
 ///
 /// 输入是已解码转义、保留花括号序列的 raw 内容；输出 Text / Interpolation 段，
@@ -907,17 +971,24 @@ fn split_format_spec(s: &str) -> (String, Option<String>) {
 /// - {{ → 文本 {，}} 与孤立 } → 文本 }；
 /// - 插值按花括号配对截取，顶层 ':' 后的非空无空格部分作为格式说明符；
 /// - 表达式 trim 后为空则不产段（parser 旧实现同样跳过）。
-fn split_fstring_segments(raw: &str) -> Vec<FStringTokenSegment> {
+///
+/// anchors 是扫描期记录的插值开括号锚点（[`FStringAnchor`]）：每个插值段的
+/// base 由「开括号后的绝对位置 + expr 前导空白推进」得出，插值子词法据此
+/// 落回源文件绝对行列（#574 / WBS 8.2.3）。
+fn split_fstring_segments(
+    raw: &str,
+    anchors: &[FStringAnchor],
+) -> Vec<FStringTokenSegment> {
     let mut segments = Vec::new();
-    let mut chars = raw.chars().peekable();
+    let mut chars = raw.char_indices().peekable();
     let mut text_buf = String::new();
 
-    while let Some(&c) = chars.peek() {
+    while let Some(&(open_offset, c)) = chars.peek() {
         if c == '{' {
             chars.next();
 
             // Escaped {{ → literal {
-            if chars.peek() == Some(&'{') {
+            if chars.peek().map(|&(_, next)| next) == Some('{') {
                 chars.next();
                 text_buf.push('{');
                 continue;
@@ -931,7 +1002,7 @@ fn split_fstring_segments(raw: &str) -> Vec<FStringTokenSegment> {
             // Collect expression content (until matching })
             let mut expr_buf = String::new();
             let mut depth = 1;
-            while let Some(&inner) = chars.peek() {
+            while let Some(&(_, inner)) = chars.peek() {
                 if inner == '{' {
                     depth += 1;
                     expr_buf.push(inner);
@@ -957,16 +1028,24 @@ fn split_fstring_segments(raw: &str) -> Vec<FStringTokenSegment> {
                 // Empty interpolation: f"{}" → 不产段（与旧 parser 一致）
                 continue;
             }
+            // base = 开括号后的绝对位置 + expr 前导空白推进（trim 的前导部分
+            // 与源文本逐字对应）；尾随空白不参与——子词法只从 expr 首字符起扫。
+            let leading_ws_len = expr_str.len() - expr_str.trim_start().len();
+            let base = position_after_leading_whitespace(
+                anchor_after_open(anchors, open_offset),
+                &expr_str[..leading_ws_len],
+            );
             segments.push(FStringTokenSegment::Interpolation {
                 expr,
                 format_spec,
                 raw: expr_buf,
+                base,
             });
         } else if c == '}' {
             chars.next();
 
             // Escaped }} → literal }; a lone } is kept literal too
-            if chars.peek() == Some(&'}') {
+            if chars.peek().map(|&(_, next)| next) == Some('}') {
                 chars.next();
             }
             text_buf.push('}');
@@ -990,9 +1069,12 @@ fn split_fstring_segments(raw: &str) -> Vec<FStringTokenSegment> {
 }
 
 /// 构造 f-string token 载荷：raw 逐字保留（Display 与既有消费者不变），
-/// segments 是词法期切好的唯一事实源。
-fn make_fstring_token(raw: String) -> FStringToken {
-    let segments = split_fstring_segments(&raw);
+/// segments 是词法期切好的唯一事实源，锚点随切段算出各插值段的 base。
+fn make_fstring_token(
+    raw: String,
+    anchors: &[FStringAnchor],
+) -> FStringToken {
+    let segments = split_fstring_segments(&raw, anchors);
     FStringToken { raw, segments }
 }
 
@@ -1036,13 +1118,17 @@ pub fn scan_fstring(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
 
     let mut brace_depth = 0;
 
+    // 插值开括号的扫描期锚点（#574）：`{{` 转义不是开括号、不记录；
+    // 其余进入插值收集的 `{` 在 advance 消费后记下紧随其后的源文件绝对位置。
+    let mut anchors: Vec<FStringAnchor> = Vec::new();
+
     while let Some(&c) = lexer.peek() {
         match c {
             '"' if brace_depth == 0 => {
                 lexer.advance();
 
                 return Some(Token {
-                    kind: TokenKind::FStringLiteral(make_fstring_token(value.clone())),
+                    kind: TokenKind::FStringLiteral(make_fstring_token(value.clone(), &anchors)),
 
                     span: Span::new(
                         Position::with_offset(
@@ -1075,6 +1161,8 @@ pub fn scan_fstring(lexer: &mut super::tokenizer::Lexer<'_>) -> Option<Token> {
                 }
 
                 brace_depth += 1;
+
+                anchors.push((value.len(), lexer.position()));
 
                 value.push('{');
             }

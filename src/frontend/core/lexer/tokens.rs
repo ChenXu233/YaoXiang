@@ -1,7 +1,7 @@
 //! Token types
 
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
-use crate::util::span::Span;
+use crate::util::span::{Position, Span};
 
 /// Lexer error
 #[derive(Debug, thiserror::Error)]
@@ -175,10 +175,17 @@ pub enum FStringTokenSegment {
     Text(String),
     /// 插值段：expr 是去掉格式说明符并 trim 后的表达式源文本；
     /// raw 是插值原内容（含格式说明符），解析失败时回退成字面文本。
+    ///
+    /// base 是 expr 起始字符（trim 后）在**源文件**中的绝对位置——插值子词法
+    /// 以它为词法起点，子 token 的 Span 直接落回源文件（#574 / WBS 8.2.3：
+    /// 修前子词法从插值文本 0/1/1 起扫，插值内诊断 line=1、col 相对插值文本）。
+    /// 锚点在扫描期由 f-string 扫描器记录（转义解码只发生在文本段，raw 相对
+    /// 偏移与源偏移会错位，不能事后从 raw 反推）。
     Interpolation {
         expr: String,
         format_spec: Option<String>,
         raw: String,
+        base: Position,
     },
 }
 

@@ -281,14 +281,18 @@ test_formatter_emits_semicolon_for_same_line_statements	src/formatter/tests/surf
 test_fstring_brace_escape_preserved_raw	src/frontend/core/lexer/tests/fstring.rs	helperx1	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
 test_fstring_close_brace_escape_preserved_raw	src/frontend/core/lexer/tests/fstring.rs	helperx1	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
 test_fstring_interpolation_markers_preserved	src/frontend/core/lexer/tests/fstring.rs	helperx1	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
-test_fstring_mixed_escape_and_interpolation	src/frontend/core/lexer/tests/fstring.rs	helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_fstring_backslash_escape_decoded	src/frontend/core/lexer/tests/fstring.rs	helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_fstring_multiline_raw	src/frontend/core/lexer/tests/fstring.rs	helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_fstring_multiline_with_interpolation	src/frontend/core/lexer/tests/fstring.rs	helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_fstring_mixed_escape_and_interpolation	src/frontend/core/lexer/tests/fstring.rs	helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_fstring_backslash_escape_decoded	src/frontend/core/lexer/tests/fstring.rs	helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_fstring_multiline_raw	src/frontend/core/lexer/tests/fstring.rs	helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_fstring_multiline_with_interpolation	src/frontend/core/lexer/tests/fstring.rs	helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_fstring_multiline_brace_escape_preserved	src/frontend/core/lexer/tests/fstring.rs	helperx1	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
-test_fstring_multiline_empty	src/frontend/core/lexer/tests/fstring.rs	helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_fstring_multiline_single_quotes_inside	src/frontend/core/lexer/tests/fstring.rs	helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_fstring_multiline_unterminated	src/frontend/core/lexer/tests/fstring.rs	assertx1 is_errx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_fstring_multiline_empty	src/frontend/core/lexer/tests/fstring.rs	helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_fstring_multiline_single_quotes_inside	src/frontend/core/lexer/tests/fstring.rs	helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_fstring_multiline_unterminated	src/frontend/core/lexer/tests/fstring.rs	assertx1 is_errx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_fstring_interpolation_base_is_absolute_source_position	src/frontend/core/lexer/tests/fstring.rs	assert_eqx3	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_fstring_interpolation_base_survives_text_escape	src/frontend/core/lexer/tests/fstring.rs	assert_eqx3	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_fstring_interpolation_base_advances_leading_whitespace	src/frontend/core/lexer/tests/fstring.rs	assert_eqx3	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_fstring_multiline_interpolation_base_points_to_source_line	src/frontend/core/lexer/tests/fstring.rs	assert_eqx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_simple_tokenization	src/frontend/core/lexer/tests/lexer_mod.rs	assert_eqx2 matchesx1 assertx1 unwrapx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_rfc010_generic_syntax	src/frontend/core/lexer/tests/lexer_mod.rs	matchesx4 assertx3 unwrapx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_int_decimal	src/frontend/core/lexer/tests/literals.rs	matchesx1 assertx1 unwrapx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
@@ -336,6 +340,11 @@ test_parse_wildcard	src/frontend/core/parser/pratt/tests/nud.rs	matchesx1 assert
 test_parse_unary	src/frontend/core/parser/pratt/tests/nud.rs	matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_parse_return_expr	src/frontend/core/parser/pratt/tests/nud.rs	matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_parse_block	src/frontend/core/parser/pratt/tests/nud.rs	matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_fstring_interpolation_var_span_is_absolute	src/frontend/core/parser/pratt/tests/nud.rs	assert_eqx5	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_fstring_multi_interpolation_var_spans_are_absolute	src/frontend/core/parser/pratt/tests/nud.rs	assert_eqx7	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_fstring_nested_interpolation_var_span_is_absolute	src/frontend/core/parser/pratt/tests/nud.rs	assert_eqx4	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_fstring_multiline_interpolation_var_span_is_absolute	src/frontend/core/parser/pratt/tests/nud.rs	assert_eqx4	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_fstring_interpolation_spanning_lines_var_spans_are_absolute	src/frontend/core/parser/pratt/tests/nud.rs	assert_eqx5	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_every_table_operator_maps_to_the_same_const_data_operator	src/frontend/core/parser/pratt/tests/operator_sources.rs	assert_eqx2 assertx1 is_nonex1 match_panicx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_second_representation_variants_are_enumerated_exhaustively	src/frontend/core/parser/pratt/tests/operator_sources.rs	assert_eqx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_precedence_ordering	src/frontend/core/parser/pratt/tests/precedence.rs	assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判

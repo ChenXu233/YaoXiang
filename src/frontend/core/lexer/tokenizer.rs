@@ -47,20 +47,33 @@ pub struct Lexer<'a> {
 impl<'a> Lexer<'a> {
     /// Create a new lexer for the given source
     pub fn new(source: &'a str) -> Self {
+        Self::with_base(source, Position::with_offset(1, 1, 0))
+    }
+
+    /// 带基础位置的词法器：起点从 base（源文件绝对 line / column / offset）起计。
+    ///
+    /// f-string 插值子词法的唯一消费入口（`lex_interpolations`）：子 token 的
+    /// Span 以 base 为原点直接落回源文件绝对位置（#574 / WBS 8.2.3）。嵌套
+    /// f-string 天然可组合——内层插值的锚点取自外层子词法已含 base 的
+    /// `position()`。整文件词法走 [`Self::new`]（base = 文件起点）。
+    pub fn with_base(
+        source: &'a str,
+        base: Position,
+    ) -> Self {
         Self {
             chars: source.chars().peekable(),
 
-            offset: 0,
+            offset: base.offset,
 
-            line: 1,
+            line: base.line,
 
-            column: 1,
+            column: base.column,
 
-            start_offset: 0,
+            start_offset: base.offset,
 
-            start_line: 1,
+            start_line: base.line,
 
-            start_column: 1,
+            start_column: base.column,
 
             error: None,
 

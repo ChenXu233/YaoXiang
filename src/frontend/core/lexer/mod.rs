@@ -20,20 +20,25 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, crate::frontend::core::lexer
     #[cfg(test)]
     record_tokenize_call();
 
-    tokenize_with_logging(source)
+    tokenize_with_logging(source, crate::util::span::Position::with_offset(1, 1, 0))
 }
 
 /// 公共词法的带日志实现：f-string 插值的一次性批量词法复用它，保证插值 token
 /// 流与逐插值调用公共入口时逐 token 同形（含 tracing 日志）。
+///
+/// base 是子源文本起点在**源文件**中的绝对位置：整文件词法传文件起点，
+/// f-string 插值子词法传插值段携带的 base——子 token 的 Span 以它为原点，
+/// 直接落回源文件绝对行列与偏移（#574 / WBS 8.2.3）。
 fn tokenize_with_logging(
-    source: &str
+    source: &str,
+    base: crate::util::span::Position,
 ) -> Result<Vec<Token>, crate::frontend::core::lexer::LexError> {
     use crate::util::i18n::{t_cur, MSG};
 
     let source_len = source.len();
     tracing::debug!("{}", t_cur(MSG::LexStart, Some(&[&source_len])));
 
-    let mut lexer = Lexer::new(source);
+    let mut lexer = Lexer::with_base(source, base);
     let mut tokens = Vec::new();
 
     while let Some(token) = lexer.next_token() {
@@ -69,15 +74,20 @@ fn tokenize_with_logging(
 /// parser 在首次需要某个 f-string 节点时用一次调用取回它的全部插值 token 流，
 /// 结果顺序与 sources 一一对应（每项与 tokenize 同形：含 Eof，词法错误为 Err）。
 /// 单点实现：插值词法只发生在这里，parser 不再逐插值重入公共词法入口。
+///
+/// 每项携带该插值 expr 起始的**源文件绝对位置**（`FStringTokenSegment` 的
+/// base，扫描期锚点记录，#574）：子词法以它为词法起点，插值内 token 的
+/// Span 直接是源文件绝对行列——不再从插值文本 0/1/1 起扫。嵌套 f-string
+/// 天然可组合：内层插值的 base 取自外层子词法已含 base 的 position。
 pub fn lex_interpolations(
-    sources: &[&str]
+    sources: &[(&str, crate::util::span::Position)]
 ) -> Vec<Result<Vec<Token>, crate::frontend::core::lexer::LexError>> {
     #[cfg(test)]
     record_interpolation_batch_call();
 
     sources
         .iter()
-        .map(|source| tokenize_with_logging(source))
+        .map(|(source, base)| tokenize_with_logging(source, *base))
         .collect()
 }
 

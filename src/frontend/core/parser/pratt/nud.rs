@@ -388,13 +388,17 @@ impl<'a> ParserState<'a> {
         fstring: &FStringToken,
         span: Span,
     ) -> Option<Vec<FStringSegment>> {
-        // 一次性满足本 f-string 全部插值的词法需求（N 个插值 1 次调用、单点实现）
-        let interpolation_sources: Vec<&str> = fstring
+        // 一次性满足本 f-string 全部插值的词法需求（N 个插值 1 次调用、单点实现）。
+        // 每项携带插值 expr 起始的源文件绝对位置（段上的 base，#574）——插值
+        // 子词法以它为词法起点，插值内诊断直接落到源文件绝对行列。
+        let interpolation_sources: Vec<(&str, crate::util::span::Position)> = fstring
             .segments
             .iter()
             .filter_map(|segment| match segment {
                 FStringTokenSegment::Text(_) => None,
-                FStringTokenSegment::Interpolation { expr, .. } => Some(expr.as_str()),
+                FStringTokenSegment::Interpolation { expr, base, .. } => {
+                    Some((expr.as_str(), *base))
+                }
             })
             .collect();
         let mut interpolation_tokens = lex_interpolations(&interpolation_sources).into_iter();
