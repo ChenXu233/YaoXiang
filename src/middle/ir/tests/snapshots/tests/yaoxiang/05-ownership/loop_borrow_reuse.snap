@@ -34,7 +34,7 @@ module
     value v12: Ref { mutable: false, inner: Int(64) } @block3
     value v13: Ref { mutable: false, inner: Int(64) } @block3
     value v14: Generic { name: "String", args: [] } @block3
-    value v15: TypeRef("?") @block3
+    value v15: Generic { name: "String", args: [] } @block3
     value v16: Void @block3
     value v17: Generic { name: "String", args: [] } @block3
     value v18: Void @block2

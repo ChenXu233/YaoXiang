@@ -10,22 +10,22 @@ module
     slot[7] tail : Int(64) @depth1
     locals_total=12
     values_total=55
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
-    value v2: TypeRef("?") @block0
+    value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Generic { name: "String", args: [] } @block0
     value v5: Generic { name: "String", args: [] } @block0
-    value v6: TypeRef("?") @block0
+    value v6: Never @block0
     value v7: Bool @block0
-    value v8: TypeRef("?") @block0
+    value v8: Int(64) @block0
     value v9: Int(64) @block0
     value v10: Generic { name: "String", args: [] } @block0
     value v11: Generic { name: "String", args: [] } @block0
     value v12: Generic { name: "String", args: [] } @block0
-    value v13: TypeRef("?") @block0
+    value v13: Never @block0
     value v14: Bool @block0
-    value v15: TypeRef("?") @block0
+    value v15: Int(64) @block0
     value v16: Int(64) @block0
     value v17: Generic { name: "String", args: [] } @block0
     value v18: Generic { name: "String", args: [] } @block0
@@ -33,36 +33,36 @@ module
     value v20: Generic { name: "String", args: [] } @block0
     value v21: TypeRef("File") @block0
     value v22: Generic { name: "String", args: [] } @block0
-    value v23: TypeRef("?") @block0
+    value v23: Never @block0
     value v24: Bool @block0
     value v25: Int(64) @block0
     value v26: Int(64) @block0
     value v27: Generic { name: "String", args: [] } @block0
-    value v28: TypeRef("?") @block0
+    value v28: Void @block0
     value v29: TypeRef("File") @block0
     value v30: Generic { name: "String", args: [] } @block0
     value v31: Generic { name: "String", args: [] } @block0
-    value v32: TypeRef("?") @block0
+    value v32: Bool @block0
     value v33: TypeRef("File") @block0
     value v34: Int(64) @block0
     value v35: TypeRef("File") @block0
     value v36: Int(64) @block0
-    value v37: TypeRef("?") @block0
+    value v37: Never @block0
     value v38: Bool @block0
     value v39: Generic { name: "String", args: [] } @block0
     value v40: Generic { name: "String", args: [] } @block0
     value v41: Generic { name: "String", args: [] } @block0
     value v42: Generic { name: "String", args: [] } @block0
     value v43: Generic { name: "String", args: [] } @block0
-    value v44: TypeRef("?") @block0
+    value v44: Void @block0
     value v45: TypeRef("File") @block0
-    value v46: TypeRef("?") @block0
-    value v47: TypeRef("?") @block0
+    value v46: Never @block0
+    value v47: Bool @block0
     value v48: Generic { name: "String", args: [] } @block0
     value v49: Generic { name: "String", args: [] } @block0
-    value v50: TypeRef("?") @block0
+    value v50: Never @block0
     value v51: Bool @block0
-    value v52: TypeRef("?") @block0
+    value v52: Bool @block0
     value v53: Generic { name: "String", args: [] } @block0
     value v54: Generic { name: "String", args: [] } @block0
     Call %0 <- string("std.os.getcwd") [] (def=d0)

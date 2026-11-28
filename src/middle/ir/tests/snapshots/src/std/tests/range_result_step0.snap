@@ -9,12 +9,12 @@ module
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     value v3: Generic { name: "Range", args: [Int(64)] } @block0
-    value v4: TypeRef("?") @block0
+    value v4: Bool @block0
     value v5: TypeRef("?") @block1
     value v6: TypeRef("?") @block2
     value v7: TypeRef("?") @block2
-    value v8: TypeRef("?") @block3
-    value v9: TypeRef("?") @block3
+    value v8: Generic { name: "Result", args: [TypeRef("Any"), TypeRef("Error")] } @block3
+    value v9: TypeRef("Any") @block3
     value v10: Generic { name: "Iterator", args: [TypeRef("Any")] } @block3
     Load %0 <- arg%0
     Load v0 <- int(1)
@@ -47,15 +47,15 @@ module
     value v0: Int(64) @block0
     value v1: Int(64) @block0
     value v2: Int(64) @block0
-    value v3: TypeRef("?") @block3
-    value v4: TypeRef("?") @block0
+    value v3: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block3
+    value v4: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block0
     value v5: Generic { name: "Range", args: [Int(64)] } @block0
     value v6: Int(64) @block0
-    value v7: TypeRef("?") @block0
-    value v8: TypeRef("?") @block1
-    value v9: TypeRef("?") @block2
-    value v10: TypeRef("?") @block2
-    value v11: TypeRef("?") @block1
+    value v7: Bool @block0
+    value v8: Bool @block1
+    value v9: TypeRef("Error") @block2
+    value v10: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block2
+    value v11: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block1
     Load %0 <- arg%0
     Load %1 <- arg%1
     Load v0 <- int(0)
@@ -87,48 +87,48 @@ module
     locals_total=10
     values_total=46
     value v0: Int(64) @block0
-    value v1: TypeRef("?") @block0
-    value v2: TypeRef("?") @block0
+    value v1: Never @block0
+    value v2: Bool @block0
     value v3: Generic { name: "Result", args: [TypeRef("Any"), TypeRef("Error")] } @block0
     value v4: Generic { name: "String", args: [] } @block0
-    value v5: TypeRef("?") @block0
+    value v5: Never @block0
     value v6: Bool @block0
-    value v7: TypeRef("?") @block0
+    value v7: Int(64) @block0
     value v8: Int(64) @block0
     value v9: Generic { name: "Result", args: [TypeRef("Any"), TypeRef("Error")] } @block0
     value v10: Generic { name: "String", args: [] } @block0
     value v11: Int(64) @block0
-    value v12: TypeRef("?") @block0
-    value v13: TypeRef("?") @block0
+    value v12: Never @block0
+    value v13: Bool @block0
     value v14: Generic { name: "Result", args: [TypeRef("Any"), TypeRef("Error")] } @block0
     value v15: Generic { name: "String", args: [] } @block0
     value v16: Int(64) @block0
-    value v17: TypeRef("?") @block0
+    value v17: Never @block0
     value v18: Bool @block0
-    value v19: TypeRef("?") @block0
+    value v19: Int(64) @block0
     value v20: Int(64) @block0
     value v21: Generic { name: "Result", args: [TypeRef("Any"), TypeRef("Error")] } @block0
     value v22: Generic { name: "String", args: [] } @block0
     value v23: Int(64) @block0
     value v24: Int(64) @block0
-    value v25: TypeRef("?") @block0
-    value v26: TypeRef("?") @block0
+    value v25: Never @block0
+    value v26: Bool @block0
     value v27: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block0
     value v28: Generic { name: "String", args: [] } @block0
     value v29: Int(64) @block0
     value v30: Int(64) @block0
-    value v31: TypeRef("?") @block0
-    value v32: TypeRef("?") @block0
+    value v31: Never @block0
+    value v32: Bool @block0
     value v33: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block0
     value v34: Generic { name: "String", args: [] } @block0
-    value v35: TypeRef("?") @block0
+    value v35: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block0
     value v36: TypeRef("?") @block0
     value v37: Int(64) @block0
     value v38: Int(64) @block0
     value v39: Int(64) @block0
-    value v40: TypeRef("?") @block0
+    value v40: Never @block0
     value v41: Bool @block0
-    value v42: TypeRef("?") @block0
+    value v42: TypeRef("Any") @block0
     value v43: Int(64) @block0
     value v44: Generic { name: "Iterator", args: [TypeRef("Any")] } @block0
     value v45: Generic { name: "String", args: [] } @block0

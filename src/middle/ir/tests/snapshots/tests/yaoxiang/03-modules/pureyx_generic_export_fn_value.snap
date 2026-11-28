@@ -12,23 +12,23 @@ module
     value v4: Int(64) @block0
     value v5: Int(64) @block0
     value v6: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v7: TypeRef("?") @block0
-    value v8: Fn { params: [Ref { mutable: false, inner: Generic { name: "Vec", args: [TypeVar(TypeVar(55))] } }, Fn { params: [TypeVar(TypeVar(55))], return_type: TypeVar(TypeVar(56)) }], return_type: Generic { name: "Vec", args: [TypeVar(TypeVar(56))] } } @block0
-    value v9: TypeRef("?") @block0
+    value v7: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v8: TypeRef("?") @block0
+    value v9: Never @block0
     value v10: Bool @block0
     value v11: TypeRef("?") @block0
     value v12: Int(64) @block0
     value v13: Generic { name: "Vec", args: [Int(64)] } @block0
     value v14: Int(64) @block0
     value v15: Generic { name: "String", args: [] } @block0
-    value v16: TypeRef("?") @block0
+    value v16: Never @block0
     value v17: Bool @block0
     value v18: TypeRef("?") @block0
     value v19: Int(64) @block0
     value v20: Generic { name: "Vec", args: [Int(64)] } @block0
     value v21: Int(64) @block0
     value v22: Generic { name: "String", args: [] } @block0
-    value v23: TypeRef("?") @block0
+    value v23: Never @block0
     value v24: Bool @block0
     value v25: TypeRef("?") @block0
     value v26: Int(64) @block0
@@ -76,13 +76,13 @@ module
     Drop %0
     Drop %1
     Ret v23
-  fn closure_0(Int(64)) -> Void
+  fn closure_0(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth2
     locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
-    value v1: TypeVar(TypeVar(44)) @block0
-    value v2: TypeVar(TypeVar(44)) @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
     value v3: Int(64) @block0
     Load v2 <- %0
     Load v3 <- int(2)

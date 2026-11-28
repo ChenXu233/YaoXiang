@@ -7,7 +7,7 @@ module
     value v0: Int(64) @block0
     value v1: Int(64) @block0
     value v2: Int(64) @block0
-    value v3: TypeRef("?") @block0
+    value v3: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block0
     value v4: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block0
     Load %0 <- arg%0
     Load v0 <- int(1)
@@ -29,12 +29,12 @@ module
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     value v3: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block0
-    value v4: TypeRef("?") @block0
+    value v4: Bool @block0
     value v5: TypeRef("?") @block1
     value v6: TypeRef("?") @block2
     value v7: TypeRef("?") @block2
-    value v8: TypeRef("?") @block3
-    value v9: TypeRef("?") @block3
+    value v8: Generic { name: "Result", args: [TypeRef("Any"), TypeRef("Error")] } @block3
+    value v9: TypeRef("Any") @block3
     value v10: Generic { name: "Iterator", args: [TypeRef("Any")] } @block3
     Load %0 <- arg%0
     Load v0 <- int(1)
@@ -70,57 +70,57 @@ module
     locals_total=11
     values_total=55
     value v0: Int(64) @block0
-    value v1: TypeRef("?") @block0
-    value v2: TypeRef("?") @block0
+    value v1: Never @block0
+    value v2: Bool @block0
     value v3: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block0
     value v4: Generic { name: "String", args: [] } @block0
     value v5: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block0
-    value v6: TypeRef("?") @block0
+    value v6: Never @block0
     value v7: Bool @block0
-    value v8: TypeRef("?") @block0
+    value v8: Generic { name: "String", args: [] } @block0
     value v9: Generic { name: "String", args: [] } @block0
     value v10: TypeRef("Error") @block0
     value v11: Generic { name: "String", args: [] } @block0
-    value v12: TypeRef("?") @block0
+    value v12: Never @block0
     value v13: Bool @block0
     value v14: Bool @block0
-    value v15: TypeRef("?") @block0
+    value v15: Generic { name: "String", args: [] } @block0
     value v16: Generic { name: "String", args: [] } @block0
     value v17: TypeRef("Error") @block0
     value v18: Generic { name: "String", args: [] } @block0
     value v19: Int(64) @block0
-    value v20: TypeRef("?") @block0
-    value v21: TypeRef("?") @block0
+    value v20: Never @block0
+    value v21: Bool @block0
     value v22: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block0
     value v23: Generic { name: "String", args: [] } @block0
     value v24: Generic { name: "String", args: [] } @block0
-    value v25: TypeRef("?") @block0
-    value v26: TypeRef("?") @block0
+    value v25: Never @block0
+    value v26: Bool @block0
     value v27: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
     value v28: Generic { name: "String", args: [] } @block0
     value v29: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
-    value v30: TypeRef("?") @block0
+    value v30: Never @block0
     value v31: Bool @block0
-    value v32: TypeRef("?") @block0
+    value v32: Generic { name: "String", args: [] } @block0
     value v33: Generic { name: "String", args: [] } @block0
     value v34: TypeRef("Error") @block0
     value v35: Generic { name: "String", args: [] } @block0
     value v36: Generic { name: "String", args: [] } @block0
-    value v37: TypeRef("?") @block0
+    value v37: Never @block0
     value v38: Bool @block0
-    value v39: TypeRef("?") @block0
+    value v39: Int(64) @block0
     value v40: Int(64) @block0
     value v41: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
     value v42: Generic { name: "String", args: [] } @block0
     value v43: Int(64) @block0
-    value v44: TypeRef("?") @block0
-    value v45: TypeRef("?") @block0
+    value v44: Never @block0
+    value v45: Bool @block0
     value v46: Generic { name: "Result", args: [TypeRef("Any"), TypeRef("Error")] } @block0
     value v47: Generic { name: "String", args: [] } @block0
     value v48: Generic { name: "Result", args: [TypeRef("Any"), TypeRef("Error")] } @block0
-    value v49: TypeRef("?") @block0
+    value v49: Never @block0
     value v50: Bool @block0
-    value v51: TypeRef("?") @block0
+    value v51: Generic { name: "String", args: [] } @block0
     value v52: Generic { name: "String", args: [] } @block0
     value v53: TypeRef("Error") @block0
     value v54: Generic { name: "String", args: [] } @block0

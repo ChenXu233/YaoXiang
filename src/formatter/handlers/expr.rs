@@ -162,6 +162,7 @@ pub fn format_expr(
             params,
             body,
             span: _,
+            plan_id: _,
         } => format_lambda(params, body, ctx, source_map),
         Expr::FString { segments, span: _ } => format_fstring(segments, ctx, source_map),
         Expr::Borrow {

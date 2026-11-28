@@ -51,7 +51,7 @@ module
     value v7: TypeRef("?") @block2
     value v8: Int(64) @block2
     value v9: Bool @block2
-    value v10: TypeRef("?") @block3
+    value v10: Never @block3
     value v11: Bool @block3
     value v12: Void @block1
     value v13: Void @block3
@@ -90,7 +90,7 @@ module
     value v7: Int(64) @block2
     value v8: Bool @block2
     value v9: TypeRef("?") @block3
-    value v10: TypeRef("?") @block3
+    value v10: Never @block3
     value v11: Bool @block3
     value v12: Void @block1
     value v13: Void @block3
@@ -120,7 +120,7 @@ module
     values_total=5
     value v0: Void @block0
     value v1: Generic { name: "String", args: [] } @block0
-    value v2: TypeRef("?") @block0
+    value v2: Generic { name: "Maybe", args: [] } @block0
     value v3: Void @block0
     value v4: Void @block0
     Load v0 <- void
@@ -135,11 +135,11 @@ module
     slot[1] v : Int(64) @depth1
     locals_total=5
     values_total=8
-    value v0: TypeRef("?") @block0
+    value v0: Bool @block0
     value v1: TypeRef("?") @block1
     value v2: TypeRef("?") @block2
-    value v3: TypeRef("?") @block2
-    value v4: TypeRef("?") @block3
+    value v3: Ref { mutable: false, inner: TypeRef("Maybe") } @block2
+    value v4: Generic { name: "Maybe", args: [] } @block3
     value v5: Int(64) @block3
     value v6: Int(64) @block3
     value v7: Int(64) @block3
@@ -178,7 +178,7 @@ module
     value v7: Int(64) @block0
     value v8: Bool @block0
     value v9: TypeRef("?") @block1
-    value v10: TypeRef("?") @block1
+    value v10: Never @block1
     value v11: Bool @block1
     value v12: Int(64) @block1
     value v13: Int(64) @block1
@@ -186,7 +186,7 @@ module
     value v15: TypeRef("?") @block2
     value v16: Int(64) @block2
     value v17: Bool @block2
-    value v18: TypeRef("?") @block3
+    value v18: Never @block3
     value v19: Bool @block3
     value v20: Generic { name: "String", args: [] } @block3
     value v21: Generic { name: "Maybe", args: [] } @block4
@@ -197,13 +197,13 @@ module
     value v26: Int(64) @block4
     value v27: Bool @block4
     value v28: TypeRef("?") @block5
-    value v29: TypeRef("?") @block5
+    value v29: Never @block5
     value v30: Bool @block5
     value v31: Generic { name: "String", args: [] } @block5
     value v32: TypeRef("?") @block6
     value v33: Int(64) @block6
     value v34: Bool @block6
-    value v35: TypeRef("?") @block7
+    value v35: Never @block7
     value v36: Bool @block7
     value v37: Generic { name: "String", args: [] } @block7
     value v38: Void @block1

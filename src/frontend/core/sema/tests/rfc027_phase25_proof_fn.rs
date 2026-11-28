@@ -189,6 +189,7 @@ fn make_proof_fn_module(
                     span: Span::dummy(),
                 }),
                 span: Span::dummy(),
+                plan_id: PlanId::UNPLANNED,
             })),
             is_mut: false,
             span: Span::dummy(),

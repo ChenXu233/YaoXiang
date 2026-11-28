@@ -42,18 +42,18 @@ module
     values_total=18
     value v0: Int(64) @block0
     value v1: Int(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Never @block0
     value v3: Bool @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
     value v6: Generic { name: "String", args: [] } @block0
     value v7: Int(64) @block0
-    value v8: TypeRef("?") @block0
+    value v8: Never @block0
     value v9: Bool @block0
     value v10: Int(64) @block0
     value v11: Int(64) @block0
     value v12: Generic { name: "String", args: [] } @block0
-    value v13: TypeRef("?") @block0
+    value v13: Never @block0
     value v14: Bool @block0
     value v15: Generic { name: "String", args: [] } @block0
     value v16: Generic { name: "String", args: [] } @block0

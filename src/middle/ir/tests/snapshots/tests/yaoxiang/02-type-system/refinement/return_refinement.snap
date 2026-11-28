@@ -51,27 +51,27 @@ module
   fn main() -> Void
     locals_total=3
     values_total=24
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
-    value v2: Refined { base: Int(64), constraint: BinOp { op: Gt, left: NamedVar("r"), right: Lit(Int(0)) } } @block0
+    value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Generic { name: "String", args: [] } @block0
-    value v6: TypeRef("?") @block0
+    value v6: Never @block0
     value v7: Bool @block0
-    value v8: Refined { base: Int(64), constraint: BinOp { op: Gt, left: NamedVar("b"), right: Lit(Int(0)) } } @block0
+    value v8: Int(64) @block0
     value v9: Int(64) @block0
     value v10: Int(64) @block0
     value v11: Generic { name: "String", args: [] } @block0
-    value v12: TypeRef("?") @block0
+    value v12: Never @block0
     value v13: Bool @block0
-    value v14: Refined { base: Int(64), constraint: BinOp { op: Gt, left: NamedVar("r"), right: Lit(Int(0)) } } @block0
+    value v14: Int(64) @block0
     value v15: Int(64) @block0
     value v16: Int(64) @block0
     value v17: Generic { name: "String", args: [] } @block0
-    value v18: TypeRef("?") @block0
+    value v18: Never @block0
     value v19: Bool @block0
-    value v20: Refined { base: Int(64), constraint: BinOp { op: Gt, left: NamedVar("r"), right: Lit(Int(0)) } } @block0
+    value v20: Int(64) @block0
     value v21: Int(64) @block0
     value v22: Int(64) @block0
     value v23: Generic { name: "String", args: [] } @block0

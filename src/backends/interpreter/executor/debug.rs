@@ -207,8 +207,7 @@ impl Interpreter {
             | BytecodeInstr::ReturnValue { .. }
             | BytecodeInstr::Jmp { .. }
             | BytecodeInstr::JmpIf { .. }
-            | BytecodeInstr::JmpIfNot { .. }
-            | BytecodeInstr::Switch { .. } => self.exec_control(fi, instr),
+            | BytecodeInstr::JmpIfNot { .. } => self.exec_control(fi, instr),
 
             // ── 寄存器与槽位（ops/reg.rs）────────────────────────
             BytecodeInstr::Mov { .. }

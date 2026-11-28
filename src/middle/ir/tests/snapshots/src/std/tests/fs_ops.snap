@@ -6,35 +6,35 @@ module
     values_total=33
     value v0: Generic { name: "String", args: [] } @block0
     value v1: Generic { name: "String", args: [] } @block0
-    value v2: TypeRef("?") @block0
+    value v2: Never @block0
     value v3: Bool @block0
     value v4: Generic { name: "String", args: [] } @block0
-    value v5: TypeRef("?") @block0
-    value v6: TypeRef("?") @block0
+    value v5: Never @block0
+    value v6: Bool @block0
     value v7: Generic { name: "String", args: [] } @block0
     value v8: Generic { name: "String", args: [] } @block0
-    value v9: TypeRef("?") @block0
+    value v9: Never @block0
     value v10: Bool @block0
-    value v11: TypeRef("?") @block0
+    value v11: Generic { name: "String", args: [] } @block0
     value v12: Generic { name: "String", args: [] } @block0
     value v13: Generic { name: "String", args: [] } @block0
     value v14: Generic { name: "String", args: [] } @block0
-    value v15: TypeRef("?") @block0
+    value v15: Bool @block0
     value v16: Generic { name: "String", args: [] } @block0
     value v17: Generic { name: "String", args: [] } @block0
-    value v18: TypeRef("?") @block0
+    value v18: Never @block0
     value v19: Bool @block0
-    value v20: TypeRef("?") @block0
+    value v20: Generic { name: "String", args: [] } @block0
     value v21: Generic { name: "String", args: [] } @block0
     value v22: Generic { name: "String", args: [] } @block0
     value v23: Generic { name: "String", args: [] } @block0
-    value v24: TypeRef("?") @block0
-    value v25: TypeRef("?") @block0
+    value v24: Never @block0
+    value v25: Bool @block0
     value v26: Generic { name: "String", args: [] } @block0
     value v27: Generic { name: "String", args: [] } @block0
-    value v28: TypeRef("?") @block0
+    value v28: Never @block0
     value v29: Bool @block0
-    value v30: TypeRef("?") @block0
+    value v30: Bool @block0
     value v31: Generic { name: "String", args: [] } @block0
     value v32: Generic { name: "String", args: [] } @block0
     Load %0 <- string("__yx_fs_ops_tmp.txt")
@@ -85,25 +85,25 @@ module
     slot[0] p : Int(64) @depth1
     locals_total=4
     values_total=21
-    value v0: TypeRef("?") @block0
+    value v0: Bool @block0
     value v1: Generic { name: "String", args: [] } @block0
     value v2: Generic { name: "String", args: [] } @block0
-    value v3: TypeRef("?") @block0
-    value v4: TypeRef("?") @block0
+    value v3: Never @block0
+    value v4: Bool @block0
     value v5: Generic { name: "String", args: [] } @block0
     value v6: Generic { name: "String", args: [] } @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
-    value v9: TypeRef("?") @block0
+    value v9: Bool @block0
     value v10: Generic { name: "String", args: [] } @block0
     value v11: Generic { name: "String", args: [] } @block0
-    value v12: TypeRef("?") @block0
+    value v12: Never @block0
     value v13: Bool @block0
-    value v14: TypeRef("?") @block0
+    value v14: Bool @block0
     value v15: Generic { name: "String", args: [] } @block0
     value v16: Generic { name: "String", args: [] } @block0
-    value v17: TypeRef("?") @block0
-    value v18: TypeRef("?") @block0
+    value v17: Never @block0
+    value v18: Bool @block0
     value v19: Generic { name: "String", args: [] } @block0
     value v20: Generic { name: "String", args: [] } @block0
     Load %0 <- string("__yx_fs_ops_pred.txt")
@@ -144,109 +144,109 @@ module
     slot[7] basenames : Int(64) @depth1
     locals_total=11
     values_total=105
-    value v0: TypeRef("?") @block0
+    value v0: Bool @block0
     value v1: Generic { name: "String", args: [] } @block0
-    value v2: TypeRef("?") @block1
+    value v2: Bool @block1
     value v3: Generic { name: "String", args: [] } @block1
-    value v4: TypeRef("?") @block2
+    value v4: Bool @block2
     value v5: Generic { name: "String", args: [] } @block2
-    value v6: TypeRef("?") @block3
+    value v6: Bool @block3
     value v7: Generic { name: "String", args: [] } @block3
-    value v8: TypeRef("?") @block4
+    value v8: Bool @block4
     value v9: Generic { name: "String", args: [] } @block4
-    value v10: TypeRef("?") @block5
+    value v10: Bool @block5
     value v11: Generic { name: "String", args: [] } @block5
-    value v12: TypeRef("?") @block6
+    value v12: Bool @block6
     value v13: Generic { name: "String", args: [] } @block6
-    value v14: TypeRef("?") @block7
+    value v14: Bool @block7
     value v15: Generic { name: "String", args: [] } @block7
-    value v16: TypeRef("?") @block8
+    value v16: Bool @block8
     value v17: Generic { name: "String", args: [] } @block8
-    value v18: TypeRef("?") @block9
+    value v18: Bool @block9
     value v19: Generic { name: "String", args: [] } @block9
-    value v20: TypeRef("?") @block10
+    value v20: Bool @block10
     value v21: Generic { name: "String", args: [] } @block10
-    value v22: TypeRef("?") @block11
+    value v22: Bool @block11
     value v23: Generic { name: "String", args: [] } @block11
-    value v24: TypeRef("?") @block12
-    value v25: TypeRef("?") @block12
+    value v24: Never @block12
+    value v25: Bool @block12
     value v26: Generic { name: "String", args: [] } @block12
     value v27: Generic { name: "String", args: [] } @block12
-    value v28: TypeRef("?") @block12
-    value v29: TypeRef("?") @block12
+    value v28: Never @block12
+    value v29: Bool @block12
     value v30: Generic { name: "String", args: [] } @block12
     value v31: Generic { name: "String", args: [] } @block12
-    value v32: TypeRef("?") @block12
-    value v33: TypeRef("?") @block12
+    value v32: Never @block12
+    value v33: Bool @block12
     value v34: Generic { name: "String", args: [] } @block12
     value v35: Generic { name: "String", args: [] } @block12
     value v36: Generic { name: "String", args: [] } @block12
     value v37: Generic { name: "String", args: [] } @block12
-    value v38: TypeRef("?") @block12
+    value v38: Bool @block12
     value v39: Generic { name: "String", args: [] } @block12
     value v40: Generic { name: "String", args: [] } @block12
     value v41: Generic { name: "String", args: [] } @block12
-    value v42: TypeRef("?") @block12
+    value v42: Never @block12
     value v43: Bool @block12
-    value v44: TypeRef("?") @block12
+    value v44: Int(64) @block12
     value v45: Int(64) @block12
     value v46: Generic { name: "Vec", args: [Generic { name: "String", args: [] }] } @block12
     value v47: Generic { name: "String", args: [] } @block12
     value v48: Generic { name: "String", args: [] } @block12
     value v49: Generic { name: "String", args: [] } @block12
-    value v50: TypeRef("?") @block12
+    value v50: Bool @block12
     value v51: Generic { name: "String", args: [] } @block12
     value v52: Generic { name: "String", args: [] } @block12
     value v53: Generic { name: "String", args: [] } @block12
-    value v54: TypeRef("?") @block12
+    value v54: Never @block12
     value v55: Bool @block12
-    value v56: TypeRef("?") @block12
+    value v56: Int(64) @block12
     value v57: Int(64) @block12
     value v58: Generic { name: "Vec", args: [Generic { name: "String", args: [] }] } @block12
     value v59: Generic { name: "String", args: [] } @block12
-    value v60: TypeRef("?") @block12
+    value v60: Never @block12
     value v61: Bool @block12
-    value v62: TypeRef("?") @block12
+    value v62: Generic { name: "String", args: [] } @block12
     value v63: Generic { name: "String", args: [] } @block12
     value v64: Generic { name: "Vec", args: [Generic { name: "String", args: [] }] } @block12
     value v65: Int(64) @block12
     value v66: Generic { name: "String", args: [] } @block12
     value v67: Generic { name: "String", args: [] } @block12
-    value v68: TypeRef("?") @block12
+    value v68: Never @block12
     value v69: Bool @block12
-    value v70: TypeRef("?") @block12
+    value v70: Int(64) @block12
     value v71: Int(64) @block12
     value v72: Generic { name: "Vec", args: [Generic { name: "String", args: [] }] } @block12
     value v73: Generic { name: "String", args: [] } @block12
     value v74: Generic { name: "Vec", args: [Generic { name: "String", args: [] }] } @block12
-    value v75: TypeRef("?") @block12
-    value v76: TypeRef("?") @block12
-    value v77: TypeRef("?") @block12
+    value v75: Fn { params: [Generic { name: "String", args: [] }], return_type: Generic { name: "String", args: [] } } @block12
+    value v76: Never @block12
+    value v77: Bool @block12
     value v78: Generic { name: "Vec", args: [Generic { name: "String", args: [] }] } @block12
     value v79: Generic { name: "String", args: [] } @block12
     value v80: Generic { name: "String", args: [] } @block12
-    value v81: TypeRef("?") @block12
-    value v82: TypeRef("?") @block12
+    value v81: Never @block12
+    value v82: Bool @block12
     value v83: Generic { name: "String", args: [] } @block12
     value v84: Generic { name: "String", args: [] } @block12
-    value v85: TypeRef("?") @block12
-    value v86: TypeRef("?") @block12
+    value v85: Never @block12
+    value v86: Bool @block12
     value v87: Generic { name: "String", args: [] } @block12
     value v88: Generic { name: "String", args: [] } @block12
-    value v89: TypeRef("?") @block12
-    value v90: TypeRef("?") @block12
+    value v89: Never @block12
+    value v90: Bool @block12
     value v91: Generic { name: "String", args: [] } @block12
     value v92: Generic { name: "String", args: [] } @block12
-    value v93: TypeRef("?") @block12
-    value v94: TypeRef("?") @block12
+    value v93: Never @block12
+    value v94: Bool @block12
     value v95: Generic { name: "String", args: [] } @block12
     value v96: Generic { name: "String", args: [] } @block12
-    value v97: TypeRef("?") @block12
-    value v98: TypeRef("?") @block12
+    value v97: Never @block12
+    value v98: Bool @block12
     value v99: Generic { name: "String", args: [] } @block12
     value v100: Generic { name: "String", args: [] } @block12
-    value v101: TypeRef("?") @block12
-    value v102: TypeRef("?") @block12
+    value v101: Never @block12
+    value v102: Bool @block12
     value v103: Generic { name: "String", args: [] } @block12
     value v104: Generic { name: "String", args: [] } @block12
     Load v1 <- string("__yx_fs_ops_dir/sep.txt")
@@ -401,40 +401,40 @@ module
     slot[2] mv : Int(64) @depth1
     locals_total=6
     values_total=36
-    value v0: TypeRef("?") @block0
+    value v0: Bool @block0
     value v1: Generic { name: "String", args: [] } @block0
     value v2: Generic { name: "String", args: [] } @block0
-    value v3: TypeRef("?") @block0
-    value v4: TypeRef("?") @block0
+    value v3: Never @block0
+    value v4: Bool @block0
     value v5: Generic { name: "String", args: [] } @block0
     value v6: Generic { name: "String", args: [] } @block0
     value v7: Generic { name: "String", args: [] } @block0
-    value v8: TypeRef("?") @block0
+    value v8: Never @block0
     value v9: Bool @block0
-    value v10: TypeRef("?") @block0
+    value v10: Generic { name: "String", args: [] } @block0
     value v11: Generic { name: "String", args: [] } @block0
     value v12: Generic { name: "String", args: [] } @block0
     value v13: Generic { name: "String", args: [] } @block0
-    value v14: TypeRef("?") @block0
-    value v15: TypeRef("?") @block0
+    value v14: Never @block0
+    value v15: Bool @block0
     value v16: Generic { name: "String", args: [] } @block0
     value v17: Generic { name: "String", args: [] } @block0
     value v18: Generic { name: "String", args: [] } @block0
-    value v19: TypeRef("?") @block0
-    value v20: TypeRef("?") @block0
+    value v19: Never @block0
+    value v20: Bool @block0
     value v21: Generic { name: "String", args: [] } @block0
     value v22: Generic { name: "String", args: [] } @block0
-    value v23: TypeRef("?") @block0
+    value v23: Never @block0
     value v24: Bool @block0
-    value v25: TypeRef("?") @block0
+    value v25: Bool @block0
     value v26: Generic { name: "String", args: [] } @block0
     value v27: Generic { name: "String", args: [] } @block0
-    value v28: TypeRef("?") @block0
-    value v29: TypeRef("?") @block0
+    value v28: Never @block0
+    value v29: Bool @block0
     value v30: Generic { name: "String", args: [] } @block0
     value v31: Generic { name: "String", args: [] } @block0
-    value v32: TypeRef("?") @block0
-    value v33: TypeRef("?") @block0
+    value v32: Never @block0
+    value v33: Bool @block0
     value v34: Generic { name: "String", args: [] } @block0
     value v35: Generic { name: "String", args: [] } @block0
     Load %0 <- string("__yx_fs_ops_copy_src.txt")
@@ -500,10 +500,10 @@ module
     slot[7] dir_flag : Int(64) @depth1
     locals_total=11
     values_total=38
-    value v0: TypeRef("?") @block0
+    value v0: Bool @block0
     value v1: Generic { name: "String", args: [] } @block0
     value v2: Generic { name: "String", args: [] } @block0
-    value v3: TypeRef("?") @block0
+    value v3: Bool @block0
     value v4: Generic { name: "String", args: [] } @block0
     value v5: Generic { name: "String", args: [] } @block0
     value v6: Generic { name: "Dict", args: [Generic { name: "String", args: [] }, TypeRef("Any")] } @block0
@@ -512,30 +512,30 @@ module
     value v9: Generic { name: "String", args: [] } @block0
     value v10: Generic { name: "Dict", args: [Generic { name: "String", args: [] }, TypeRef("Any")] } @block0
     value v11: Generic { name: "String", args: [] } @block0
-    value v12: TypeRef("?") @block0
+    value v12: Never @block0
     value v13: Bool @block0
     value v14: TypeRef("Any") @block0
     value v15: Int(64) @block0
     value v16: Generic { name: "String", args: [] } @block0
-    value v17: TypeRef("?") @block0
+    value v17: Never @block0
     value v18: Bool @block0
     value v19: Generic { name: "String", args: [] } @block0
-    value v20: TypeRef("?") @block0
+    value v20: Never @block0
     value v21: Bool @block0
     value v22: Bool @block0
     value v23: Generic { name: "String", args: [] } @block0
     value v24: Generic { name: "String", args: [] } @block0
     value v25: Generic { name: "Dict", args: [Generic { name: "String", args: [] }, TypeRef("Any")] } @block0
     value v26: Generic { name: "String", args: [] } @block0
-    value v27: TypeRef("?") @block0
+    value v27: Never @block0
     value v28: Bool @block0
     value v29: Generic { name: "String", args: [] } @block0
-    value v30: TypeRef("?") @block0
-    value v31: TypeRef("?") @block0
+    value v30: Never @block0
+    value v31: Bool @block0
     value v32: Generic { name: "String", args: [] } @block0
     value v33: Generic { name: "String", args: [] } @block0
-    value v34: TypeRef("?") @block0
-    value v35: TypeRef("?") @block0
+    value v34: Never @block0
+    value v35: Bool @block0
     value v36: Generic { name: "String", args: [] } @block0
     value v37: Generic { name: "String", args: [] } @block0
     Load %0 <- string("__yx_fs_ops_meta.txt")
@@ -605,36 +605,36 @@ module
     locals_total=6
     values_total=33
     value v0: Generic { name: "String", args: [] } @block0
-    value v1: TypeRef("?") @block0
-    value v2: TypeRef("?") @block0
+    value v1: Never @block0
+    value v2: Bool @block0
     value v3: Generic { name: "String", args: [] } @block0
     value v4: Generic { name: "String", args: [] } @block0
     value v5: Generic { name: "String", args: [] } @block0
-    value v6: TypeRef("?") @block0
-    value v7: TypeRef("?") @block0
+    value v6: Never @block0
+    value v7: Bool @block0
     value v8: Generic { name: "String", args: [] } @block0
     value v9: Generic { name: "String", args: [] } @block0
-    value v10: TypeRef("?") @block0
+    value v10: Bool @block0
     value v11: Generic { name: "String", args: [] } @block0
     value v12: Generic { name: "String", args: [] } @block0
-    value v13: TypeRef("?") @block0
+    value v13: Never @block0
     value v14: Bool @block0
-    value v15: TypeRef("?") @block0
+    value v15: Generic { name: "String", args: [] } @block0
     value v16: Generic { name: "String", args: [] } @block0
     value v17: Generic { name: "String", args: [] } @block0
     value v18: Generic { name: "String", args: [] } @block0
-    value v19: TypeRef("?") @block0
+    value v19: Never @block0
     value v20: Bool @block0
-    value v21: TypeRef("?") @block0
+    value v21: Int(64) @block0
     value v22: Int(64) @block0
     value v23: Generic { name: "String", args: [] } @block0
     value v24: Generic { name: "String", args: [] } @block0
-    value v25: TypeRef("?") @block0
-    value v26: TypeRef("?") @block0
+    value v25: Never @block0
+    value v26: Bool @block0
     value v27: Generic { name: "String", args: [] } @block0
     value v28: Generic { name: "String", args: [] } @block0
-    value v29: TypeRef("?") @block0
-    value v30: TypeRef("?") @block0
+    value v29: Never @block0
+    value v30: Bool @block0
     value v31: Generic { name: "String", args: [] } @block0
     value v32: Generic { name: "String", args: [] } @block0
     Load v0 <- string("yx_fs_ops_")
@@ -687,51 +687,51 @@ module
     slot[0] j : Int(64) @depth1
     locals_total=4
     values_total=48
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
-    value v2: TypeRef("?") @block0
+    value v2: Generic { name: "String", args: [] } @block0
     value v3: Generic { name: "String", args: [] } @block0
     value v4: Generic { name: "String", args: [] } @block0
     value v5: Generic { name: "String", args: [] } @block0
-    value v6: TypeRef("?") @block0
+    value v6: Never @block0
     value v7: Bool @block0
-    value v8: TypeRef("?") @block0
+    value v8: Generic { name: "String", args: [] } @block0
     value v9: Generic { name: "String", args: [] } @block0
     value v10: Generic { name: "String", args: [] } @block0
     value v11: Generic { name: "String", args: [] } @block0
-    value v12: TypeRef("?") @block0
+    value v12: Never @block0
     value v13: Bool @block0
-    value v14: TypeRef("?") @block0
+    value v14: Generic { name: "String", args: [] } @block0
     value v15: Generic { name: "String", args: [] } @block0
     value v16: Generic { name: "String", args: [] } @block0
     value v17: Generic { name: "String", args: [] } @block0
-    value v18: TypeRef("?") @block0
+    value v18: Never @block0
     value v19: Bool @block0
-    value v20: TypeRef("?") @block0
+    value v20: Generic { name: "String", args: [] } @block0
     value v21: Generic { name: "String", args: [] } @block0
     value v22: Generic { name: "String", args: [] } @block0
     value v23: Generic { name: "String", args: [] } @block0
-    value v24: TypeRef("?") @block0
+    value v24: Never @block0
     value v25: Bool @block0
-    value v26: TypeRef("?") @block0
+    value v26: Generic { name: "String", args: [] } @block0
     value v27: Generic { name: "String", args: [] } @block0
     value v28: Generic { name: "String", args: [] } @block0
     value v29: Generic { name: "String", args: [] } @block0
-    value v30: TypeRef("?") @block0
+    value v30: Never @block0
     value v31: Bool @block0
-    value v32: TypeRef("?") @block0
+    value v32: Generic { name: "String", args: [] } @block0
     value v33: Generic { name: "String", args: [] } @block0
     value v34: Generic { name: "String", args: [] } @block0
     value v35: Generic { name: "String", args: [] } @block0
     value v36: Generic { name: "String", args: [] } @block0
     value v37: Generic { name: "String", args: [] } @block0
-    value v38: TypeRef("?") @block0
-    value v39: TypeRef("?") @block0
+    value v38: Never @block0
+    value v39: Bool @block0
     value v40: Generic { name: "String", args: [] } @block0
     value v41: Generic { name: "String", args: [] } @block0
     value v42: Generic { name: "String", args: [] } @block0
-    value v43: TypeRef("?") @block0
-    value v44: TypeRef("?") @block0
+    value v43: Never @block0
+    value v44: Bool @block0
     value v45: Generic { name: "String", args: [] } @block0
     value v46: Generic { name: "String", args: [] } @block0
     value v47: Generic { name: "String", args: [] } @block0
@@ -805,12 +805,12 @@ module
     Call v5 <- string("temp") [] (def=d36)
     Call v6 <- string("pathops") [] (def=d37)
     Ret v6
-  fn closure_0(Generic { name: "String", args: [] }) -> Void
+  fn closure_0(Generic { name: "String", args: [] }) -> Generic { name: "String", args: [] }
     slot[0] p : Int(64) @depth2
     locals_total=3
     values_total=3
     value v0: TypeRef("?") @block0
-    value v1: TypeRef("?") @block0
+    value v1: Generic { name: "String", args: [] } @block0
     value v2: Generic { name: "String", args: [] } @block0
     Load v2 <- %0
     Call v1 <- string("std.fs.path_basename") [v2] (def=d26)

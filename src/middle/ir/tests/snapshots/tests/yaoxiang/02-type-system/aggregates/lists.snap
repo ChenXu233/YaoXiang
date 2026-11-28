@@ -12,7 +12,7 @@ module
     value v5: Int(64) @block0
     value v6: Generic { name: "Vec", args: [Int(64)] } @block0
     value v7: Int(64) @block0
-    value v8: TypeRef("?") @block0
+    value v8: Never @block0
     value v9: Bool @block0
     value v10: Int(64) @block0
     value v11: Int(64) @block0

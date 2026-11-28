@@ -265,6 +265,7 @@ fn make_binding(
                     span: Span::default(),
                 }),
                 span: Span::default(),
+                plan_id: crate::util::plan_id::PlanId::UNPLANNED,
             })),
             is_mut: false,
             span: Span::default(),

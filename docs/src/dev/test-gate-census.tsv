@@ -81,6 +81,8 @@ test_run_bytecode_file_roundtrip	src/backends/interpreter/tests/bytecode_load.rs
 test_run_bytecode_file_roundtrip_with_method_vtable	src/backends/interpreter/tests/bytecode_load.rs	expectx2 helperx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_run_bytecode_file_invalid_magic	src/backends/interpreter/tests/bytecode_load.rs	assertx1 expectx3	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_run_bytecode_file_version_mismatch	src/backends/interpreter/tests/bytecode_load.rs	assertx1 expectx4	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
+test_dot42_roundtrip_preserves_source_upvalue_count	src/backends/interpreter/tests/bytecode_load.rs	assert_eqx1 assertx1 expectx6	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
+test_dot42_run_matches_source_run_for_globals	src/backends/interpreter/tests/bytecode_load.rs	assert_eqx2 assertx2 expectx7 helperx3	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_run_yx_file_uses_source_compile_path	src/backends/interpreter/tests/bytecode_load.rs	assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_run_file_with_yxbc_magic_uses_bytecode_load_path	src/backends/interpreter/tests/bytecode_load.rs	assertx1 expectx2	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_new_registry_is_empty	src/backends/interpreter/tests/ffi.rs	assert_eqx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
@@ -1673,8 +1675,20 @@ test_opcodes_without_encoder_are_documented	src/middle/bytecode/tests/bytecode.r
 test_decode_i64_not_restores_unary_op_not	src/middle/bytecode/tests/bytecode.rs	assert_eqx2 matchesx1 assertx1 match_panicx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_decode_i64_neg_restores_unary_op_neg	src/middle/bytecode/tests/bytecode.rs	assert_eqx2 matchesx1 assertx1 match_panicx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_opcode_method_distinguishes_unary_op_field	src/middle/bytecode/tests/bytecode.rs	assert_eqx2 assert_nex1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
+test_function_upvalue_count_round_trips_through_dot42	src/middle/bytecode/tests/file.rs	assert_eqx2 expectx2	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_old_format_version_file_is_rejected_with_diagnostic	src/middle/bytecode/tests/file.rs	assert_eqx1 assertx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
+test_ffi_compile_time_constants_are_rejected_without_panic	src/middle/bytecode/tests/file.rs	assert_eqx1 assertx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_ffi_compile_time_types_are_rejected_without_panic	src/middle/bytecode/tests/file.rs	assert_eqx1 assertx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_globals_table_round_trips_through_dot42	src/middle/bytecode/tests/file.rs	assert_eqx5 expectx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
+test_global_initializer_is_rejected_without_silent_loss	src/middle/bytecode/tests/file.rs	assert_eqx1 assertx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_global_mutability_is_rejected_without_silent_loss	src/middle/bytecode/tests/file.rs	assert_eqx1 assertx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_reversible_type_codes_round_trip_and_are_distinct	src/middle/bytecode/tests/file.rs	assert_eqx2 assert_nex1 expectx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_unsupported_type_widths_are_rejected_on_write	src/middle/bytecode/tests/file.rs	assert_eqx1 assertx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_folded_type_codes_are_distinct_and_lossy	src/middle/bytecode/tests/file.rs	assert_eqx2 assert_nex1 expectx5	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_builtin_string_and_bytes_codes_require_flat_identity_without_args	src/middle/bytecode/tests/file.rs	assert_eqx6 expectx8	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_debug_section_round_trip	src/middle/bytecode/tests/file.rs	assert_eqx5	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_debug_section_round_trip_global_names	src/middle/bytecode/tests/file.rs	assert_eqx2 expectx3	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_string_and_bytes_codes_reject_non_builtin_identity	src/middle/bytecode/tests/file.rs	assert_eqx6 matchesx1 assertx1 expectx12	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_generic_yx_std_export_alias_value_is_make_closure	src/middle/ir/tests/alias_fn_value.rs	assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_method_binding_without_signature_reports_diagnostic_instead_of_panicking	src/middle/ir/tests/batch_method_bind.rs	assert_eqx1 assertx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_method_binding_bare_lambda_without_signature_reports_diagnostic	src/middle/ir/tests/batch_method_bind.rs	assert_eqx1 assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
@@ -1688,6 +1702,7 @@ test_partition_blocks_empty_body_keeps_single_empty_block	src/middle/ir/tests/bl
 test_lowered_while_body_has_real_block_successors	src/middle/ir/tests/blocks.rs	assert_eqx1 assertx4 expectx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_ssa_phi_on_lowered_blocks_reports_real_predecessor_count	src/middle/ir/tests/blocks.rs	assertx2 expectx2 match_panicx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 assign_defs_gives_every_function_def_and_resolves_static_calls	src/middle/ir/tests/def_assign.rs	assert_eqx1 assertx1 is_somex1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_call_result_types_land_in_value_table_for_source_call_sites	src/middle/ir/tests/expr_result_types.rs	assert_eqx2 matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_generic_params_includes_const_param_referenced_only_in_return_type	src/middle/ir/tests/generic_params.rs	assert_eqx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_generic_params_excludes_const_param_never_referenced_in_types	src/middle/ir/tests/generic_params.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_generic_params_excludes_predicate_application_arguments	src/middle/ir/tests/generic_params.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
@@ -1766,6 +1781,10 @@ test_namespace_constant_value_keeps_zero_arg_call	src/middle/lower/expr/tests/ac
 test_native_constant_alias_value_keeps_zero_arg_call	src/middle/lower/expr/tests/access.rs	assertx3	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_native_fn_alias_value_loads_native_fn	src/middle/lower/expr/tests/access.rs	assertx3	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_method_def_via_namespace_materializes_closure	src/middle/lower/expr/tests/access.rs	assertx3	病史	函数体/注释点名 issue/回归/缺陷/事故	留
+test_struct_empty_constructor_keeps_zero_value_fill	src/middle/lower/expr/tests/call.rs	assert_eqx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_struct_partial_constructor_without_default_reports_internal_error	src/middle/lower/expr/tests/call.rs	assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_named_constructor_missing_field_without_default_reports_internal_error	src/middle/lower/expr/tests/call.rs	assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_named_argument_uncovered_slot_reports_internal_error	src/middle/lower/expr/tests/call.rs	assert_eqx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_lambda_free_variable_uses_explicit_environment	src/middle/lower/expr/tests/closure.rs	assertx1 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_spawn_task_uses_synthesized_environment	src/middle/lower/expr/tests/closure.rs	assertx1 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_spawn_for_body_uses_synthesized_environment	src/middle/lower/expr/tests/closure.rs	assert_eqx1 matchesx1 assertx3 is_okx1 helperx3	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
@@ -1806,6 +1825,7 @@ test_phi_group_parallel_copy_cycle_is_rejected	src/middle/passes/codegen/tests/p
 test_not_instruction_roundtrip_decode_preserves_not_op	src/middle/passes/codegen/tests/translator.rs	matchesx1 assertx1	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
 test_neg_instruction_roundtrip_decode_preserves_neg_op	src/middle/passes/codegen/tests/translator.rs	matchesx1 assertx1	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
 test_not_instruction_encodes_to_dedicated_opcode	src/middle/passes/codegen/tests/translator.rs	assertx2 expectx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_upvalue_count_survives_dot42_roundtrip	src/middle/passes/codegen/tests/translator.rs	assert_eqx3 expectx3	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_not_bool_executes_logically_through_serialized_module	src/middle/passes/codegen/tests/translator.rs	expectx1 match_panicx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_synthesize_constructor_skips_witness_field	src/middle/passes/codegen/tests/witness_constructor.rs	assert_eqx6	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_synthesize_constructor_maps_third_field_to_runtime_index	src/middle/passes/codegen/tests/witness_constructor.rs	assert_eqx6	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留

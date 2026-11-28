@@ -7,12 +7,12 @@ module
     values_total=13
     value v0: Generic { name: "String", args: [] } @block0
     value v1: Fn { params: [Ref { mutable: false, inner: Generic { name: "String", args: [] } }], return_type: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } } @block0
-    value v2: TypeRef("?") @block0
-    value v3: TypeRef("?") @block0
+    value v2: Never @block0
+    value v3: Bool @block0
     value v4: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v5: Generic { name: "String", args: [] } @block0
     value v6: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
     value v9: Generic { name: "String", args: [] } @block0
     value v10: Generic { name: "String", args: [] } @block0

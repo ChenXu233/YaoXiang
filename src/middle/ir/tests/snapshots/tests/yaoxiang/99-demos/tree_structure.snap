@@ -33,14 +33,14 @@ module
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     value v3: Struct(StructType { name: "Tree", fields: [("value", Int(64)), ("left", Int(64)), ("right", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v4: TypeRef("?") @block0
+    value v4: Never @block0
     value v5: Bool @block0
     value v6: Int(64) @block0
     value v7: Int(64) @block0
     value v8: Generic { name: "String", args: [] } @block0
-    value v9: TypeRef("?") @block0
+    value v9: Void @block0
     value v10: Int(64) @block0
-    value v11: TypeRef("?") @block0
+    value v11: Never @block0
     value v12: Bool @block0
     value v13: Generic { name: "String", args: [] } @block0
     Load v0 <- int(10)

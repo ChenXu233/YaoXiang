@@ -4,6 +4,7 @@
 
 use crate::frontend::core::sema::MonoType;
 use crate::frontend::core::types::identity::Nominal;
+use crate::middle::bytecode::GlobalInfo;
 use crate::middle::ir::ir::ConstValue;
 use crate::util::span::{DebugSpan, FileId, Position, SourceMap, Span};
 use std::collections::HashMap;
@@ -14,9 +15,26 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 /// 文件格式采用混合端序：魔数大端序（方便调试），其他数据小端序（性能优化）
 const MAGIC: u32 = 0x59584243;
 /// 版本号（字节码格式的单一版本源；read_from 与 generate_header 均引用此常量）
-pub const VERSION: u32 = 4;
+///
+/// 版本史（每条只记「格式观测量」的变化，不记内部重构）：
+/// - v4 及以前：函数记录无上值槽数 ⇒ 载入侧只能硬编 0，闭包的上值槽数丢失。
+/// - v5：函数记录追加 `upvalue_count`（u32）；前端值 `SWITCH`(0x06) 与
+///   `TAIL_CALL`(0x09) 从词表回收（RFC-039 D17/D32/D34），值交回分配池。
+///   同一未发布窗口追加**模块级全局表**（`globals`：名字 + 类型号，槽位序号即表序），
+///   使 `.42` 载入后 `BytecodeModule.globals` 不再恒为空（RFC-039 D52 的 2341 项）。
+///   同一未发布窗口再改**类型号表**：`Int` 五档与 `Float` 两档各占独立号
+///   （此前 `Int(64)` 与 `Float(32)` 同为 `9`、`Float(64)` 读回 `TypeRef("_")`），
+///   编号与解码共用一张表、可逆往返；写侧对未知位宽与编译期 FFI 类型
+///   （`LibraryRef` / `ExternRef`）响亮拒绝而不是静默折算（依据见 WBS 09 的 7e.4 行
+///   与本节 v5 条目；同源叙述在 [04-ssa.md](../../../docs/src/dev/architecture/04-ssa.md)
+///   的「硬编码丢弃的跟踪」）。
+pub const VERSION: u32 = 5;
 
 const FLAG_DEBUG_INFO: u32 = 0x02;
+
+/// 无调试段时 `.42` 写出的段数：类型表 / 常量池 / 代码段 / vtable 表 / 全局表。
+/// 段数只在 `write_to` 由本常量 + 可选调试段推导一次。
+const BASE_SECTION_COUNT: u16 = 5;
 
 const DEBUG_SECTION_MAGIC: u32 = 0x59584442; // 'Y' 'X' 'D' 'B'
 /// 调试段格式版本。
@@ -41,6 +59,13 @@ pub struct BytecodeFile {
     /// 分发全程按函数表索引，不按名解析。
     pub vtables: Vec<(String, Vec<(String, u32)>)>,
 
+    /// 模块级全局表（v5）：表序即槽位号，`type_id` 是 .42 类型号。
+    ///
+    /// 语义见 [`GlobalInfo`]：`BytecodeModule.globals` 此前在载入侧被硬编空表
+    /// （RFC-039 D52 的 `2341` 项），顶层绑定只剩调试段里的名字，没有「有哪些全局、
+    /// 各是什么类型」这张表。
+    pub globals: Vec<GlobalInfo>,
+
     /// 可选调试信息段（用于离线 .42 调试/定位）
     pub debug_section: Option<DebugSection>,
 }
@@ -52,6 +77,9 @@ pub struct FileHeader {
     pub version: u32,
     pub flags: u32,
     pub entry_point: u32,
+    /// 段数。口径：写出时按**实际写出的段数**填写——类型表 / 常量池 / 代码段 /
+    /// vtable 表 / 全局表 = 5，带调试段 = 6，计算点只在 `write_to`；
+    /// 读侧只搬运、不校验。构造侧填 0 表示未填写。
     pub section_count: u16,
     pub file_size: u32,
     pub checksum: u32,
@@ -64,7 +92,8 @@ impl Default for FileHeader {
             version: VERSION,
             flags: 0,
             entry_point: 0,
-            section_count: 4,
+            // 未填写：写出时由 write_to 按实际段数计算（见 section_count 的注释）
+            section_count: 0,
             file_size: 0,
             checksum: 0,
         }
@@ -279,6 +308,16 @@ pub struct FunctionCode {
     pub return_type: MonoType,
     pub instructions: Vec<BytecodeInstruction>,
     pub local_count: usize,
+    /// 上值槽数（闭包环境槽数，RFC-039 D17）。
+    ///
+    /// 取值：本函数体内经 `LoadUpvalue` / `StoreUpvalue` 触达的上值槽数
+    /// （最大槽下标 + 1），由 codegen 从指令流统计。
+    /// 消费面：本字段只保产物事实（编解码与 `.42` 往返）；解释器闭包帧不读它——
+    /// 上值经 `CallDyn` / `Spawn` 的 env 注入（`Frame::set_upvalue`），帧布局与此无关。
+    /// 若日后要按它给闭包帧预分配上值槽，属行为变更：先立任务，先红后绿。
+    /// v5 起随函数记录落盘；v4 及以前的产物没有该字段（且载入侧曾硬编 0，
+    /// 属数据丢失缺陷），故读取侧按版本整体拒绝旧文件而不是补 0。
+    pub upvalue_count: usize,
     /// 局部变量名（槽位下标 → 源码名）。
     /// 只含具名变量；编译器临时寄存器不出现在此表。
     pub local_names: HashMap<usize, String>,
@@ -336,8 +375,11 @@ impl BytecodeFile {
         let has_debug_section = self.debug_section.is_some();
         if has_debug_section {
             header.flags |= FLAG_DEBUG_INFO;
-            header.section_count = 5;
         }
+        // 段数的唯一计算点：本函数实际写出的段 = 类型表 / 常量池 / 代码段 /
+        // vtable 表 / 全局表（BASE_SECTION_COUNT），外加可选调试段。
+        // 构造侧不手填——名称与值不符会误导 dump 读者。
+        header.section_count = BASE_SECTION_COUNT + u16::from(has_debug_section);
 
         // 文件头：魔数大端序，其他小端序
         writer.write_all(&header.magic.to_be_bytes())?; // YXBC 方便调试
@@ -351,7 +393,7 @@ impl BytecodeFile {
         // 类型表 (小端序，性能优化)
         writer.write_all(&(self.type_table.len() as u32).to_le_bytes())?;
         for ty in &self.type_table {
-            writer.write_all(&ty.to_type_id().to_le_bytes())?;
+            writer.write_all(&ty.to_type_id()?.to_le_bytes())?;
         }
 
         // 常量池 (小端序，性能优化)
@@ -388,7 +430,36 @@ impl BytecodeFile {
                     writer.write_all(&(name.len() as u32).to_le_bytes())?;
                     writer.write_all(name.as_bytes())?;
                 }
-                ConstValue::LibraryRef { .. } | ConstValue::ExternRef { .. } => todo!(),
+                // 可达性：`middle/lower/const_eval.rs` 会在编译期把
+                // `Native.c("lib")` / `lib("sym")` 求值成这两个变体；只要其中一个
+                // 以值的形式进 `Instruction::Load`，它就会经 `emitter.add_constant`
+                // 进常量池并到这里。此前这里是 `todo!()`——写 .42 直接 panic，
+                // 用户看到的是「thread panicked」而不是「这个东西不能进 .42」。
+                // 改为响亮诊断：既指出是哪一类常量，也说明它只在编译期存在。
+                ConstValue::LibraryRef { mechanism, lib } => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            ".42 常量池无法表示 LibraryRef(mechanism={mechanism}, lib={lib})：\
+                             它是编译期 FFI 描述值，运行期没有数据表示；\
+                             前端若把它当值落进常量池，应在 codegen 前消解（FfiBinding）"
+                        ),
+                    ));
+                }
+                ConstValue::ExternRef {
+                    mechanism,
+                    lib,
+                    symbol,
+                } => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            ".42 常量池无法表示 ExternRef(mechanism={mechanism}, lib={lib}, \
+                             symbol={symbol})：它是编译期 FFI 绑定描述值，运行期没有数据表示；\
+                             前端若把它当值落进常量池，应在 codegen 前消解（FfiBinding）"
+                        ),
+                    ));
+                }
             }
         }
 
@@ -399,10 +470,13 @@ impl BytecodeFile {
             writer.write_all(func.name.as_bytes())?;
             writer.write_all(&(func.params.len() as u32).to_le_bytes())?;
             for param in &func.params {
-                writer.write_all(&param.to_type_id().to_le_bytes())?;
+                writer.write_all(&param.to_type_id()?.to_le_bytes())?;
             }
-            writer.write_all(&func.return_type.to_type_id().to_le_bytes())?;
+            writer.write_all(&func.return_type.to_type_id()?.to_le_bytes())?;
             writer.write_all(&(func.local_count as u32).to_le_bytes())?;
+            // v5：上值槽数随函数记录落盘（D17）。写在两个计数之间，
+            // 与 read_from 的读取顺序对称。
+            writer.write_all(&(func.upvalue_count as u32).to_le_bytes())?;
             writer.write_all(&(func.instructions.len() as u32).to_le_bytes())?;
             for instr in &func.instructions {
                 writer.write_all(&[instr.opcode])?;
@@ -424,6 +498,34 @@ impl BytecodeFile {
                 writer.write_all(bare_name.as_bytes())?;
                 writer.write_all(&func_idx.to_le_bytes())?;
             }
+        }
+
+        // 全局表（v5）：表序即槽位号。只落「名字 + 类型号」两项既有事实——
+        // 见 `GlobalInfo` 的字段说明：initializer / is_mutable 在 IR 侧没有载体，
+        // 写侧遇到非默认值即拒绝，绝不静默丢成 None/false。
+        writer.write_all(&(self.globals.len() as u32).to_le_bytes())?;
+        for global in &self.globals {
+            if global.initializer.is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        ".42 全局表不携带 initializer（全局 '{}'）：初始化由模块初始化序列在运行时求值，编译期常量折叠只是优化；若确需落盘，先扩格式与载入侧",
+                        global.name
+                    ),
+                ));
+            }
+            if global.is_mutable {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        ".42 全局表不携带可变性（全局 '{}'）：该事实在 IR `GlobalSlot` 里没有字段（lower 阶段即被丢弃），写侧拒绝而不是静默读成不可变",
+                        global.name
+                    ),
+                ));
+            }
+            write_string(writer, &global.name)?;
+            // 类型号由唯一编码口径产出（与形参/返回/类型表项同一套编号）
+            writer.write_all(&mono_type_id(&global.ty)?.to_le_bytes())?;
         }
 
         if (header.flags & FLAG_DEBUG_INFO) != 0 {
@@ -468,10 +570,7 @@ impl BytecodeFile {
 
         let version = read_u32(reader)?;
         if version != VERSION {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("unsupported bytecode version {version}, expected {VERSION}"),
-            ));
+            return Err(unsupported_version_error(version));
         }
 
         let flags = read_u32(reader)?;
@@ -575,6 +674,8 @@ impl BytecodeFile {
             let return_type = type_id_to_monotype(return_type_id);
 
             let local_count = read_u32(reader)? as usize;
+            // v5：上值槽数（D17）——此前格式不落该字段，载入侧硬编 0
+            let upvalue_count = read_u32(reader)? as usize;
             let instr_count = read_u32(reader)? as usize;
 
             let mut instructions = Vec::with_capacity(instr_count);
@@ -601,6 +702,7 @@ impl BytecodeFile {
                 return_type,
                 instructions,
                 local_count,
+                upvalue_count,
                 // 名字来自调试段（v2）；由上层在读取调试段后回填
                 local_names: HashMap::new(),
                 debug_map: HashMap::new(),
@@ -626,6 +728,23 @@ impl BytecodeFile {
             vtables.push((type_name, methods));
         }
 
+        // 全局表（v5）：表序即槽位号；类型号按 .42 的类型号原样搬运。
+        let global_count = read_u32(reader)? as usize;
+        let mut globals = Vec::with_capacity(global_count);
+        for _ in 0..global_count {
+            let name = read_string(reader)?;
+            let type_code = read_u32(reader)?;
+            globals.push(GlobalInfo {
+                name,
+                // 读侧解回 MonoType：与函数签名同载体，消费端不必认识「类型号」
+                ty: type_id_to_monotype(type_code),
+                // 格式不携带这两项：初始化在模块初始化序列里运行时求值；
+                // 可变性事实在 IR GlobalSlot 没有字段（见 GlobalInfo 的文档注释）。
+                initializer: None,
+                is_mutable: false,
+            });
+        }
+
         // 可选的调试段（从文件尾向后读取）
         let debug_section = DebugSection::read_from_end(reader)?;
 
@@ -645,6 +764,7 @@ impl BytecodeFile {
             const_pool,
             code_section: CodeSection { functions },
             vtables,
+            globals,
             debug_section,
         })
     }
@@ -668,29 +788,45 @@ impl BytecodeFile {
     }
 }
 
-/// 将 type_id (u32) 转换为相应的 MonoType。
+/// 将 .42 类型号转换回 [`MonoType`]（与编码共用 [`SCALAR_TYPE_CODES`] 一张表）。
 ///
-/// 序列化是 lossy 的（复杂类型如 Struct/Enum 只存储一个 id），
-/// 因此复杂类型会 fallback 到 `TypeRef("_")`。
-/// 简单类型（Void/Bool/Int/Float/Char/String/Bytes）可以精确重建。
-fn type_id_to_monotype(id: u32) -> MonoType {
-    match id {
-        0 => MonoType::Void,
-        1 => MonoType::Bool,
-        2..=5 => MonoType::Int(((id - 2) * 8 + 8) as usize),
-        6..=9 => MonoType::Float(((id - 6) * 8 + 8) as usize),
-        10 => MonoType::Char,
-        11 => MonoType::make_string(),
-        12 => MonoType::Generic {
-            name: Nominal::flat(AsRef::<str>::as_ref(&("Bytes")))
-                .expect("type name must be bare and non-empty"),
-            args: vec![],
-        },
-        _ => MonoType::TypeRef(
-            Nominal::flat(AsRef::<str>::as_ref(&("_")))
-                .expect("type name must be bare and non-empty"),
-        ),
+/// **可逆段**（0..=12：Void/Bool/Int 五档/Float 两档/Char/String/Bytes）精确重建；
+/// **折叠类**（20..=61：Struct/Enum/Option/Result/Fn/DepFn/TypeRef/Union/…）仍是单号，
+/// 读回既定 lossy 形态 [`lossy_type_ref`]——这条降级契约与本批前一致，没有收紧也没有放宽。
+/// 未知号同样落 lossy 形态（防御：正常产物不会出现未登记号，版本校验在更外层）。
+pub(crate) fn type_id_to_monotype(id: u32) -> MonoType {
+    // 与编码共用同一张表：能编出来的标量一定能原样读回
+    if let Some(row) = SCALAR_TYPE_CODES.iter().find(|row| row.code == id) {
+        return (row.build)();
     }
+    // 折叠类与未知号：单号无参数，读回既定 lossy 形态（既有的降级契约，不变）
+    lossy_type_ref()
+}
+
+/// 版本不匹配的诊断（RFC-039 D17：升版后旧 `.42` 按既有行为拒绝）。
+///
+/// 两类要素都要给全，调用方才能既分类又定位：
+/// - **码**：`io::ErrorKind::Unsupported`——「这个文件本读取器不支持」，
+///   与同函数里魔数错误的 `InvalidData`（「文件本身坏了」）分得开；
+/// - **消息**：文件版本、当前版本、差在哪个方向、以及可执行的动作
+///   （`.42` 是构建产物，重新构建而不是复用旧文件）。
+///
+/// 不新增诊断码：RFC-013 码表归 `src/util/diagnostic/codes/`，扩容是独立裁决面；
+/// 本函数只用 `io::Error` 的既有分类，不另立一套平行码。
+fn unsupported_version_error(version: u32) -> io::Error {
+    let direction = if version < VERSION {
+        "older than"
+    } else {
+        "newer than"
+    };
+    io::Error::new(
+        io::ErrorKind::Unsupported,
+        format!(
+            "unsupported bytecode version {version}: the file is {direction} the current .42 \
+             format version {VERSION}. .42 files are build artifacts, not source — rebuild the \
+             bytecode from source instead of reusing this file"
+        ),
+    )
 }
 
 fn write_string<W: Write>(
@@ -732,34 +868,174 @@ fn read_u32<R: Read>(reader: &mut R) -> io::Result<u32> {
     Ok(u32::from_le_bytes(buf))
 }
 
+/// 可逆类型号表的一行：**编码与解码共用同一份口诀**。
+///
+/// 一行为一个「能原样读回」的类型：`matches` 判编码，`build` 造解码结果。
+/// 两向同表是刻意的——分成两张表就会漂移，而漂移只会表现为「版本没变、类型变了」。
+pub(crate) struct ScalarTypeCode {
+    pub(crate) code: u32,
+    pub(crate) name: &'static str,
+    matches: fn(&MonoType) -> bool,
+    build: fn() -> MonoType,
+}
+
+/// .42 类型号表（可逆段）。
+///
+/// 号段约定：
+/// - `0..=12`：基本标量，可逆往返（Char/String/Bytes 保持历史号 10/11/12，缩小改动面）；
+/// - `20..=50`：折叠类（Struct/Enum/Fn/…）**单号、无参数**，读回既定 lossy 形态
+///   [`lossy_type_ref`]；`TypeId::STRUCT = 20` / `TypeId::ENUM = 21` 与运行时身份常量对齐，
+///   `Option`/`Result` 归入 21（运行时 sum type 身份即 21）；
+/// - `60` 以后：无运行时表示的元类型/底类型。
+///
+/// 不在本表、也不是折叠类的类型（未知位宽、编译期 FFI 类型）在写侧**拒绝**。
+pub(crate) const SCALAR_TYPE_CODES: &[ScalarTypeCode] = &[
+    ScalarTypeCode {
+        code: 0,
+        name: "Void",
+        matches: |t| matches!(t, MonoType::Void),
+        build: || MonoType::Void,
+    },
+    ScalarTypeCode {
+        code: 1,
+        name: "Bool",
+        matches: |t| matches!(t, MonoType::Bool),
+        build: || MonoType::Bool,
+    },
+    ScalarTypeCode {
+        code: 2,
+        name: "Int(8)",
+        matches: |t| matches!(t, MonoType::Int(8)),
+        build: || MonoType::Int(8),
+    },
+    ScalarTypeCode {
+        code: 3,
+        name: "Int(16)",
+        matches: |t| matches!(t, MonoType::Int(16)),
+        build: || MonoType::Int(16),
+    },
+    ScalarTypeCode {
+        code: 4,
+        name: "Int(32)",
+        matches: |t| matches!(t, MonoType::Int(32)),
+        build: || MonoType::Int(32),
+    },
+    ScalarTypeCode {
+        code: 5,
+        name: "Int(64)",
+        matches: |t| matches!(t, MonoType::Int(64)),
+        build: || MonoType::Int(64),
+    },
+    ScalarTypeCode {
+        code: 6,
+        name: "Int(128)",
+        matches: |t| matches!(t, MonoType::Int(128)),
+        build: || MonoType::Int(128),
+    },
+    ScalarTypeCode {
+        code: 7,
+        name: "Float(32)",
+        matches: |t| matches!(t, MonoType::Float(32)),
+        build: || MonoType::Float(32),
+    },
+    ScalarTypeCode {
+        code: 8,
+        name: "Float(64)",
+        matches: |t| matches!(t, MonoType::Float(64)),
+        build: || MonoType::Float(64),
+    },
+    ScalarTypeCode {
+        code: 10,
+        name: "Char",
+        matches: |t| matches!(t, MonoType::Char),
+        build: || MonoType::Char,
+    },
+    ScalarTypeCode {
+        code: 11,
+        name: "String",
+        // 只认内建（平路径、无实参）的 String：module/args 任一非空都属另一个类型，
+        // 编成 11 会把它读回成内建 String——静默丢身份（D64 后 name 携带模块）。
+        matches: |t| {
+            matches!(t, MonoType::Generic { name, args }
+            if args.is_empty() && name.module().is_empty() && name.bare() == "String")
+        },
+        build: MonoType::make_string,
+    },
+    ScalarTypeCode {
+        code: 12,
+        name: "Bytes",
+        matches: |t| {
+            matches!(t, MonoType::Generic { name, args }
+            if args.is_empty() && name.module().is_empty() && name.bare() == "Bytes")
+        },
+        build: || MonoType::Generic {
+            name: Nominal::flat("Bytes").expect("内建类型名必须是裸名且非空"),
+            args: Vec::new(),
+        },
+    },
+];
+
+/// 折叠类的既定 lossy 读回形态（单号无参数，解不出原结构）。
+fn lossy_type_ref() -> MonoType {
+    MonoType::TypeRef(Nominal::flat("_").expect("lossy 占位名必须是裸名且非空"))
+}
+
+/// 表里查编码号；命中 `Some`，未登记 `None`（由调用方决定折叠还是拒绝）。
+fn scalar_code_of(ty: &MonoType) -> Option<u32> {
+    SCALAR_TYPE_CODES
+        .iter()
+        .find(|row| (row.matches)(ty))
+        .map(|row| row.code)
+}
+
+/// 未登记位宽：拒绝而不就近折算（Int(24) 折算成 Int(32) 就是静默错配）。
+fn unsupported_width(
+    kind: &str,
+    width: usize,
+) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidInput,
+        format!(
+            ".42 类型表不支持 {kind}({width}) 位宽：可逆号表只登记 Int(8/16/32/64/128) 与 Float(32/64)，\
+             其余一律拒绝而不是就近折算"
+        ),
+    )
+}
+
+/// 把 [`MonoType`] 编成 .42 类型号（`.42` 内所有类型字段的唯一编码口径）。
+///
+/// 生产者与容器写侧共用本函数；表 [`SCALAR_TYPE_CODES`] 同时供解码使用，
+/// 因此不存在「编码口诀」与「解码口诀」两份而漂移的可能。
+pub(crate) fn mono_type_id(ty: &MonoType) -> io::Result<u32> {
+    ty.to_type_id()
+}
+
+/// 把 `MonoType` 映射成 .42 的类型号。
+///
+/// 返回 `Result` 而不是裸 `u32`：`LibraryRef` / `ExternRef` 是编译期 FFI 描述类型，
+/// 运行期没有表示，写进类型表只能得到「读回来变成别的东西」的静默错配——
+/// 那是 `todo!()` 时代的 panic 点换了个形态。写侧因此拒绝并给出可定位的诊断。
 trait MonoTypeExt {
-    fn to_type_id(&self) -> u32;
+    fn to_type_id(&self) -> io::Result<u32>;
 }
 
 impl MonoTypeExt for MonoType {
-    fn to_type_id(&self) -> u32 {
-        match self {
-            MonoType::Void => 0,
-            MonoType::Bool => 1,
-            MonoType::Int(n) => 2 + (*n as u32 / 8 - 1),
-            MonoType::Float(n) => 6 + (*n as u32 / 8 - 1),
-            MonoType::Char => 10,
+    fn to_type_id(&self) -> io::Result<u32> {
+        // 先查可逆表：命中即原样读回（这一半是「不失真」的契约）
+        if let Some(code) = scalar_code_of(self) {
+            return Ok(code);
+        }
+        let code = match self {
+            // 未登记位宽：拒绝而不就近折算
+            MonoType::Int(width) => return Err(unsupported_width("Int", *width)),
+            MonoType::Float(width) => return Err(unsupported_width("Float", *width)),
+            // ── 折叠类：单号、无参数，读回 lossy_type_ref() ──────────────
+            // 20/21 与运行时常量 `TypeId::STRUCT` / `TypeId::ENUM` 对齐
+            //（`src/backends/common/value.rs`）；Option/Result 归入 21——
+            // 运行时的 sum type 身份就是 21，不是按名折叠的巧合。
             MonoType::Struct(_) => 20,
             MonoType::Enum(_) => 21,
-            MonoType::Fn { .. } => 30,
-            MonoType::TypeRef(_) => 40,
-            MonoType::TypeVar(_) => 50,
-            // 联合类型和交集类型暂时使用 TypeRef 的 ID
-            MonoType::Union(_) => 40,
-            MonoType::Intersection(_) => 40,
-            MonoType::Ref { .. } => 49,       // 借用引用类型
-            MonoType::AssocType { .. } => 47, // 使用新的类型ID
-            MonoType::Literal { .. } => 48,   // 字面量类型
-            MonoType::MetaType { .. } => 0,   // 元类型无运行时表示
-            // #299：容器/复合类型统一走 Generic，映射到原编号保持序列化稳定
             MonoType::Generic { name, .. } => match name.as_str() {
-                "String" => 11,
-                "Bytes" => 12,
                 "Option" | "Result" => 21,
                 "Tuple" => 22,
                 "List" => 23,
@@ -768,12 +1044,58 @@ impl MonoTypeExt for MonoType {
                 "Range" => 26,
                 "Arc" => 45,
                 "Weak" => 46,
-                _ => 47, // 泛型实例化，使用结构体类型ID
+                _ => 47, // 泛型实例化
             },
-            MonoType::Refined { base, .. } => base.to_type_id(),
-            MonoType::DepFn { .. } => 30, // 依赖函数类型，与普通函数同ID
-            MonoType::LibraryRef { .. } | MonoType::ExternRef { .. } => todo!(),
-            MonoType::Never => 0, // Never 无运行时表示
-        }
+            MonoType::Fn { .. } => 30,
+            MonoType::DepFn { .. } => 31,
+            MonoType::TypeRef(_) => 40,
+            MonoType::Union(_) => 41,
+            MonoType::Intersection(_) => 42,
+            MonoType::Literal { .. } => 48,
+            MonoType::Ref { .. } => 49,
+            MonoType::TypeVar(_) => 50,
+            MonoType::AssocType { .. } => 51,
+            MonoType::MetaType { .. } => 60,
+            MonoType::Never => 61,
+            // 精化类型的运行时表示就是基类型：与 base 同号是**设计**（透明别名），
+            // 因此它是「不同 MonoType 同号」的合法例外之一。
+            MonoType::Refined { base, .. } => return base.to_type_id(),
+            MonoType::LibraryRef { mechanism, lib } => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        ".42 类型表无法表示 LibraryRef(mechanism={mechanism}, lib={lib})：\
+                         它是编译期 FFI 描述类型，运行期没有表示；\
+                         出现在签名/类型表里说明前端把编译期值当成了运行期类型"
+                    ),
+                ));
+            }
+            MonoType::ExternRef {
+                mechanism,
+                lib,
+                symbol,
+            } => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        ".42 类型表无法表示 ExternRef(mechanism={mechanism}, lib={lib}, \
+                         symbol={symbol})：它是编译期 FFI 绑定描述类型，运行期没有表示；\
+                         出现在签名/类型表里说明前端把编译期值当成了运行期类型"
+                    ),
+                ));
+            }
+            // Void/Bool/Char/String/Bytes 已在可逆表里命中：走到这里说明表漏登记。
+            // 响亮失败而不是给个近号——静默给号正是本批要修的那类缺陷。
+            other => {
+                let registered: Vec<&str> = SCALAR_TYPE_CODES.iter().map(|row| row.name).collect();
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "未登记的可逆类型 {other:?}：必须先加进 SCALAR_TYPE_CODES 表（编码/解码共用同一份口诀）；当前可逆段：{registered:?}"
+                    ),
+                ));
+            }
+        };
+        Ok(code)
     }
 }

@@ -63,19 +63,19 @@ module
     value v0: Int(64) @block0
     value v1: Int(64) @block0
     value v2: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v3: TypeRef("?") @block0
+    value v3: Never @block0
     value v4: Bool @block0
     value v5: TypeRef("?") @block0
     value v6: Int(64) @block0
     value v7: Ref { mutable: false, inner: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) } @block0
     value v8: Generic { name: "String", args: [] } @block0
-    value v9: TypeRef("?") @block0
+    value v9: Never @block0
     value v10: Bool @block0
     value v11: TypeRef("?") @block0
     value v12: Int(64) @block0
     value v13: Ref { mutable: false, inner: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) } @block0
     value v14: Generic { name: "String", args: [] } @block0
-    value v15: TypeRef("?") @block0
+    value v15: Never @block0
     value v16: Bool @block0
     value v17: Int(64) @block0
     value v18: Int(64) @block0
@@ -85,22 +85,22 @@ module
     value v22: Int(64) @block0
     value v23: Int(64) @block0
     value v24: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v25: TypeRef("?") @block0
+    value v25: Void @block0
     value v26: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v27: Int(64) @block0
     value v28: Int(64) @block0
     value v29: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v30: TypeRef("?") @block0
+    value v30: Never @block0
     value v31: Bool @block0
     value v32: Int(64) @block0
     value v33: Int(64) @block0
     value v34: Generic { name: "String", args: [] } @block0
-    value v35: TypeRef("?") @block0
+    value v35: Never @block0
     value v36: Bool @block0
     value v37: Int(64) @block0
     value v38: Int(64) @block0
     value v39: Generic { name: "String", args: [] } @block0
-    value v40: TypeRef("?") @block0
+    value v40: Never @block0
     value v41: Bool @block0
     value v42: TypeRef("?") @block0
     value v43: Int(64) @block0
@@ -108,15 +108,15 @@ module
     value v45: Generic { name: "String", args: [] } @block0
     value v46: Int(64) @block0
     value v47: Int(64) @block0
-    value v48: TypeRef("?") @block0
+    value v48: Void @block0
     value v49: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v50: Int(64) @block0
     value v51: Int(64) @block0
-    value v52: TypeRef("?") @block0
+    value v52: Void @block0
     value v53: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v54: Int(64) @block0
     value v55: Int(64) @block0
-    value v56: TypeRef("?") @block3
+    value v56: Never @block3
     value v57: Bool @block1
     value v58: Bool @block0
     value v59: TypeRef("?") @block0
@@ -130,14 +130,14 @@ module
     value v67: Int(64) @block3
     value v68: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block3
     value v69: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block3
-    value v70: TypeRef("?") @block3
+    value v70: Never @block3
     value v71: Bool @block3
     value v72: TypeRef("?") @block3
     value v73: Int(64) @block3
     value v74: TypeRef("?") @block3
     value v75: Struct(StructType { name: "Window", fields: [("view", Ref { mutable: false, inner: TypeRef("Point") })], methods: {}, interfaces: [] }) @block3
     value v76: Generic { name: "String", args: [] } @block3
-    value v77: TypeRef("?") @block3
+    value v77: Never @block3
     value v78: Bool @block3
     value v79: TypeRef("?") @block3
     value v80: Int(64) @block3

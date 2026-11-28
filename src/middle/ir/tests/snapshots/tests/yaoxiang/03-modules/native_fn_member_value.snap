@@ -10,8 +10,8 @@ module
     value v2: Fn { params: [TypeRef("Any")], return_type: Void } @block0
     value v3: Generic { name: "String", args: [] } @block0
     value v4: Fn { params: [Ref { mutable: false, inner: Generic { name: "String", args: [] } }], return_type: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } } @block0
-    value v5: TypeRef("?") @block0
-    value v6: TypeRef("?") @block0
+    value v5: Never @block0
+    value v6: Bool @block0
     value v7: Generic { name: "Result", args: [TypeRef("Json"), TypeRef("Error")] } @block0
     value v8: Generic { name: "String", args: [] } @block0
     Load %0 <- nativefn(std.io.println)

@@ -51,6 +51,7 @@ pub(super) fn synth_closure(
         params,
         body: Box::new(body),
         span,
+        plan_id: crate::util::plan_id::PlanId::UNPLANNED,
     }
 }
 

@@ -10,13 +10,13 @@ module
     values_total=44
     value v0: Int(64) @block0
     value v1: Int(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Never @block0
     value v3: Bool @block0
     value v4: TypeRef("?") @block0
     value v5: Int(64) @block0
     value v6: Generic { name: "Pair", args: [Int(64)] } @block0
     value v7: Generic { name: "String", args: [] } @block0
-    value v8: TypeRef("?") @block0
+    value v8: Never @block0
     value v9: Bool @block0
     value v10: TypeRef("?") @block0
     value v11: Int(64) @block0
@@ -24,13 +24,13 @@ module
     value v13: Generic { name: "String", args: [] } @block0
     value v14: Generic { name: "String", args: [] } @block0
     value v15: Generic { name: "String", args: [] } @block0
-    value v16: TypeRef("?") @block0
+    value v16: Never @block0
     value v17: Bool @block0
     value v18: TypeRef("?") @block0
     value v19: Generic { name: "String", args: [] } @block0
     value v20: Struct(StructType { name: "Pair", fields: [("first", Generic { name: "String", args: [] }), ("second", Generic { name: "String", args: [] })], methods: {}, interfaces: [] }) @block0
     value v21: Generic { name: "String", args: [] } @block0
-    value v22: TypeRef("?") @block0
+    value v22: Never @block0
     value v23: Bool @block0
     value v24: TypeRef("?") @block0
     value v25: Generic { name: "String", args: [] } @block0
@@ -38,7 +38,7 @@ module
     value v27: Generic { name: "String", args: [] } @block0
     value v28: Int(64) @block0
     value v29: Int(64) @block0
-    value v30: TypeRef("?") @block0
+    value v30: Never @block0
     value v31: Bool @block0
     value v32: TypeRef("?") @block0
     value v33: Int(64) @block0
@@ -46,7 +46,7 @@ module
     value v35: Generic { name: "String", args: [] } @block0
     value v36: Struct(StructType { name: "Pair", fields: [("first", Int(64)), ("second", Int(64))], methods: {}, interfaces: [] }) @block0
     value v37: Int(64) @block0
-    value v38: TypeRef("?") @block0
+    value v38: Never @block0
     value v39: Bool @block0
     value v40: TypeRef("?") @block0
     value v41: Int(64) @block0

@@ -5,7 +5,7 @@ module
     locals_total=5
     values_total=6
     value v0: Int(64) @block0
-    value v1: TypeRef("?") @block0
+    value v1: Never @block0
     value v2: Bool @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0

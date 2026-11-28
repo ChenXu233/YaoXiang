@@ -17,17 +17,17 @@ module
     value v10: TypeRef("?") @block3
     value v11: TypeRef("?") @block0
     value v12: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v13: TypeRef("?") @block0
-    value v14: TypeRef("?") @block1
-    value v15: TypeRef("?") @block2
+    value v13: Generic { name: "Iter", args: [Int(64)] } @block0
+    value v14: Bool @block1
+    value v15: Int(64) @block2
     value v16: TypeRef("?") @block2
-    value v17: TypeRef("?") @block3
+    value v17: Never @block3
     value v18: Bool @block3
     value v19: TypeRef("?") @block3
     value v20: Int(64) @block3
     value v21: Generic { name: "Vec", args: [Int(64)] } @block3
     value v22: Int(64) @block3
-    value v23: TypeRef("?") @block3
+    value v23: Never @block3
     value v24: Bool @block3
     value v25: TypeRef("?") @block3
     value v26: Int(64) @block3
@@ -81,7 +81,7 @@ module
     slot[1] item : Int(64) @depth3
     locals_total=3
     values_total=1
-    value v0: TypeVar(TypeVar(44)) @block0
+    value v0: TypeRef("?") @block0
     Load v0 <- %0
     Ret v0
   init (locals=0)

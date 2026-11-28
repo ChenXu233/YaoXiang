@@ -75,28 +75,28 @@ module
     slot[2] msg : Int(64) @depth1
     locals_total=7
     values_total=64
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
     value v6: Generic { name: "String", args: [] } @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
     value v9: Int(64) @block0
     value v10: Int(64) @block0
     value v11: Int(64) @block0
     value v12: Int(64) @block0
     value v13: Generic { name: "String", args: [] } @block0
-    value v14: TypeRef("?") @block0
+    value v14: Never @block0
     value v15: Bool @block0
     value v16: Int(64) @block0
     value v17: Int(64) @block0
     value v18: Int(64) @block0
     value v19: Int(64) @block0
     value v20: Generic { name: "String", args: [] } @block0
-    value v21: TypeRef("?") @block0
+    value v21: Never @block0
     value v22: Bool @block0
     value v23: Int(64) @block0
     value v24: Int(64) @block0
@@ -104,7 +104,7 @@ module
     value v26: Int(64) @block0
     value v27: Int(64) @block0
     value v28: Generic { name: "String", args: [] } @block0
-    value v29: TypeRef("?") @block0
+    value v29: Never @block0
     value v30: Bool @block0
     value v31: Int(64) @block0
     value v32: Int(64) @block0
@@ -118,23 +118,23 @@ module
     value v40: Int(64) @block0
     value v41: Int(64) @block0
     value v42: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v43: TypeRef("?") @block0
+    value v43: Never @block0
     value v44: Bool @block0
-    value v45: TypeRef("?") @block0
+    value v45: Int(64) @block0
     value v46: Int(64) @block0
-    value v47: Generic { name: "Vec", args: [TypeVar(TypeVar(48))] } @block0
+    value v47: TypeRef("?") @block0
     value v48: Generic { name: "String", args: [] } @block0
-    value v49: TypeRef("?") @block0
+    value v49: Never @block0
     value v50: Bool @block0
-    value v51: TypeRef("?") @block0
+    value v51: Int(64) @block0
     value v52: Int(64) @block0
-    value v53: Generic { name: "Vec", args: [TypeVar(TypeVar(48))] } @block0
+    value v53: TypeRef("?") @block0
     value v54: Int(64) @block0
     value v55: Generic { name: "String", args: [] } @block0
     value v56: Generic { name: "String", args: [] } @block0
     value v57: Generic { name: "String", args: [] } @block0
     value v58: Generic { name: "String", args: [] } @block0
-    value v59: TypeRef("?") @block0
+    value v59: Never @block0
     value v60: Bool @block0
     value v61: Generic { name: "String", args: [] } @block0
     value v62: Generic { name: "String", args: [] } @block0

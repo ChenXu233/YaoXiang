@@ -3,7 +3,7 @@ module
     slot[0] s : Int(64) @depth1
     locals_total=4
     values_total=5
-    value v0: TypeRef("?") @block0
+    value v0: Void @block0
     value v1: Generic { name: "String", args: [] } @block0
     value v2: Generic { name: "String", args: [] } @block0
     value v3: Int(64) @block0

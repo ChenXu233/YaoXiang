@@ -10,14 +10,14 @@ module
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
-    value v6: TypeRef("?") @block0
+    value v6: Never @block0
     value v7: Bool @block0
     value v8: TypeRef("?") @block0
     value v9: Int(64) @block0
     value v10: Generic { name: "Vec", args: [Int(64)] } @block0
     value v11: Int(64) @block0
     value v12: Generic { name: "String", args: [] } @block0
-    value v13: TypeRef("?") @block0
+    value v13: Never @block0
     value v14: Bool @block0
     value v15: TypeRef("?") @block0
     value v16: Int(64) @block0
@@ -30,14 +30,14 @@ module
     value v23: Int(64) @block0
     value v24: Int(64) @block0
     value v25: Int(64) @block0
-    value v26: TypeRef("?") @block0
+    value v26: Never @block0
     value v27: Bool @block0
     value v28: TypeRef("?") @block0
     value v29: Int(64) @block0
     value v30: Generic { name: "Array", args: [Int(64), Literal { name: "3", base_type: Int(64), value: Int(3) }] } @block0
     value v31: Int(64) @block0
     value v32: Generic { name: "String", args: [] } @block0
-    value v33: TypeRef("?") @block0
+    value v33: Never @block0
     value v34: Bool @block0
     value v35: TypeRef("?") @block0
     value v36: Int(64) @block0

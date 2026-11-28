@@ -10,18 +10,18 @@ module
     value v2: Int(64) @block0
     value v3: TypeRef("?") @block0
     value v4: Generic { name: "Range", args: [Int(64)] } @block0
-    value v5: TypeRef("?") @block0
+    value v5: Generic { name: "Iterator", args: [TypeRef("Any")] } @block0
     value v6: TypeRef("?") @block0
     value v7: Int(64) @block0
     value v8: Bool @block0
-    value v9: TypeRef("?") @block3
-    value v10: TypeRef("?") @block4
+    value v9: Bool @block3
+    value v10: TypeRef("Any") @block4
     value v11: Void @block4
     value v12: Int(64) @block4
     value v13: Int(64) @block4
-    value v14: TypeRef("?") @block4
-    value v15: TypeRef("?") @block1
-    value v16: TypeRef("?") @block3
+    value v14: Generic { name: "String", args: [] } @block4
+    value v15: Generic { name: "Iterator", args: [TypeRef("Any")] } @block1
+    value v16: Generic { name: "Iterator", args: [TypeRef("Any")] } @block3
     Load %0 <- int(0)
     Load v0 <- int(1)
     Load v1 <- int(10)

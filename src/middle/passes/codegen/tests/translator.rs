@@ -14,6 +14,12 @@
 //!   `op` 字段必须保真为 Not；
 //! - 端到端语义（钉住执行面）：Not(Bool) 经序列化往返后执行仍返回逻辑非；
 //! - Neg 对照锚：Neg 编码/解码行为逐字不变（修前修后都绿）。
+//!
+//! 追加一组 .42 升版判据（RFC-039 D17）：`upvalue_count` 的**生产端**是本文件的
+//! `Instruction::LoadUpvalue` / `StoreUpvalue` 计数，**消费端**是
+//! `file::FunctionCode.upvalue_count` 的落盘与 `BytecodeModule` 解码——
+//! 两端在本文件直驱（合成 IR → 直接翻译 vs 经 .42 往返），不让消费者手工构造
+//! 登记数据（coding-rules 第六部分「静默通道」）。
 
 use crate::backends::Executor;
 use crate::frontend::core::sema::MonoType;
@@ -202,6 +208,93 @@ fn test_not_instruction_encodes_to_dedicated_opcode() {
 }
 
 // -- 端到端语义（执行面钉住）--
+
+// -- 上值槽数落盘（RFC-039 D17）--
+
+/// 构造一个「读 upvalue#3、写 upvalue#1」的单函数模块——上值槽数应为 4。
+fn upvalue_module() -> ModuleIR {
+    let mut module = ModuleIR {
+        entry_function: Some("main".to_string()),
+        ..ModuleIR::default()
+    };
+    module.functions.push(FunctionIR {
+        def: None,
+        name: "main".to_string(),
+        params: Vec::new(),
+        return_type: MonoType::Void,
+        generic_params: None,
+        body: FunctionBody::Code {
+            blocks: vec![BasicBlock {
+                label: 0,
+                instructions: vec![
+                    Instruction::Load {
+                        dst: Operand::Local(0),
+                        src: Operand::Const(ConstValue::Int(1)),
+                        span: Span::default(),
+                    },
+                    Instruction::StoreUpvalue {
+                        src: Operand::Local(0),
+                        upvalue_idx: 1,
+                        span: Span::default(),
+                    },
+                    Instruction::LoadUpvalue {
+                        dst: Operand::Local(1),
+                        upvalue_idx: 3,
+                        span: Span::default(),
+                    },
+                    Instruction::Ret {
+                        value: None,
+                        span: Span::default(),
+                    },
+                ],
+                successors: Vec::new(),
+            }],
+            entry: 0,
+            locals: vec![
+                LocalSlot::temp(MonoType::Int(64)),
+                LocalSlot::temp(MonoType::Int(64)),
+            ],
+            values: Vec::new(),
+            value_slots: Vec::new(),
+        },
+    });
+    module
+}
+
+/// 主锚（RFC-039 D17）：上值槽数在直接翻译与经 .42 写读往返后必须一致，
+/// 且该值等于函数体触达的最大上值下标 + 1（不是硬编 0）。
+///
+/// 缺陷形态：`.42` 不落该字段、载入侧硬编 0——闭包的上值槽数经一次落盘
+/// 往返即丢失，而产物与运行结果都看不出异常（静默数据丢失）。
+#[test]
+fn test_upvalue_count_survives_dot42_roundtrip() {
+    // Arrange：合成 IR 直接翻译（= 源码直跑所用的同一翻译器）
+    let mut ctx = CodegenContext::new(upvalue_module());
+    let direct = ctx.generate().expect("codegen should succeed");
+
+    // Act：落盘 → 读回
+    let mut buf = Vec::new();
+    direct.write_to(&mut buf).expect("write_to should succeed");
+    let mut cursor = std::io::Cursor::new(&buf);
+    let restored = crate::middle::bytecode::file::BytecodeFile::read_from(&mut cursor)
+        .expect("read_from should succeed");
+
+    // Assert：生产端计数、落盘保真、解码搬运三处同一事实
+    let direct_count = direct.code_section.functions[0].upvalue_count;
+    assert_eq!(
+        direct_count, 4,
+        "函数体触达 upvalue#3 与 upvalue#1，上值槽数应为 4；实际 {direct_count}"
+    );
+    assert_eq!(
+        restored.code_section.functions[0].upvalue_count, direct_count,
+        ".42 往返后上值槽数必须与直接翻译一致（0 即字段未落盘）"
+    );
+    let decoded = crate::middle::bytecode::BytecodeModule::from(restored);
+    assert_eq!(
+        decoded.functions[0].upvalue_count, direct_count,
+        "解码进 BytecodeModule 后上值槽数必须仍为 {direct_count}（载入侧不得硬编 0）"
+    );
+}
 
 /// 端到端锚：IR `Not(Bool(true))` 经 .42 序列化往返 + 解码 + 解释器执行，
 /// 全局槽位 0 记录 `Bool(false)`（逻辑非语义；语言规范 `!` 限定 Bool 域）。

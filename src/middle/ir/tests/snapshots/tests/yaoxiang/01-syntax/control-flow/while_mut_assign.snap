@@ -16,17 +16,17 @@ module
     value v5: Int(64) @block2
     value v6: Int(64) @block2
     value v7: Int(64) @block2
-    value v8: TypeRef("?") @block3
+    value v8: Never @block3
     value v9: Bool @block3
     value v10: Int(64) @block3
     value v11: Int(64) @block3
     value v12: Generic { name: "String", args: [] } @block3
-    value v13: TypeRef("?") @block3
+    value v13: Never @block3
     value v14: Bool @block3
     value v15: Int(64) @block3
     value v16: Int(64) @block3
     value v17: Generic { name: "String", args: [] } @block3
-    value v18: TypeRef("?") @block3
+    value v18: Never @block3
     value v19: Bool @block3
     value v20: Int(64) @block3
     value v21: Int(64) @block3
@@ -39,7 +39,7 @@ module
     value v28: Int(64) @block5
     value v29: Int(64) @block5
     value v30: Int(64) @block5
-    value v31: TypeRef("?") @block6
+    value v31: Never @block6
     value v32: Bool @block6
     value v33: Int(64) @block6
     value v34: Int(64) @block6

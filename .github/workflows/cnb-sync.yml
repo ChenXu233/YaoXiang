@@ -19,6 +19,8 @@ on:
     tags: ['**']
   pull_request:
     types: [closed]
+  issues:
+    types: [closed]
   workflow_dispatch:
 
 permissions:
@@ -37,6 +39,7 @@ jobs:
     steps:
       # GitHub 上合掉的 PR 里，只有从 CNB 镜像来的 cnb/pr-* 需要在 CNB 侧回关；
       # 其余（dev→main 发布、dependabot 等）在 CNB 没有对应 PR，跳过。
+      # GitHub 上关闭的 Issue 里，只有正文带 cnb-issue-mirror 标记的才回关 CNB。
       - name: Decide mirror scope
         id: decide
         env:
@@ -44,11 +47,19 @@ jobs:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           SELF_REPO: ${{ github.repository }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
           if [ "$EVENT" = "pull_request" ]; then
             # 只认本仓库的 cnb/pr-* 镜像分支；fork 上的同名分支不算。
             if [ "$HEAD_REPO" = "$SELF_REPO" ] && [[ "$HEAD_REF" == cnb/pr-* ]]; then
               echo "scope=prs" >> "$GITHUB_OUTPUT"
+            else
+              echo "scope=skip" >> "$GITHUB_OUTPUT"
+            fi
+          elif [ "$EVENT" = "issues" ]; then
+            # 只认由本脚本镜像的 Issue：正文含 cnb-issue-mirror 标记。
+            if printf '%s' "$ISSUE_BODY" | grep -q 'cnb-issue-mirror'; then
+              echo "scope=issues" >> "$GITHUB_OUTPUT"
             else
               echo "scope=skip" >> "$GITHUB_OUTPUT"
             fi

@@ -10,7 +10,7 @@ mod call;
 mod closure;
 mod container;
 mod control;
-mod lit;
+pub(crate) mod lit;
 mod op;
 mod reference;
 mod spawn;
@@ -522,11 +522,17 @@ impl AstToIrGenerator {
             Expr::UnOp { op, expr, .. } => {
                 self.generate_un_op_expr_ir(op, expr, result_reg, instructions, constants)?;
             }
-            Expr::Lambda { params, body, .. } => {
+            Expr::Lambda {
+                params,
+                body,
+                plan_id,
+                ..
+            } => {
                 self.generate_lambda_expr_ir(
                     params,
                     body,
                     env,
+                    *plan_id,
                     result_reg,
                     instructions,
                     constants,

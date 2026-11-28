@@ -8,33 +8,33 @@ module
     slot[5] city : Int(64) @depth1
     locals_total=10
     values_total=27
-    value v0: TypeRef("?") @block0
-    value v1: TypeRef("?") @block0
+    value v0: Generic { name: "Tuple", args: [Void, Void, Void] } @block0
+    value v1: Generic { name: "Tuple", args: [Void, Void, Void] } @block0
     value v2: Generic { name: "String", args: [] } @block0
     value v3: Int(64) @block0
     value v4: Generic { name: "String", args: [] } @block0
     value v5: Int(64) @block0
     value v6: Int(64) @block0
     value v7: Int(64) @block0
-    value v8: TypeRef("?") @block0
+    value v8: Never @block0
     value v9: Bool @block0
     value v10: Generic { name: "String", args: [] } @block0
-    value v11: TypeRef("?") @block0
+    value v11: Void @block0
     value v12: Generic { name: "String", args: [] } @block0
-    value v13: TypeRef("?") @block0
+    value v13: Never @block0
     value v14: Bool @block0
     value v15: Generic { name: "String", args: [] } @block0
-    value v16: TypeRef("?") @block0
+    value v16: Void @block0
     value v17: Int(64) @block0
-    value v18: TypeRef("?") @block0
+    value v18: Never @block0
     value v19: Bool @block0
     value v20: Generic { name: "String", args: [] } @block0
-    value v21: TypeRef("?") @block0
+    value v21: Void @block0
     value v22: Generic { name: "String", args: [] } @block0
-    value v23: TypeRef("?") @block0
+    value v23: Never @block0
     value v24: Bool @block0
     value v25: Generic { name: "String", args: [] } @block0
-    value v26: TypeRef("?") @block0
+    value v26: Generic { name: "Tuple", args: [Void, Void, Void] } @block0
     Load %0 <- string("Alice")
     Load %1 <- int(30)
     Load %2 <- string("Beijing")

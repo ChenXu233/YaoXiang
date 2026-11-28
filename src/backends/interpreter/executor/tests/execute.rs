@@ -67,11 +67,13 @@ fn new_array_roundtrip_file() -> crate::middle::bytecode::file::BytecodeFile {
                 return_type: crate::frontend::core::types::MonoType::Void,
                 instructions: vec![raw_new_array, raw_return],
                 local_count: 1,
+                upvalue_count: 0,
                 local_names: HashMap::new(),
                 debug_map: std::collections::HashMap::new(),
             }],
         },
         vtables: vec![],
+        globals: vec![],
         debug_section: None,
     }
 }

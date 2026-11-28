@@ -14,14 +14,14 @@ module
     value v2: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v3: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v4: Ref { mutable: false, inner: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) } @block0
-    value v5: TypeRef("?") @block0
+    value v5: Never @block0
     value v6: Bool @block0
     value v7: Generic { name: "String", args: [] } @block0
-    value v8: TypeRef("?") @block0
+    value v8: Void @block0
     value v9: TypeRef("?") @block0
     value v10: TypeRef("?") @block0
     value v11: Struct(StructType { name: "Window", fields: [("target", TypeRef("Point")), ("view", Ref { mutable: false, inner: TypeRef("Point") })], methods: {}, interfaces: [] }) @block0
-    value v12: TypeRef("?") @block0
+    value v12: Never @block0
     value v13: Bool @block0
     value v14: Generic { name: "String", args: [] } @block0
     Load v0 <- float(4607182418800017408)

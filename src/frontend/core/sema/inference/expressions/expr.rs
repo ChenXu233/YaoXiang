@@ -1923,8 +1923,15 @@ impl<'a> ExpressionInferrer<'a> {
         expected: Option<&MonoType>,
     ) -> Result<MonoType> {
         match expr {
-            crate::ast::Expr::Lambda { params, body, .. } => {
-                self.infer_lambda(params, body, expected)
+            crate::ast::Expr::Lambda {
+                params,
+                body,
+                plan_id,
+                ..
+            } => {
+                let ty = self.infer_lambda(params, body, expected)?;
+                self.record_lambda_result_type(*plan_id, &ty);
+                Ok(ty)
             }
             // 6.8.7：字面量同样消费期望——期望是单值类型且取值相等时定型为该
             // 单值类型。调用实参位因此能拿到 Literal{v} 型实参：
@@ -1988,6 +1995,20 @@ impl<'a> ExpressionInferrer<'a> {
                 }
                 _ => return None,
             }
+        }
+    }
+
+    /// 闭包结果类型落表（RFC-039 D20：与调用点同一张表、同一身份形态）。
+    ///
+    /// 存**原样**推断结果；收敛与「未收敛即不落」在导出点做一次（与调用点
+    /// 共用 `finalize_expr_result_types`）。身份未分配（合成 lambda）不进表。
+    fn record_lambda_result_type(
+        &mut self,
+        plan_id: crate::util::plan_id::PlanId,
+        ty: &MonoType,
+    ) {
+        if plan_id.is_planned() {
+            self.expr_result_types.insert(plan_id, ty.clone());
         }
     }
 
@@ -2693,7 +2714,22 @@ impl<'a> ExpressionInferrer<'a> {
                 named_args,
                 span,
                 plan_id,
-            } => self.infer_call_expr(func, args, named_args, *span, *plan_id),
+            } => {
+                let ty = self.infer_call_expr(func, args, named_args, *span, *plan_id)?;
+                // 调用点结果类型落表（RFC-039 D20：与 `overload_resolutions` 同一身份）。
+                // 限定名 / native / 方法 / 泛型调用的**最终**类型只有 sema 有：IR 侧按
+                // 被调名反查原生签名取不到，值表遂落显式未知。
+                //
+                // 这里存**原样**推断结果：此刻 zonk 太早——`dict.new()` 的
+                // `Dict(K, V)` 要等后续使用点（`dict.set(d, "a", 1)`）才收敛。收敛
+                // 与「未收敛即不落」的过滤在导出点
+                // （`StatementChecker::finalize_expr_result_types`）做一次；身份未分配
+                // 的合成调用（`PlanId::UNPLANNED`）不进表。
+                if plan_id.is_planned() {
+                    self.expr_result_types.insert(*plan_id, ty.clone());
+                }
+                Ok(ty)
+            }
 
             // If 表达式
             crate::ast::Expr::If {
@@ -2876,8 +2912,13 @@ impl<'a> ExpressionInferrer<'a> {
                 params,
                 body,
                 span: _span,
+                plan_id,
                 ..
-            } => self.infer_lambda(params, body, None),
+            } => {
+                let ty = self.infer_lambda(params, body, None)?;
+                self.record_lambda_result_type(*plan_id, &ty);
+                Ok(ty)
+            }
 
             // Match 表达式
             crate::ast::Expr::Match { expr, arms, span } => {

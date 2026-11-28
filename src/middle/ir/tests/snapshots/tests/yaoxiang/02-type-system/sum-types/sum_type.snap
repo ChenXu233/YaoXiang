@@ -18,20 +18,20 @@ module
     value v4: Bool @block0
     value v5: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block0
     value v6: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block0
-    value v7: TypeRef("?") @block1
+    value v7: Void @block1
     value v8: Generic { name: "String", args: [] } @block1
     value v9: Bool @block2
     value v10: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block2
     value v11: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block2
-    value v12: TypeRef("?") @block3
+    value v12: Void @block3
     value v13: Generic { name: "String", args: [] } @block3
     value v14: Void @block6
-    value v15: TypeRef("?") @block5
+    value v15: Void @block5
     value v16: Bool @block4
     value v17: Generic { name: "Color", args: [] } @block4
-    value v18: TypeRef("?") @block4
+    value v18: Generic { name: "Color", args: [] } @block4
     value v19: Void @block4
-    value v20: TypeRef("?") @block5
+    value v20: Void @block5
     value v21: Generic { name: "String", args: [] } @block5
     Load v0 <- void
     CreateVariant %0 <- Color::1 v0

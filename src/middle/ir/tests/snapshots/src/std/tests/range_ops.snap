@@ -17,110 +17,110 @@ module
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     value v3: Generic { name: "Range", args: [Int(64)] } @block0
-    value v4: TypeRef("?") @block0
+    value v4: Generic { name: "Iterator", args: [TypeRef("Any")] } @block0
     value v5: TypeRef("?") @block0
     value v6: Int(64) @block0
     value v7: Bool @block0
-    value v8: TypeRef("?") @block3
-    value v9: TypeRef("?") @block4
+    value v8: Bool @block3
+    value v9: TypeRef("Any") @block4
     value v10: Bool @block4
     value v11: Int(64) @block4
     value v12: Int(64) @block4
     value v13: Int(64) @block6
     value v14: Int(64) @block6
-    value v15: TypeRef("?") @block7
+    value v15: Never @block7
     value v16: Bool @block7
     value v17: Int(64) @block7
     value v18: Int(64) @block7
     value v19: Generic { name: "String", args: [] } @block7
-    value v20: TypeRef("?") @block7
+    value v20: Never @block7
     value v21: Bool @block7
     value v22: Int(64) @block7
     value v23: Int(64) @block7
     value v24: Generic { name: "String", args: [] } @block7
-    value v25: TypeRef("?") @block7
+    value v25: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block7
     value v26: TypeRef("?") @block7
     value v27: Int(64) @block7
     value v28: Int(64) @block7
     value v29: Int(64) @block7
-    value v30: TypeRef("?") @block7
-    value v31: TypeRef("?") @block7
+    value v30: Never @block7
+    value v31: Bool @block7
     value v32: Generic { name: "Iterator", args: [TypeRef("Any")] } @block7
     value v33: Generic { name: "String", args: [] } @block7
-    value v34: TypeRef("?") @block7
+    value v34: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block7
     value v35: TypeRef("?") @block7
     value v36: Int(64) @block7
     value v37: Int(64) @block7
     value v38: Int(64) @block7
-    value v39: TypeRef("?") @block7
+    value v39: Never @block7
     value v40: Bool @block7
-    value v41: TypeRef("?") @block7
+    value v41: TypeRef("Any") @block7
     value v42: Int(64) @block7
     value v43: Generic { name: "Iterator", args: [TypeRef("Any")] } @block7
     value v44: Generic { name: "String", args: [] } @block7
-    value v45: TypeRef("?") @block7
+    value v45: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block7
     value v46: TypeRef("?") @block7
     value v47: Int(64) @block7
     value v48: Int(64) @block7
     value v49: Int(64) @block7
     value v50: Int(64) @block7
-    value v51: TypeRef("?") @block7
+    value v51: Never @block7
     value v52: Bool @block7
-    value v53: TypeRef("?") @block7
+    value v53: TypeRef("Any") @block7
     value v54: Int(64) @block7
     value v55: Generic { name: "Iterator", args: [TypeRef("Any")] } @block7
     value v56: Generic { name: "String", args: [] } @block7
-    value v57: TypeRef("?") @block7
+    value v57: Never @block7
     value v58: Bool @block7
-    value v59: TypeRef("?") @block7
+    value v59: TypeRef("Any") @block7
     value v60: Int(64) @block7
     value v61: Generic { name: "Iterator", args: [TypeRef("Any")] } @block7
     value v62: Generic { name: "String", args: [] } @block7
-    value v63: TypeRef("?") @block7
-    value v64: TypeRef("?") @block7
+    value v63: Never @block7
+    value v64: Bool @block7
     value v65: Generic { name: "Iterator", args: [TypeRef("Any")] } @block7
     value v66: Generic { name: "String", args: [] } @block7
-    value v67: TypeRef("?") @block7
-    value v68: TypeRef("?") @block7
-    value v69: TypeRef("?") @block7
+    value v67: Never @block7
+    value v68: Bool @block7
+    value v69: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block7
     value v70: TypeRef("?") @block7
     value v71: Int(64) @block7
     value v72: Int(64) @block7
     value v73: Int(64) @block7
     value v74: Int(64) @block7
     value v75: Generic { name: "String", args: [] } @block7
-    value v76: TypeRef("?") @block7
+    value v76: Never @block7
     value v77: Bool @block7
-    value v78: TypeRef("?") @block7
-    value v79: TypeRef("?") @block7
+    value v78: Bool @block7
+    value v79: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block7
     value v80: TypeRef("?") @block7
     value v81: Int(64) @block7
     value v82: Int(64) @block7
     value v83: Int(64) @block7
     value v84: Int(64) @block7
     value v85: Generic { name: "String", args: [] } @block7
-    value v86: TypeRef("?") @block7
-    value v87: TypeRef("?") @block7
-    value v88: TypeRef("?") @block7
+    value v86: Never @block7
+    value v87: Bool @block7
+    value v88: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block7
     value v89: TypeRef("?") @block7
     value v90: Int(64) @block7
     value v91: Int(64) @block7
     value v92: Int(64) @block7
     value v93: Int(64) @block7
     value v94: Generic { name: "String", args: [] } @block7
-    value v95: TypeRef("?") @block7
+    value v95: Never @block7
     value v96: Bool @block7
-    value v97: TypeRef("?") @block7
-    value v98: TypeRef("?") @block7
+    value v97: Bool @block7
+    value v98: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block7
     value v99: TypeRef("?") @block7
     value v100: Int(64) @block7
     value v101: Int(64) @block7
     value v102: Int(64) @block7
     value v103: Int(64) @block7
     value v104: Generic { name: "String", args: [] } @block7
-    value v105: TypeRef("?") @block7
-    value v106: TypeRef("?") @block7
-    value v107: TypeRef("?") @block7
+    value v105: Never @block7
+    value v106: Bool @block7
+    value v107: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block7
     value v108: TypeRef("?") @block7
     value v109: Int(64) @block7
     value v110: Int(64) @block7
@@ -128,10 +128,10 @@ module
     value v112: Int(64) @block7
     value v113: Int(64) @block7
     value v114: Generic { name: "String", args: [] } @block7
-    value v115: TypeRef("?") @block7
+    value v115: Never @block7
     value v116: Bool @block7
-    value v117: TypeRef("?") @block7
-    value v118: TypeRef("?") @block7
+    value v117: Bool @block7
+    value v118: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block7
     value v119: TypeRef("?") @block7
     value v120: Int(64) @block7
     value v121: Int(64) @block7
@@ -139,82 +139,82 @@ module
     value v123: Int(64) @block7
     value v124: Int(64) @block7
     value v125: Generic { name: "String", args: [] } @block7
-    value v126: TypeRef("?") @block7
-    value v127: TypeRef("?") @block7
-    value v128: TypeRef("?") @block7
+    value v126: Generic { name: "Iterator", args: [TypeRef("Any")] } @block7
+    value v127: Generic { name: "Iterator", args: [TypeRef("Any")] } @block7
+    value v128: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block7
     value v129: Generic { name: "Range", args: [Int(64)] } @block7
     value v130: TypeRef("?") @block7
-    value v131: TypeRef("?") @block7
+    value v131: Never @block7
     value v132: Bool @block7
     value v133: Int(64) @block7
     value v134: Int(64) @block7
     value v135: Generic { name: "Vec", args: [TypeRef("Any")] } @block7
     value v136: Generic { name: "String", args: [] } @block7
-    value v137: TypeRef("?") @block7
+    value v137: Never @block7
     value v138: Bool @block7
     value v139: TypeRef("?") @block7
     value v140: Int(64) @block7
     value v141: Generic { name: "Vec", args: [TypeRef("Any")] } @block7
     value v142: Int(64) @block7
     value v143: Generic { name: "String", args: [] } @block7
-    value v144: TypeRef("?") @block7
+    value v144: Never @block7
     value v145: Bool @block7
     value v146: TypeRef("?") @block7
     value v147: Int(64) @block7
     value v148: Generic { name: "Vec", args: [TypeRef("Any")] } @block7
     value v149: Int(64) @block7
     value v150: Generic { name: "String", args: [] } @block7
-    value v151: TypeRef("?") @block7
-    value v152: TypeRef("?") @block7
-    value v153: TypeRef("?") @block7
+    value v151: Generic { name: "Iterator", args: [TypeRef("Any")] } @block7
+    value v152: Generic { name: "Iterator", args: [TypeRef("Any")] } @block7
+    value v153: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block7
     value v154: Generic { name: "Range", args: [Int(64)] } @block7
     value v155: TypeRef("?") @block7
-    value v156: TypeRef("?") @block7
+    value v156: Never @block7
     value v157: Bool @block7
     value v158: Int(64) @block7
     value v159: Int(64) @block7
     value v160: Generic { name: "Vec", args: [TypeRef("Any")] } @block7
     value v161: Generic { name: "String", args: [] } @block7
-    value v162: TypeRef("?") @block7
+    value v162: Never @block7
     value v163: Bool @block7
     value v164: TypeRef("?") @block7
     value v165: Int(64) @block7
     value v166: Generic { name: "Vec", args: [TypeRef("Any")] } @block7
     value v167: Int(64) @block7
     value v168: Generic { name: "String", args: [] } @block7
-    value v169: TypeRef("?") @block7
-    value v170: TypeRef("?") @block7
-    value v171: TypeRef("?") @block7
-    value v172: TypeRef("?") @block7
+    value v169: Generic { name: "Iterator", args: [TypeRef("Any")] } @block7
+    value v170: Generic { name: "Iterator", args: [TypeRef("Any")] } @block7
+    value v171: Generic { name: "Iterator", args: [TypeRef("Any")] } @block7
+    value v172: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block7
     value v173: Generic { name: "Range", args: [Int(64)] } @block7
     value v174: TypeRef("?") @block7
     value v175: TypeRef("?") @block7
-    value v176: TypeRef("?") @block7
+    value v176: Never @block7
     value v177: Bool @block7
     value v178: TypeRef("?") @block7
     value v179: Int(64) @block7
     value v180: Generic { name: "Vec", args: [TypeRef("Any")] } @block7
     value v181: Int(64) @block7
     value v182: Generic { name: "String", args: [] } @block7
-    value v183: TypeRef("?") @block7
+    value v183: Never @block7
     value v184: Bool @block7
     value v185: TypeRef("?") @block7
     value v186: Int(64) @block7
     value v187: Generic { name: "Vec", args: [TypeRef("Any")] } @block7
     value v188: Int(64) @block7
     value v189: Generic { name: "String", args: [] } @block7
-    value v190: TypeRef("?") @block7
-    value v191: TypeRef("?") @block7
+    value v190: Generic { name: "Iterator", args: [TypeRef("Any")] } @block7
+    value v191: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block7
     value v192: Generic { name: "Range", args: [Int(64)] } @block7
     value v193: Int(64) @block7
     value v194: TypeRef("?") @block7
-    value v195: TypeRef("?") @block7
+    value v195: Never @block7
     value v196: Bool @block7
     value v197: TypeRef("Any") @block7
     value v198: Int(64) @block7
     value v199: Generic { name: "String", args: [] } @block7
-    value v200: TypeRef("?") @block1
-    value v201: TypeRef("?") @block3
+    value v200: Generic { name: "Iterator", args: [TypeRef("Any")] } @block1
+    value v201: Generic { name: "Iterator", args: [TypeRef("Any")] } @block3
     Load v0 <- int(1)
     Load v1 <- int(6)
     Load v2 <- int(1)
@@ -506,8 +506,8 @@ module
     locals_total=5
     values_total=4
     value v0: TypeRef("?") @block0
-    value v1: TypeVar(TypeVar(125)) @block0
-    value v2: TypeVar(TypeVar(125)) @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
     value v3: Int(64) @block0
     Load v2 <- %0
     Load v3 <- %1

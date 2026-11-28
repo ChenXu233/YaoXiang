@@ -9,13 +9,13 @@ module
     locals_total=9
     values_total=37
     value v0: Bool @block0
-    value v1: TypeRef("?") @block2
+    value v1: Never @block2
     value v2: Bool @block2
     value v3: Generic { name: "String", args: [] } @block2
     value v4: Generic { name: "String", args: [] } @block2
     value v5: Generic { name: "String", args: [] } @block2
     value v6: Bool @block2
-    value v7: TypeRef("?") @block5
+    value v7: Never @block5
     value v8: Bool @block5
     value v9: Generic { name: "String", args: [] } @block5
     value v10: Generic { name: "String", args: [] } @block5
@@ -29,7 +29,7 @@ module
     value v18: Bool @block9
     value v19: Int(64) @block9
     value v20: Int(64) @block9
-    value v21: TypeRef("?") @block12
+    value v21: Never @block12
     value v22: Bool @block12
     value v23: Generic { name: "String", args: [] } @block12
     value v24: Generic { name: "String", args: [] } @block12
@@ -40,7 +40,7 @@ module
     value v29: Bool @block13
     value v30: Int(64) @block13
     value v31: Int(64) @block13
-    value v32: TypeRef("?") @block16
+    value v32: Never @block16
     value v33: Bool @block16
     value v34: Generic { name: "String", args: [] } @block16
     value v35: Generic { name: "String", args: [] } @block16

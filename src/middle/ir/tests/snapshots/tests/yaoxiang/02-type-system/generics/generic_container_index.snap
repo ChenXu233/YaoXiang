@@ -32,7 +32,7 @@ module
     value v1: Int(64) @block0
     value v2: Struct(StructType { name: "Box", fields: [("v", Int(64)), ("n", Int(64))], methods: {}, interfaces: [] }) @block0
     value v3: Int(64) @block0
-    value v4: TypeRef("?") @block0
+    value v4: Never @block0
     value v5: Bool @block0
     value v6: Int(64) @block0
     value v7: Int(64) @block0
@@ -41,15 +41,15 @@ module
     value v10: Int(64) @block0
     value v11: Struct(StructType { name: "Box", fields: [("v", Generic { name: "String", args: [] }), ("n", Int(64))], methods: {}, interfaces: [] }) @block0
     value v12: Int(64) @block0
-    value v13: TypeRef("?") @block0
+    value v13: Never @block0
     value v14: Bool @block0
     value v15: Generic { name: "String", args: [] } @block0
     value v16: Generic { name: "String", args: [] } @block0
     value v17: Generic { name: "String", args: [] } @block0
     value v18: Struct(StructType { name: "Box", fields: [("v", Int(64)), ("n", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v19: TypeRef("?") @block0
+    value v19: Never @block0
     value v20: Bool @block0
-    value v21: TypeVar(TypeVar(58)) @block0
+    value v21: TypeRef("?") @block0
     value v22: Int(64) @block0
     value v23: Generic { name: "String", args: [] } @block0
     Load v0 <- int(42)

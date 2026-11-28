@@ -76,7 +76,7 @@ module
     slot[0] a : Int(64) @depth1
     locals_total=6
     values_total=14
-    value v0: TypeRef("?") @block1
+    value v0: Generic { name: "String", args: [] } @block1
     value v1: TypeRef("Animal") @block0
     value v2: TypeRef("?") @block0
     value v3: Int(64) @block0
@@ -87,9 +87,9 @@ module
     value v8: TypeRef("?") @block3
     value v9: Bool @block4
     value v10: Generic { name: "String", args: [] } @block4
-    value v11: TypeRef("?") @block3
-    value v12: TypeRef("?") @block4
-    value v13: TypeRef("?") @block5
+    value v11: Generic { name: "String", args: [] } @block3
+    value v12: Generic { name: "String", args: [] } @block4
+    value v13: Generic { name: "String", args: [] } @block5
     Load %0 <- arg%0
     Load v1 <- %0
     VariantTag v2 <- v1 : Animal$Group
@@ -141,7 +141,7 @@ module
     value v18: TypeRef("?") @block3
     value v19: Bool @block4
     value v20: Generic { name: "String", args: [] } @block4
-    value v21: TypeRef("?") @block5
+    value v21: Never @block5
     value v22: Bool @block5
     value v23: Generic { name: "String", args: [] } @block5
     value v24: Generic { name: "String", args: [] } @block5
@@ -158,7 +158,7 @@ module
     value v35: TypeRef("?") @block8
     value v36: Bool @block9
     value v37: Generic { name: "String", args: [] } @block9
-    value v38: TypeRef("?") @block10
+    value v38: Never @block10
     value v39: Bool @block10
     value v40: Generic { name: "String", args: [] } @block10
     value v41: Generic { name: "String", args: [] } @block10
@@ -176,16 +176,16 @@ module
     value v53: TypeRef("?") @block13
     value v54: Bool @block14
     value v55: Generic { name: "String", args: [] } @block14
-    value v56: TypeRef("?") @block15
+    value v56: Never @block15
     value v57: Bool @block15
     value v58: Int(64) @block15
     value v59: Int(64) @block15
     value v60: Generic { name: "String", args: [] } @block15
     value v61: Generic { name: "Vec", args: [TypeRef("Animal")] } @block15
     value v62: Int(64) @block15
-    value v63: TypeRef("?") @block20
+    value v63: Never @block20
     value v64: Bool @block20
-    value v65: TypeRef("?") @block16
+    value v65: Generic { name: "String", args: [] } @block16
     value v66: Generic { name: "String", args: [] } @block20
     value v67: TypeRef("Animal") @block15
     value v68: TypeRef("?") @block15
@@ -198,7 +198,7 @@ module
     value v75: Bool @block19
     value v76: Generic { name: "String", args: [] } @block19
     value v77: Generic { name: "String", args: [] } @block20
-    value v78: TypeRef("?") @block20
+    value v78: Never @block20
     value v79: Bool @block20
     value v80: Generic { name: "String", args: [] } @block20
     value v81: Generic { name: "String", args: [] } @block20
@@ -206,7 +206,7 @@ module
     value v83: Generic { name: "Vec", args: [TypeRef("Animal")] } @block20
     value v84: Int(64) @block20
     value v85: Generic { name: "String", args: [] } @block20
-    value v86: TypeRef("?") @block20
+    value v86: Never @block20
     value v87: Bool @block20
     value v88: Generic { name: "String", args: [] } @block20
     value v89: Generic { name: "String", args: [] } @block20
@@ -219,9 +219,9 @@ module
     value v96: TypeRef("?") @block20
     value v97: Generic { name: "String", args: [] } @block20
     value v98: Int(64) @block20
-    value v99: TypeRef("?") @block25
+    value v99: Never @block25
     value v100: Bool @block25
-    value v101: TypeRef("?") @block21
+    value v101: Generic { name: "String", args: [] } @block21
     value v102: Generic { name: "String", args: [] } @block25
     value v103: TypeRef("?") @block20
     value v104: Generic { name: "Vec", args: [TypeRef("Animal")] } @block20
@@ -236,12 +236,12 @@ module
     value v113: Bool @block24
     value v114: Generic { name: "String", args: [] } @block24
     value v115: Generic { name: "String", args: [] } @block25
-    value v116: TypeRef("?") @block18
-    value v117: TypeRef("?") @block19
-    value v118: TypeRef("?") @block23
-    value v119: TypeRef("?") @block24
-    value v120: TypeRef("?") @block20
-    value v121: TypeRef("?") @block25
+    value v116: Generic { name: "String", args: [] } @block18
+    value v117: Generic { name: "String", args: [] } @block19
+    value v118: Generic { name: "String", args: [] } @block23
+    value v119: Generic { name: "String", args: [] } @block24
+    value v120: Generic { name: "String", args: [] } @block20
+    value v121: Generic { name: "String", args: [] } @block25
     AllocArray %0 size=int(2), elem=int(1)
     Load v2 <- string("Rex")
     Load v3 <- int(3)

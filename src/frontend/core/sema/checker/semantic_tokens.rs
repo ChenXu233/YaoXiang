@@ -1237,7 +1237,9 @@ impl TypeChecker {
                     );
                 }
             }
-            Expr::Lambda { params, body, span } => {
+            Expr::Lambda {
+                params, body, span, ..
+            } => {
                 // Lambda 参数
                 for param in params {
                     self.semantic_db.add_token(

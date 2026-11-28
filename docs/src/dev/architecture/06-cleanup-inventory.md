@@ -176,17 +176,17 @@ C1-C3 描述的跨文件分析能力**是真的存在**的，只是路径完全�
 | E7 | 双 `ConstValue`：`src/frontend/core/types/const_data.rs:14-30` × `src/middle/core/ir.rs:738-755` | 5 个变体同名（`Int` / `Bool` / `Float` / `LibraryRef` / `ExternRef`），但 **`Float` 位宽不一致（f32 × f64）**；无 `From` / `TryFrom`，转换手写散落调用点（`const_eval.rs` / `ir_gen.rs`）。`const_data.rs:44` `kind()` 对 `LibraryRef` / `ExternRef` 是活 `todo!()`。**处置：合并为一份 + 显式转换 + `todo!()` 改降级输出，归 P10（E 类局部清理项）**。2026-10-06 P0 门禁登记（判据 A，J=0.56） |
 | E8 | `Literal` 下游映射同义重复（禁令三 A） | `Literal → MonoType` 同款臂 ≥3 处（`inference/expressions.rs`、`checker.rs`、`inference/patterns.rs` 的 `Literal::Int(_) => MonoType::Int(64)` 等）；`Literal → ir::ConstValue`（`ir_gen.rs` 19 处手写）与 `Literal → const_data::ConstValue`（`const_eval.rs` 4 处手写），无共享转换点。**处置：typecheck 侧 3 处提到共享层，归 P6；`ir_gen` / `const_eval` 侧随 E7 的 `ConstValue` 合并于 P10 一并收口**。2026-10-06 P0 门禁登记 |
 
-### 不是死代码，但同类问题：三条硬编码丢弃
+### 数据丢失：两处，不是三处
 
-`src/middle/core/bytecode.rs` 的 `impl From<BytecodeFile>`（`943-2350`，1400 行）有 3 处硬编码丢弃：
+`impl From<BytecodeFile>`（今 `src/middle/bytecode/mod.rs`）原有三处硬编码丢弃；7e 复核后为两处真丢失 + 一处误报：
 
-| 行 | 丢弃内容 | 后果 |
+| 行（旧） | 丢弃内容 | 复核结论 |
 | --- | --- | --- |
-| `2312` | `upvalue_count: 0` | upvalue 元信息丢失 |
-| `2315` | `exception_handlers: Vec::new()` | **`.42` 产物丢失异常表** |
-| `2341` | `globals: Vec::new()` | **`.42` 产物丢失全局变量信息** |
+| `2312` | `upvalue_count: 0` | **真丢失**：已随 v5 落盘（7e.1） |
+| `2315` | `exception_handlers: Vec::new()` | **误报**：字段无生产者、无消费者，语言层无 throw/try/catch（RFC-030/036）⇒ 死字段，不落盘；删除归 P10 S6 |
+| `2341` | `globals: Vec::new()` | **真丢失**：已随 v5 落盘（7e.3），载体统一为 `MonoType`（7e.4） |
 
-**这三处不是死代码，是数据丢失缺陷**——`.42` 产物在内存路径下才是完整的。**处置方式与死代码不同**：~~应作为独立 issue 跟踪~~ **已全部收编 P7 批 e（决议 D52，2026-10-05），不留独立 issue**——`2315`（异常表）与 `2341`（全局变量）属语言核心语义的产物完整性，不属于"可推迟"项。三处同修，`.42` 的 `VERSION` 从 4 升到 5 一次到位（格式头已有 `MAGIC` + `VERSION` 字段，`codegen/bytecode.rs:14-16`）。此处列出仅为避免被误当作"死代码"清理掉。
+判据：没有生产者的空表不是丢失的数据，是死路径（与 D32 同一判据）。`.42` 的 `VERSION` 从 4 升到 5 一次覆盖两处真丢失（决议 D52）。此处列出仅为避免被误当作「死代码」清理掉。
 
 ## F. 不删、但要标记或决策的
 
@@ -356,7 +356,7 @@ $ git grep -rn 'cfg!(target_arch' b5e68b3c9 -- '*.rs' | wc -l
 | **有真实断言的孤儿测试** | **复活，不是删除** | 合计 **1005 行 / 78 个测试**：lexer 629 行 / 55 个 + 藏在活目录里的 311 行 / 16 个（`precedence_inline` / `overload_inline` / `json`）+ `package/template/tests/` 65 行 / 7 个。**复活成本是一行 `mod` 声明，价值是让 CI 重新获得这些覆盖**。删除它们是净损失 |
 | **零调用但语义重要的 `pub` 项** | **降可见性而非删除** | B2（`TypeSystem`）、B4（`check_type_equivalence`）——移到 `pub(crate)` 让编译器指认，或补实现。**B4 的 `is_subtype` 必须保留** |
 | **产不出值的 opcode / 指令** | **补构造点或删 opcode** | B8（`TailCall`）、B9（`Switch`，opcode 往返测试已以 `WHITELIST=["SWITCH"]` 显式登记）。B10 已按 D33 修复完成（2026-11-14：`opcode()` 区分 `op` 字段 + 专用码 `I64_NOT`，见任务 3.20.29 的提交信息），移出本待办。剩余项三选一，不能维持现状；D32/D33/D34 已裁决，随 `.42` 升版一并处理 |
-| **数据丢失缺陷** | ~~独立 issue~~ **P7 批 e（D52）** | E 节三条硬编码丢弃——不是死代码 |
+| **数据丢失缺陷** | ~~独立 issue~~ **P7 批 e（D52）** | E 节两处真丢失 + 一处误报（`exception_handlers` 为死字段，删除归 P10 S6） |
 | **无模块身份但有效** | **改造不删除** | F1（`semantic_tokens.rs`）改 `include!` → 真 `mod`（见 `02`） |
 | **需要决策的** | **列为开放问题** | F2 的 wasm32 清理已登记为 [09](09-execution-wbs.md) §P10 **S7**（wasm32 门控 project-mode 子树，2026-10-18 用户裁决 B；含三条未核实原样保留）；层序修正会暴露新诊断 |
 

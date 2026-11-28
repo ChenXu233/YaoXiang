@@ -7,7 +7,7 @@ module
     value v1: Int(64) @block0
     value v2: Generic { name: "String", args: [] } @block0
     value v3: Int(64) @block0
-    value v4: TypeRef("?") @block0
+    value v4: Never @block0
     value v5: Bool @block0
     value v6: Generic { name: "String", args: [] } @block0
     Load v0 <- string("a")

@@ -21,36 +21,36 @@ module
     value v8: Int(64) @block0
     value v9: Int(64) @block0
     value v10: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v11: TypeRef("?") @block0
-    value v12: TypeRef("?") @block0
+    value v11: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v12: Never @block0
     value v13: Bool @block0
     value v14: TypeRef("?") @block0
     value v15: Int(64) @block0
     value v16: Generic { name: "Vec", args: [Int(64)] } @block0
     value v17: Int(64) @block0
     value v18: Generic { name: "String", args: [] } @block0
-    value v19: TypeRef("?") @block0
+    value v19: Never @block0
     value v20: Bool @block0
     value v21: TypeRef("?") @block0
     value v22: Int(64) @block0
     value v23: Generic { name: "Vec", args: [Int(64)] } @block0
     value v24: Int(64) @block0
     value v25: Generic { name: "String", args: [] } @block0
-    value v26: TypeRef("?") @block0
+    value v26: Never @block0
     value v27: Bool @block0
     value v28: TypeRef("?") @block0
     value v29: Int(64) @block0
     value v30: Generic { name: "Vec", args: [Int(64)] } @block0
     value v31: Int(64) @block0
     value v32: Generic { name: "String", args: [] } @block0
-    value v33: TypeRef("?") @block0
+    value v33: Never @block0
     value v34: Bool @block0
     value v35: TypeRef("?") @block0
     value v36: Int(64) @block0
     value v37: Generic { name: "Vec", args: [Int(64)] } @block0
     value v38: Int(64) @block0
     value v39: Generic { name: "String", args: [] } @block0
-    value v40: TypeRef("?") @block0
+    value v40: Never @block0
     value v41: Bool @block0
     value v42: TypeRef("?") @block0
     value v43: Int(64) @block0
@@ -68,15 +68,15 @@ module
     value v55: Int(64) @block0
     value v56: Int(64) @block0
     value v57: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v58: TypeRef("?") @block0
-    value v59: TypeRef("?") @block0
+    value v58: Fn { params: [Int(64)], return_type: Bool } @block0
+    value v59: Never @block0
     value v60: Bool @block0
     value v61: TypeRef("?") @block0
     value v62: Int(64) @block0
     value v63: Generic { name: "Vec", args: [Int(64)] } @block0
     value v64: Int(64) @block0
     value v65: Generic { name: "String", args: [] } @block0
-    value v66: TypeRef("?") @block0
+    value v66: Never @block0
     value v67: Bool @block0
     value v68: TypeRef("?") @block0
     value v69: Int(64) @block0
@@ -94,9 +94,9 @@ module
     value v81: Int(64) @block0
     value v82: Int(64) @block0
     value v83: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v84: TypeRef("?") @block0
+    value v84: Fn { params: [Int(64), Int(64)], return_type: Int(64) } @block0
     value v85: Int(64) @block0
-    value v86: TypeRef("?") @block0
+    value v86: Never @block0
     value v87: Bool @block0
     value v88: Int(64) @block0
     value v89: Int(64) @block0
@@ -111,25 +111,25 @@ module
     value v98: Int(64) @block0
     value v99: Int(64) @block0
     value v100: Int(64) @block0
-    value v101: TypeRef("?") @block0
+    value v101: Generic { name: "Vec", args: [Int(64)] } @block0
     value v102: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v103: TypeRef("?") @block0
-    value v104: TypeRef("?") @block0
-    value v105: TypeRef("?") @block0
+    value v103: Fn { params: [Int(64)], return_type: Bool } @block0
+    value v104: Fn { params: [Int(64)], return_type: Int(64) } @block0
+    value v105: Never @block0
     value v106: Bool @block0
     value v107: TypeRef("?") @block0
     value v108: Int(64) @block0
     value v109: Generic { name: "Vec", args: [Int(64)] } @block0
     value v110: Int(64) @block0
     value v111: Generic { name: "String", args: [] } @block0
-    value v112: TypeRef("?") @block0
+    value v112: Never @block0
     value v113: Bool @block0
     value v114: TypeRef("?") @block0
     value v115: Int(64) @block0
     value v116: Generic { name: "Vec", args: [Int(64)] } @block0
     value v117: Int(64) @block0
     value v118: Generic { name: "String", args: [] } @block0
-    value v119: TypeRef("?") @block0
+    value v119: Never @block0
     value v120: Bool @block0
     value v121: TypeRef("?") @block0
     value v122: Int(64) @block0
@@ -303,27 +303,27 @@ module
     Drop %7
     Drop %5
     Ret v119
-  fn closure_0(Int(64)) -> Void
+  fn closure_0(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth2
     locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
-    value v1: TypeVar(TypeVar(44)) @block0
-    value v2: TypeVar(TypeVar(44)) @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
     value v3: Int(64) @block0
     Load v2 <- %0
     Load v3 <- int(2)
     Mul v1 <- v2, v3
     Ret v1
-  fn closure_1(Int(64)) -> Void
+  fn closure_1(Int(64)) -> Bool
     slot[0] x : Int(64) @depth2
     locals_total=4
     values_total=6
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
-    value v2: TypeVar(TypeVar(44)) @block0
+    value v2: TypeRef("?") @block0
     value v3: Int(64) @block0
-    value v4: TypeVar(TypeVar(44)) @block0
+    value v4: TypeRef("?") @block0
     value v5: Int(64) @block0
     Load v4 <- %0
     Load v5 <- int(2)
@@ -331,38 +331,38 @@ module
     Load v3 <- int(0)
     Eq v1 <- v2, v3
     Ret v1
-  fn closure_2(Int(64), Int(64)) -> Void
+  fn closure_2(Int(64), Int(64)) -> Int(64)
     slot[0] acc : Int(64) @depth2
     slot[1] x : Int(64) @depth2
     locals_total=5
     values_total=4
     value v0: TypeRef("?") @block0
-    value v1: TypeVar(TypeVar(56)) @block0
-    value v2: TypeVar(TypeVar(56)) @block0
-    value v3: TypeVar(TypeVar(44)) @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: TypeRef("?") @block0
     Load v2 <- %0
     Load v3 <- %1
     Add v1 <- v2, v3
     Ret v1
-  fn closure_3(Int(64)) -> Void
+  fn closure_3(Int(64)) -> Bool
     slot[0] x : Int(64) @depth2
     locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
     value v1: Bool @block0
-    value v2: TypeVar(TypeVar(44)) @block0
+    value v2: TypeRef("?") @block0
     value v3: Int(64) @block0
     Load v2 <- %0
     Load v3 <- int(2)
     Gt v1 <- v2, v3
     Ret v1
-  fn closure_4(Int(64)) -> Void
+  fn closure_4(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth2
     locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
-    value v1: TypeVar(TypeVar(44)) @block0
-    value v2: TypeVar(TypeVar(44)) @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
     value v3: Int(64) @block0
     Load v2 <- %0
     Load v3 <- int(10)

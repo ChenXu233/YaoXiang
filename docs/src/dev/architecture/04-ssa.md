@@ -151,7 +151,7 @@ let final_args: Vec<Operand> = arg_regs.clone();
 1. **错位不报错只错值。** 6 个分支各自决定 `arg_regs` 的最终顺序，任何一处顺序假设错误都不会 panic。
 2. **规范化快照对此免疫。** 07 已记录该局限：快照工具按"首次出现顺序"重命名临时值后，「第 3 个实参本该用第 5 个寄存器」在快照里完全相同。**这一类缺陷在 C4 阶段连快照这一层判据都不存在。**
 
-**补充核实：结构体构造路径的重排无重复槽守卫。** `7724` 的 `final_args` 按"位置实参先入位、命名实参按字段名覆写"填充，**覆写前没有 `slots[idx].is_some()` 之类的重复槽检查**（对比命名空间路径 `7381` 有）——命名实参静默顶掉位置实参时不 panic、不诊断；且实参**求值顺序**（源码序）与最终 `arg_regs` 顺序（字段声明序）在此分叉。批 d 的 `fill_missing` 断言化必须一并覆盖"重复槽"检查，否则结构体构造路径的静默顶替会原样存活。
+**补充核实：结构体构造路径的重排无重复槽守卫。** `7724` 的 `final_args` 按"位置实参先入位、命名实参按字段名覆写"填充，**覆写前没有 `slots[idx].is_some()` 之类的重复槽检查**（对比命名空间路径 `7381` 有）——命名实参静默顶掉位置实参时不 panic、不诊断；且实参**求值顺序**（源码序）与最终 `arg_regs` 顺序（字段声明序）在此分叉。**7d.2 的断言化只覆盖「缺位」三处，没有覆盖「重复槽」**——结构体构造的命名实参覆写位置实参仍静默（该分支只可达于「类型检查已报错、IR 仍生成」的状态；类型检查侧 `bind_record_ctor_args` 的共享判据规则③已以 E1111 拒绝）。该缺口登记在 [09](09-execution-wbs.md) 的「7d 遗留」段，不随 7d 结案。
 
 ### 缺陷类 3：span 键控的跨层契约静默失效（**已消除**，2026-10-13 / RFC-039 D20、WBS 4.5）
 
@@ -346,28 +346,32 @@ pub struct ValueInfo {
 
 `Cargo.toml:37-39` 的 dev-dependencies 仅 `criterion` / `proptest`；`[dependencies]` 中无 regalloc / petgraph / graphlib——引入任一 crate 都是新增依赖面。
 
-### `generate_call_expr_ir` 746 行的拆分策略
+### `generate_call_expr_ir` 的拆分（7d.1 已落地）
 
-**必须最后做**，且**必须先有 SSA 形态与判据**。理由：拆分本身是 C1（纯搬移，判据为快照 zero-diff），但只有在 `arg_regs` 的语义被 SSA 消除到"每个实参一个独立 `ValueId`"之后，拆分才不会把旧的顺序假设原样搬进新文件。
-
-**核心设计约束：`arg_regs` 所有权留在函数顶部，6 个分支只 `push` 不重排。**
+拆分前是单函数 920 行（审计时点记 746 行；迁入 `middle/lower/expr/call.rs` 后 920 行），承担六类调用形态。落地形态：
 
 ```
-generate_call_expr_ir (746 行)
-├── 参数求值：按源码顺序求值，push 到 arg_regs —— 6 个分支共用，唯一允许 append 的地方
-├── CallArgs（值对象）
-│   └── arg_regs: Vec<Operand>  —— 只在顶部创建，6 个分支只 push，绝不重新 collect/reorder
-├── 分支 1 → emit_namespace_call(args: CallArgs)         [7395 分支抽出]
-├── 分支 2 → emit_bound_call(args: CallArgs)              [7406+ 分支抽出]
-├── 分支 3 → emit_struct_ctor(args: CallArgs)             [7724 分支抽出]
-├── 分支 4 → emit_plain_call(args: CallArgs)              [7835-7848 分支抽出]
-├── 分支 5 → emit_curried_call(args: CallArgs)
-└── 分支 6 → emit_method_call(args: CallArgs)             [7420 / 7493 分支抽出]
+generate_call_expr_ir（call.rs:479-568，函数体 78 行，只做分派）
+├── 命中即返回，按序：变体构造 → 命名空间调用 → 跨文件全局槽位间接调用
+│                    → 方法调用重排 → 内置容器构造 → 普通/重载调用
+├── CallArgs（call.rs:31-271）——实参收集 / 命名重排 / 槽位绑定的唯一载体
+│    collect_regs / bind_named_slots / collect_regs_in_slot_order / arg_expr
+│    槽位判定仍唯一归 sema::inference::arg_binding::bind_args_to_params
+├── emit_variant_ctor              call.rs:575-621    （RFC-010 变体构造）
+├── emit_namespace_call            call.rs:631-684    （命名空间调用）
+├── emit_global_slot_indirect_call call.rs:695-717    （跨文件全局槽位 → CallDyn）
+├── emit_method_call_reordered     call.rs:728-853    （RFC-004 绑定重排）
+├── emit_builtin_container_ctor    container.rs:175-220（RFC-011 §Vec 容器构造）
+└── emit_plain_call                call.rs:864-1457   （无绑定方法 + 函数形态）
 ```
 
-`7835-7848` 的"补 0"逻辑（`7838-7846`）下沉为 `CallArgs::fill_missing(&mut self, instructions) -> Result<(), Diagnostic>`，**并把"正常路径不会到这里"的自述注释换成一条断言**：若任何槽位缺席且 typecheck 未报 E1010，直接返回诊断。**这一条把一个静默兜底变成硬错误，是本文对缺陷类 2 最直接的改善。**
+**对旧草图两处前提的更正**：① 原设计假设「SSA 已把 `arg_regs` 收敛为每实参一个 `ValueId`，6 个分支只 push 不重排」——该前提在当前树不成立；C1 要求保序，落地保留三条重排路径（`set_regs` / `collect_regs_in_slot_order` / `bind_named_slots`），并全部收进 `CallArgs`，不散在分支里。② 原命名 `emit_bound_call` / `emit_struct_ctor` / `emit_curried_call` / `emit_method_call` 与落地六名不符，以本表为准。
 
-**判据**：纯搬移部分（SSA 形态未变）用快照 zero-diff；`fill_missing` 的断言化属于 C4，用语料差分 + 第一层校验器。
+**收敛的内联副本**（拆分同时消掉，不是原样搬家）：位置实参求值 5→1、命名实参入槽 2→1、按槽位序重建 2→1、位置/命名下标换算 4→1。
+
+**7d.2 的「补 0」断言化**：原 `unwrap_or_else` 补 `Load 0` 的三处同形分支改为返回既有 `E3005`（`ErrorCodeDefinition::ir_internal_error`），载体是 `CallArgs::require_complete_slots`（不是草图的 `fill_missing`）；**唯一保留**空构造 `Pair(Int)()` 的字段零值——那是 SPEC §4.3 的合法零初始化，语料 `generic_constructor.yx` 断言 `z.first == 0`。
+
+**判据**：纯搬移部分 C1 快照 zero-diff + 语料 412 条逐字节相同；断言化部分 C4（新增 4 条直驱用例，旧实现红、新实现绿）。
 
 ### `synth.rs` 边界：把隐式回调变成显式的合成 AST 边界
 
@@ -429,23 +433,19 @@ self.release_plan_total = type_result.release_plan.drops.len();
 **机制三：`method_def_ordinals` 的定义序依赖（独立小项，**2026-11-25 已落地**）。**
 该字段原为 `HashMap<String, usize>`，key 为无模块限定的 `"{type_name}.{method_name}"`，按定义遍历序分配 `#N` 混编名——若 typecheck 的注册序与 lowering 的定义序不一致，同名方法会解析到不同目标。**落地形态**：typecheck 在登记重载候选的同一处**一次性产出** `method_def_ir_names: HashMap<PlanId, String>`（裸名或 `#N` 混编名），随 `TypeCheckResult` 交给 IR 生成。键取**方法声明语句的 `PlanId`**（AST 结构身份，D20 同款）——`DefId` 在 lowering 尾部的 `assign_defs` 才分配，typecheck 侧不存在。lowering 按声明身份只读取名，**未命中即 E3005 响亮失败**（不回退裸名——回退会把「定义名与调用名不同源」伪装成可运行程序）。可变计数器及其写入点已删除，定义名不再有第二个推导入口。
 
-### 三条硬编码丢弃的跟踪
+### 硬编码丢弃的跟踪
 
-**已核实事实。** `impl From<BytecodeFile> for BytecodeModule`（`bytecode.rs:943-2350`，1408 行）中有三处硬编码丢弃：
+`impl From<BytecodeFile> for BytecodeModule`（今 `src/middle/bytecode/mod.rs`）原有三处硬编码丢弃；7e 复核后为**两处真丢失 + 一处误报**：
 
-| 位置 | 字段 | 值 | 后果 |
+| 位置（旧行号） | 字段 | 原值 | 复核结论 |
 | --- | --- | --- | --- |
-| `bytecode.rs:2312` | `upvalue_count` | `0` // Not stored in BytecodeFile | 闭包 upvalue 数量在 `.42` 往返后归零 |
-| `bytecode.rs:2315` | `exception_handlers` | `Vec::new()` // Not implemented yet | **`.42` 产物丢失整个异常表** |
-| `bytecode.rs:2341` | `globals` | `Vec::new()` // Not stored in BytecodeFile yet | **`.42` 产物丢失全局变量信息**（注意 `2347` 的 `global_names` **有**被填充，两者不一致） |
+| `bytecode.rs:2312` | `upvalue_count` | `0` // Not stored in BytecodeFile | **真丢失**：闭包上值槽数经 `.42` 往返归零；已随 v5 落盘（7e.1） |
+| `bytecode.rs:2315` | `exception_handlers` | `Vec::new()` // Not implemented yet | **误报**：字段无生产者、无消费者，语言层无 throw/try/catch（RFC-030 把 `Throw` 记为字节码层预留，RFC-036 否决进程内 catch 边界）⇒ 没有「丢失的数据」，是死字段；不落盘，删除归 P10 S6 |
+| `bytecode.rs:2341` | `globals` | `Vec::new()` // Not stored in BytecodeFile yet | **真丢失**：全局表（名字 + 类型）经往返归零；已随 v5 落盘（7e.3），载体与函数签名同为 `MonoType`（7e.4） |
 
-**设计判断（2026-10-05 修订，决议 D52）：三处全部收进本文范围，作为 P7 批 e（7e），不再立"独立 issue"。** 原判断（后两条立独立 issue）的理由记录如下，以及为什么被推翻：
+**判据（决议 D52）：没有生产者的空表不是丢失的数据，是死路径**——与 D32 同一判据。有生产者而容器不落盘的才是数据丢失，因此 `2312` / `2341` 收进 P7 批 e（7e）；`2315` 不落盘，作为死字段归 P10 S6 的 opcode 死路径清理（`THROW` 单列待裁决）。升版一次覆盖两处真丢失（`VERSION` 4→5，D17）；`.42` 是构建产物，跨版本兼容不是目标。
 
-1. ~~它们是**格式层缺口**（`BytecodeFile` 没序列化这些字段），与 SSA 无关。~~ 成立，但不构成排除理由——P7 本来就动 `bytecode.rs`，且三处同修只需一次 `VERSION` 升版（4→5），拆成两次升版反而更贵。
-2. ~~修它们需要改 `.42` 落盘格式 → 升版 → 范围从"IR 形态"膨胀到"产物格式"。~~ 升版机制已存在（`MAGIC` + `VERSION` 头，读取侧按版本拒绝），且 `.42` 是构建产物，跨版本兼容不是目标——膨胀的是工作量，不是风险。
-3. ~~`2315` / `2341` 实际风险等级低，`.42` 直跑是次要路径。~~ **被推翻**：异常表丢失使 throw/try 在 `.42` 直跑时行为错误——throw/try 是语言核心语义；次要路径不等于可以静默错。本次重构的原则是**不留核心功能的待实现遗留**（`Vec::new() // Not implemented yet` 正是这类遗留）。
-
-**同时保留**：三处仍必须在 `Obligations` 账本里登记为"产出但未序列化"直至 7e 完成，避免它变成第四种"没人知道的事"。`2312` 随升版一并落地（D17），已分配未使用的 opcode 值（D32/D34）同批回收。
+**7e 同批的第三处格式失真**：`.42` 类型号表不可逆且撞号——`Int(64)` 与 `Float(32)` 同为 `9`、`Float(64)` 读回 `TypeRef("_")`。号表改为可逆无碰撞（7e.4），写侧对未知位宽与编译期 FFI 类型响亮拒绝。
 
 ## 详细设计
 
@@ -531,8 +531,8 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | 24 | `src/middle/lower/expr/{access,closure}.rs` + `query.rs` | 变量与命名空间查询 | `closure_captures.contains_key` 改查词法 upvalue，捕获物化统一走 `capture_operand`（**7c.1 已落地**） |
 | 25 | `src/middle/core/ir_gen.rs`（审计时点路径） | `341` + `1942` | ~~加 span 键控的消费计数~~ → 由 4.5 的 `PlanId` 消费台账覆盖（读与记账同一次、结算 W1090）；7c.2 核验零触发，无代码改动 |
 | 26 | `src/middle/lower/{mod,stmt}.rs`、语义侧 `sema/{checker,types}.rs` | `generate_method_ir` 的定义名 + `TypeCheckResult` 权威映射 | `method_def_ordinals` 只读化（**7c.3 已落地**：typecheck 按声明 `PlanId` 产出混编名，lowering 只读） |
-| 27 | `src/middle/core/ir_gen.rs` | `7269-8014` | **最后做**：拆为顶部 `CallArgs` + 6 个 `emit_*` |
-| 28 | `src/middle/core/ir_gen.rs` | `7838-7846` | "补 0" 兜底改为返回诊断 |
+| 27 | `src/middle/lower/expr/call.rs` + `container.rs` | 审计时点 `ir_gen.rs:7269-8014` | 拆为 `CallArgs` + 6 个 `emit_*`（**7d.1 已落地**：`eb13cac`；主函数 `call.rs:479-568` 只做分派） |
+| 28 | `src/middle/lower/expr/call.rs` | 审计时点 `ir_gen.rs:7838-7846` | "补 0" 兜底改返回既有 `E3005`（**7d.2 已落地**：`e246d6d`；合法空构造零值保留） |
 | 29 | `src/middle/lower/synth.rs` | **新建** | 合成 AST 边界 |
 | 30 | `src/middle/ir/verify.rs` | **新建**（[07](07-equivalence-oracle.md) 第一层） | `verify_loose` / `verify_ssa` |
 | 31 | `src/middle/passes/codegen/translator.rs` | dispatch match | `Instruction::Phi` 的翻译（**7b.3 已落地**：方案 A 展开在**块入口**——`plan_phi_edges` / `emit_phi_prologue` 按前驱发 `Move` 组、组间既有 `JMP` 跳过、入边跳转按 `(前驱, 汇合块首指令)` 重定向到组起点；`translate_instruction` 的 `Phi` 臂收敛为不可达 E8001 防御臂——单条返回位放不下按前驱分布的多条 Move，到达即响亮失败） |
@@ -567,7 +567,7 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | **批 a** | 切断多次定义：删 3 处语句级回收 → 6 处 save/restore 换 RAII guard → 口径统一 | 8-10（先）→ 11-16 → 17-18 | 删除回收：**C4**（行为等价 + 第一层支配性不变量）。RAII 与口径统一属纯搬移：**C1** 快照 zero-diff | 逐项单 commit，`git revert` 即回滚 |
 | **批 b** | SSA 形态切换：`ir.rs` 结构变更 + 临时值改产 `Operand::Value`（机械替换）→ `translator.rs` 的 `Phi` 臂（方案 A）→ 线性扫描分配器。批内按 WBS 三级任务串行：7b.1a（`Operand` 变体收敛 + `Instruction::Phi` 引入，**已落地**）→ 7b.1b（`FunctionIR` / `BasicBlock` / 类型标注字段，**已落地**）→ 7b.2（`next_temp_reg` 改产 `Operand::Value`，**已落地**）→ 7b.3（`translator.rs` 的 `Phi` 臂 + `BasicBlock.successors` 填充，**已落地**）→ 7b.4（线性扫描分配器 + 删三处语句级回收，与 7a.1 同批，**已落地**） | 1-5、7 → 31-32 → 37 | **C4**：行为等价 + `verify_ssa` 全绿 + `.42` 往返测试 | `ir.rs` 变更**独占一个 commit**（类型变更波及全仓编译，不可增量回滚） |
 | **批 c** | 隐式契约显式化：`synth.rs` 边界 → 既有消费台账核验（无代码改动）→ `method_def_ordinals` 只读化（哨兵脚本经用户 2026-11-24 裁决丁取消） | 20-24、29 → 25 → 26 | **C4**：行为等价；消费计数在新诊断上零触发（否则说明真存在失配） | 独立 commit |
-| **批 d** | `generate_call_expr_ir` 拆分 + "补 0" 兜底断言化 | 27-28 | 纯搬移部分：**C1** 快照 zero-diff。断言化部分：**C4** 语料差分 + 第一层校验器 | 独立 commit |
+| **批 d** | `generate_call_expr_ir` 拆分 + "补 0" 兜底断言化（**已落地**：7d.1 `eb13cac`、7d.2 `e246d6d`） | 27-28 | 纯搬移部分：**C1** 快照 zero-diff。断言化部分：**C4** 语料差分 + 第一层校验器 | 独立 commit |
 
 **批内顺序不可交换的三处依赖：**
 
@@ -720,7 +720,7 @@ self.release_plan_total = type_result.release_plan.drops.len();
 - `src/middle/core/bytecode.rs:127-554` — `BytecodeInstr` 66 变体
 - `src/middle/core/bytecode.rs:558` / `649` — `opcode()` / `size()`
 - `src/middle/core/bytecode.rs:943-2350` — `impl From<BytecodeFile> for BytecodeModule`（1408 行）
-- `src/middle/core/bytecode.rs:2312` / `2315` / `2341` — 三处硬编码丢弃（对照 `2344` / `2347`）
+- `src/middle/core/bytecode.rs:2312` / `2315` / `2341` — 三处硬编码丢弃（对照 `2344` / `2347`）；旧审计记录，复核结论见本文 §「硬编码丢弃的跟踪」（两处真丢失 + 一处误报）
 - `src/middle/core/bytecode.rs:2353` — `impl From<MonoType> for IrType`（[03](03-type-unification.md) 待拆的桥接）
 - `src/middle/passes/codegen/translator.rs:533` / `631` / `632` / `655-657` / `658-660` — 9 条 NOP 降级
 - `src/middle/passes/codegen/operand.rs:36-45` / `72-77` — `OperandResolver`，`u8` 上限 255

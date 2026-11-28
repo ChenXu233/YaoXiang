@@ -429,7 +429,32 @@ impl AstToIrGenerator {
                 }
                 self.lookup_var_type(name).map(|poly| poly.body.clone())
             }
-            ast::Expr::Call { func, .. } => {
+            // 字面量的类型是可信来源（与值表落库走同一条映射）。
+            ast::Expr::Lit(literal, _) => {
+                crate::middle::lower::expr::lit::literal_const_value(literal).mono_type()
+            }
+            // 容器字面量：交给同一套结构推导（元素/分量类型逐位递归）。
+            ast::Expr::List(..) | ast::Expr::Tuple(..) | ast::Expr::Dict(..) => {
+                self.get_expr_mono_type(expr)
+            }
+            // 闭包结果类型：同一张表、同一身份形态（typecheck 在 lambda 推断处落表）。
+            // 命中即 `MakeClosure` 的 dst 类型 = 该 `Fn` 类型；未命中落显式未知。
+            ast::Expr::Lambda { plan_id, .. } => self
+                .type_result
+                .as_ref()
+                .and_then(|tr| tr.expr_result_types.get(plan_id))
+                .cloned(),
+            ast::Expr::Call { func, plan_id, .. } => {
+                // 调用点结果类型：sema 在 `infer_call_expr` 返回处落的表（同一节点的
+                // 同一 `PlanId`，RFC-039 D20）。限定名 / native / 方法 / 泛型调用的
+                // **最终**类型只有它有——按被调名反查原生签名取不到（#593）。
+                if let Some(ty) = self
+                    .type_result
+                    .as_ref()
+                    .and_then(|tr| tr.expr_result_types.get(plan_id))
+                {
+                    return Some(ty.clone());
+                }
                 let ast::Expr::Var(name, _) = func.as_ref() else {
                     return None;
                 };
@@ -1090,7 +1115,6 @@ impl AstToIrGenerator {
                         return Some(mono_type.clone());
                     }
                 }
-
                 self.lookup_var_type(name)
                     .map(|poly_type| poly_type.body.clone())
             }
@@ -1108,7 +1132,23 @@ impl AstToIrGenerator {
                     _ => None,
                 }
             }
-            ast::Expr::List(_, _) => Some(MonoType::make_list(MonoType::Void)),
+            ast::Expr::List(items, _) => {
+                // 元素类型：逐元素取**已定**类型（`expr_value_type`），全部一致才采信。
+                // 拿不到一致类型时保留历史的 `Void` 占位（结构性查询需要容器形态）。
+                let mut element: Option<MonoType> = None;
+                let mut homogeneous = true;
+                for item in items {
+                    match (self.expr_value_type(item), &element) {
+                        (Some(ty), None) => element = Some(ty),
+                        (Some(ty), Some(prev)) if *prev == ty => {}
+                        _ => homogeneous = false,
+                    }
+                }
+                Some(MonoType::make_list(match (homogeneous, element) {
+                    (true, Some(ty)) => ty,
+                    _ => MonoType::Void,
+                }))
+            }
             // `Vec(Int)(...)` / `Array(Int, 3)(...)` 的静态类型。
             //
             // 链式取字段（`Vec(Int)().length`）走 `get_expr_mono_type` 判类型，

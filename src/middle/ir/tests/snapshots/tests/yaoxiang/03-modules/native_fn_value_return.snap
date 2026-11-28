@@ -26,7 +26,7 @@ module
     value v4: Generic { name: "String", args: [] } @block0
     value v5: Generic { name: "String", args: [] } @block0
     value v6: Fn { params: [Ref { mutable: false, inner: Generic { name: "String", args: [] } }, Ref { mutable: false, inner: Generic { name: "String", args: [] } }], return_type: Generic { name: "String", args: [] } } @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
     value v9: Generic { name: "String", args: [] } @block0
     value v10: Generic { name: "String", args: [] } @block0

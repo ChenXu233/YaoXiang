@@ -382,6 +382,7 @@ impl<'a> ParserState<'a> {
             params,
             body: Box::new(body),
             span,
+            plan_id: self.alloc_plan_id(),
         })
     }
 

@@ -15,12 +15,12 @@ module
     value v6: Int(64) @block2
     value v7: Int(64) @block2
     value v8: TypeRef("?") @block0
-    value v9: TypeRef("?") @block5
+    value v9: Never @block5
     value v10: Bool @block5
     value v11: Bool @block5
     value v12: Bool @block5
     value v13: Generic { name: "String", args: [] } @block5
-    value v14: TypeRef("?") @block5
+    value v14: Never @block5
     value v15: Bool @block5
     value v16: Int(64) @block5
     value v17: Int(64) @block5

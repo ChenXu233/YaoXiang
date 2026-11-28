@@ -188,13 +188,6 @@ pub enum BytecodeInstr {
         target: Label,
     },
 
-    /// Switch/case dispatch
-    Switch {
-        value: Reg,
-        /// (default_target, [(value, target), ...])
-        targets: Vec<(Option<Label>, Label)>,
-    },
-
     // =====================
     // Register Operations
     // =====================
@@ -578,7 +571,6 @@ impl BytecodeInstr {
             BytecodeInstr::Jmp { .. } => opcode::JMP,
             BytecodeInstr::JmpIf { .. } => opcode::JMP_IF,
             BytecodeInstr::JmpIfNot { .. } => opcode::JMP_IF_NOT,
-            BytecodeInstr::Switch { .. } => opcode::SWITCH,
             BytecodeInstr::Mov { .. } => opcode::MOV,
             BytecodeInstr::LoadConst { .. } => opcode::LOAD_CONST,
             BytecodeInstr::LoadLocal { .. } => opcode::LOAD_LOCAL,
@@ -717,7 +709,6 @@ impl BytecodeInstr {
             BytecodeInstr::Jmp { .. } => 4,
             BytecodeInstr::JmpIf { .. } => 4,
             BytecodeInstr::JmpIfNot { .. } => 4,
-            BytecodeInstr::Switch { targets, .. } => 2 + targets.len() * 4,
             BytecodeInstr::Mov { .. } => 4,
             BytecodeInstr::LoadConst { .. } => 4,
             BytecodeInstr::LoadLocal { .. } => 3,
@@ -840,7 +831,12 @@ pub struct BytecodeFunction {
     pub instructions: Vec<BytecodeInstr>,
     /// Label to instruction index mapping
     pub labels: HashMap<Label, usize>,
-    /// Exception handlers (try-catch blocks)
+    /// 异常处理器表。`.42` 不落该字段。
+    ///
+    /// 复核结论（7e / D52）：本字段无生产者、无消费者——语言层没有 throw/try/catch
+    /// （RFC-030 把 `Throw` 记为字节码层预留，RFC-036 否决进程内 catch 边界），
+    /// codegen 从不写入，解释器从不读取；载入侧因此留空表。
+    /// 字段与 `TRY_BEGIN` / `TRY_END` 的删除归 P10 S6（`THROW` 单列待裁决）。
     pub exception_handlers: Vec<ExceptionHandler>,
     /// Debug info: mapping from IP to Span
     pub debug_map: HashMap<usize, crate::util::span::DebugSpan>,
@@ -890,12 +886,26 @@ pub struct BytecodeModule {
 }
 
 /// Global variable information
+///
+/// # 字段与 .42（v5）的对应关系
+///
+/// - `name` / `ty`：随 `.42` 全局表落盘（表序即槽位号）。`ty` 与
+///   `BytecodeFunction.params` / `return_type` **同载体**（都是 [`MonoType`]，6.2 载体统一）；
+///   `.42` 写侧把它编成类型号（`file::mono_type_id`），读侧解回 `MonoType`
+///   （`file::type_id_to_monotype`）——消费端因此不需要再认识「类型号」这个概念，
+///   也不会把它误当 `type_table` 下标。
+/// - `initializer`：**不落盘**。顶层绑定的初始化由模块初始化序列在运行时求值
+///   （`lower/globals.rs` 的 `generate_global_var_ir`：任意表达式求值后
+///   `Store(Global(idx))`），编译期常量折叠只是优化；把它再存一份就是同一事实的第二来源。
+/// - `is_mutable`：**不落盘**。可变性的事实源是 AST 的 `Assign.is_mut`（`mut` 关键字），
+///   它在 `lower` 阶段没有进 `GlobalSlot`（IR 无该字段），故 codegen 拿不到——载入产物
+///   恒为 `false`，含义是「未跟踪」而不是「不可变」。要让 .42 携带它，先让 IR 携带。
 #[derive(Debug, Clone)]
 pub struct GlobalInfo {
     /// Variable name
     pub name: String,
-    /// Variable type
-    pub type_id: u16,
+    /// Variable type（与函数签名同载体；.42 写侧编类型号，读侧解回）
+    pub ty: crate::frontend::core::sema::MonoType,
     /// Initial value (if compile-time constant)
     pub initializer: Option<ConstValue>,
     /// Is mutable
@@ -2183,23 +2193,6 @@ impl From<crate::middle::bytecode::file::BytecodeFile> for BytecodeModule {
                             decoded_instructions.push(BytecodeInstr::Nop);
                         }
                     }
-                    opcode::TAIL_CALL => {
-                        // TailCall: func_id(4) + base_arg_reg(1) + argc(1)
-                        // 注：IR `TailCall` 目前无生成点（死路径），此处补齐
-                        // 格式以免未来接通时静默失效。
-                        let func_id = op_u32(&instr.operands, 0).unwrap_or(0);
-                        let base_arg_reg = instr.operands.get(4).copied().unwrap_or(0);
-                        let argc = instr.operands.get(5).copied().unwrap_or(0);
-                        let mut args = Vec::with_capacity(argc as usize);
-                        for k in 0..argc as usize {
-                            args.push(Reg(base_arg_reg as u16 + k as u16));
-                        }
-                        decoded_instructions.push(BytecodeInstr::CallStatic {
-                            dst: None,
-                            func: func_id,
-                            args,
-                        });
-                    }
                     // Nop 是合法的填充指令（编译器用于对齐/占位），显式识别。
                     // 此前无分支 → 落到静默兜底「未知 opcode 用 Nop」而侥幸正确；
                     // 该兜底改为 panic 后必须显式处理，否则合法字节码也会失败。
@@ -2346,10 +2339,12 @@ impl From<crate::middle::bytecode::file::BytecodeFile> for BytecodeModule {
                 return_type: func.return_type,
                 local_count: func.local_count,
                 local_names,
-                upvalue_count: 0, // Not stored in BytecodeFile
+                // v5 起随函数记录落盘（D17）；此前载入侧硬编 0 是数据丢失缺陷
+                upvalue_count: func.upvalue_count,
                 instructions: decoded_instructions,
-                labels,                         // Populated from opcode::LABEL
-                exception_handlers: Vec::new(), // Not implemented yet
+                labels, // Populated from opcode::LABEL
+                // .42 不落异常处理器：字段无生产者、无消费者（D52 复核），删除归 P10 S6
+                exception_handlers: Vec::new(),
                 debug_map,
             };
             functions.push(byte_func);
@@ -2375,7 +2370,8 @@ impl From<crate::middle::bytecode::file::BytecodeFile> for BytecodeModule {
             functions,
             type_table: file.type_table,
             vtables: file.vtables,
-            globals: Vec::new(), // Not stored in BytecodeFile yet
+            // v5：全局表随 .42 落盘（名字 + 类型号）；此前恒为空（RFC-039 D52 的 2341 项）
+            globals: file.globals,
             entry_point,
             init_function,
             // #327：贯通 DebugSection.sources——.42 直跑也能渲染栈帧源码上下文

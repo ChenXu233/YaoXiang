@@ -3,7 +3,7 @@ module
     slot[0] s : Int(64) @depth1
     locals_total=3
     values_total=2
-    value v0: TypeRef("?") @block0
+    value v0: Int(64) @block0
     value v1: Generic { name: "String", args: [] } @block0
     Load %0 <- arg%0
     Load v1 <- %0
@@ -18,28 +18,28 @@ module
     slot[4] d : Int(64) @depth1
     locals_total=8
     values_total=31
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
     value v2: Generic { name: "String", args: [] } @block0
     value v3: Generic { name: "String", args: [] } @block0
     value v4: Generic { name: "String", args: [] } @block0
-    value v5: TypeRef("?") @block0
+    value v5: Never @block0
     value v6: Bool @block0
     value v7: Generic { name: "String", args: [] } @block0
     value v8: Generic { name: "String", args: [] } @block0
     value v9: Generic { name: "String", args: [] } @block0
     value v10: Generic { name: "String", args: [] } @block0
-    value v11: TypeRef("?") @block0
+    value v11: Never @block0
     value v12: Bool @block0
     value v13: Int(64) @block0
     value v14: Int(64) @block0
     value v15: Generic { name: "String", args: [] } @block0
-    value v16: TypeRef("?") @block0
+    value v16: Never @block0
     value v17: Bool @block0
     value v18: Generic { name: "String", args: [] } @block0
     value v19: Generic { name: "String", args: [] } @block0
     value v20: Generic { name: "String", args: [] } @block0
-    value v21: TypeRef("?") @block3
+    value v21: Never @block3
     value v22: Bool @block1
     value v23: Bool @block0
     value v24: Generic { name: "String", args: [] } @block0

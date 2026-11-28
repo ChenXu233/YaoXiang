@@ -43,7 +43,7 @@ module
     value v12: Bool @block2
     value v13: TypeRef("?") @block3
     value v14: Int(64) @block3
-    value v15: TypeRef("?") @block4
+    value v15: Void @block4
     value v16: Int(64) @block4
     value v17: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block4
     value v18: TypeRef("?") @block4
@@ -56,7 +56,7 @@ module
     value v25: Bool @block6
     value v26: TypeRef("?") @block7
     value v27: Generic { name: "String", args: [] } @block7
-    value v28: TypeRef("?") @block8
+    value v28: Void @block8
     value v29: Generic { name: "String", args: [] } @block8
     value v30: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block8
     value v31: TypeRef("?") @block8
@@ -65,7 +65,7 @@ module
     value v34: TypeRef("?") @block9
     value v35: Generic { name: "String", args: [] } @block9
     value v36: Generic { name: "String", args: [] } @block10
-    value v37: TypeRef("?") @block11
+    value v37: Void @block11
     value v38: Generic { name: "String", args: [] } @block11
     Load v0 <- int(21)
     CreateVariant %0 <- Result::0 v0

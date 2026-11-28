@@ -21,7 +21,7 @@ module
     value v9: Bool @block2
     value v10: TypeRef("?") @block3
     value v11: Float(64) @block3
-    value v12: TypeRef("?") @block4
+    value v12: Never @block4
     value v13: Bool @block4
     value v14: Float(64) @block4
     value v15: Float(64) @block4
@@ -39,7 +39,7 @@ module
     value v27: TypeRef("?") @block7
     value v28: Int(64) @block7
     value v29: Int(64) @block7
-    value v30: TypeRef("?") @block8
+    value v30: Never @block8
     value v31: Bool @block8
     value v32: Int(64) @block8
     value v33: Int(64) @block8
@@ -56,7 +56,7 @@ module
     value v44: Bool @block10
     value v45: TypeRef("?") @block11
     value v46: Generic { name: "String", args: [] } @block11
-    value v47: TypeRef("?") @block12
+    value v47: Never @block12
     value v48: Bool @block12
     value v49: Generic { name: "String", args: [] } @block12
     value v50: Generic { name: "String", args: [] } @block12

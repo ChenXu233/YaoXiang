@@ -2,19 +2,19 @@ module
   fn main() -> Void
     locals_total=3
     values_total=31
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
     value v6: Generic { name: "String", args: [] } @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
     value v9: Generic { name: "String", args: [] } @block0
     value v10: Generic { name: "String", args: [] } @block0
     value v11: Generic { name: "String", args: [] } @block0
-    value v12: TypeRef("?") @block3
+    value v12: Never @block3
     value v13: Bool @block1
     value v14: Bool @block0
     value v15: Int(64) @block0
@@ -22,11 +22,11 @@ module
     value v17: Int(64) @block1
     value v18: Int(64) @block1
     value v19: Generic { name: "String", args: [] } @block3
-    value v20: TypeRef("?") @block3
+    value v20: Never @block3
     value v21: Bool @block3
     value v22: Bool @block3
     value v23: Generic { name: "String", args: [] } @block3
-    value v24: TypeRef("?") @block3
+    value v24: Never @block3
     value v25: Bool @block3
     value v26: Int(64) @block3
     value v27: Int(64) @block3

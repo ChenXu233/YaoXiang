@@ -15,7 +15,7 @@ module
     value v7: Int(64) @block0
     value v8: Int(64) @block0
     value v9: Int(64) @block0
-    value v10: TypeRef("?") @block0
+    value v10: Never @block0
     value v11: Bool @block0
     value v12: TypeRef("?") @block0
     value v13: Int(64) @block0
@@ -34,7 +34,7 @@ module
     value v26: Int(64) @block0
     value v27: Int(64) @block0
     value v28: Int(64) @block0
-    value v29: TypeRef("?") @block0
+    value v29: Never @block0
     value v30: Bool @block0
     value v31: TypeRef("?") @block0
     value v32: Int(64) @block0
@@ -51,7 +51,7 @@ module
     value v43: Int(64) @block0
     value v44: Int(64) @block0
     value v45: Int(64) @block0
-    value v46: TypeRef("?") @block0
+    value v46: Never @block0
     value v47: Bool @block0
     value v48: TypeRef("?") @block0
     value v49: Int(64) @block0

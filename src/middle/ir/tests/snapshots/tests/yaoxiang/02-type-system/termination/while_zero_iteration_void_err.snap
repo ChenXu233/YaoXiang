@@ -9,7 +9,7 @@ module
     value v2: Int(64) @block1
     value v3: Int(64) @block2
     value v4: Int(64) @block2
-    value v5: TypeRef("?") @block3
+    value v5: Never @block3
     value v6: Bool @block3
     value v7: Int(64) @block3
     value v8: Int(64) @block3

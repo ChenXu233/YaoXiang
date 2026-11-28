@@ -10,7 +10,7 @@ module
     locals_total=12
     values_total=44
     value v0: Int(64) @block0
-    value v1: TypeRef("?") @block0
+    value v1: Never @block0
     value v2: Bool @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
@@ -19,15 +19,15 @@ module
     value v7: Int(64) @block0
     value v8: Int(64) @block0
     value v9: Int(64) @block0
-    value v10: TypeRef("?") @block0
+    value v10: Generic { name: "Iterator", args: [TypeRef("Any")] } @block0
     value v11: TypeRef("?") @block0
     value v12: Int(64) @block0
     value v13: Bool @block0
-    value v14: TypeRef("?") @block3
-    value v15: TypeRef("?") @block4
+    value v14: Bool @block3
+    value v15: TypeRef("Any") @block4
     value v16: Int(64) @block4
     value v17: Int(64) @block4
-    value v18: TypeRef("?") @block5
+    value v18: Never @block5
     value v19: Bool @block5
     value v20: Int(64) @block5
     value v21: Int(64) @block5
@@ -41,18 +41,18 @@ module
     value v29: Int(64) @block5
     value v30: Int(64) @block5
     value v31: Generic { name: "Vec", args: [Int(64)] } @block5
-    value v32: TypeRef("?") @block5
-    value v33: TypeRef("?") @block6
-    value v34: TypeRef("?") @block7
+    value v32: Generic { name: "Iter", args: [Int(64)] } @block5
+    value v33: Bool @block6
+    value v34: Int(64) @block7
     value v35: Int(64) @block7
     value v36: Int(64) @block7
-    value v37: TypeRef("?") @block8
+    value v37: Never @block8
     value v38: Bool @block8
     value v39: Int(64) @block8
     value v40: Int(64) @block8
     value v41: Generic { name: "String", args: [] } @block8
-    value v42: TypeRef("?") @block1
-    value v43: TypeRef("?") @block3
+    value v42: Generic { name: "Iterator", args: [TypeRef("Any")] } @block1
+    value v43: Generic { name: "Iterator", args: [TypeRef("Any")] } @block3
     Load %0 <- int(42)
     Spawn %1 <- [] plan(groups=[], deps=[], resources=[])
     Load v0 <- %0

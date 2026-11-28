@@ -17,7 +17,7 @@ module
     value v0: Float(64) @block0
     value v1: Float(64) @block0
     value v2: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
-    value v3: TypeRef("?") @block0
+    value v3: Never @block0
     value v4: Bool @block0
     value v5: Float(64) @block0
     value v6: Float(64) @block0

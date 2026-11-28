@@ -14,7 +14,7 @@ module
     value v3: Int(64) @block1
     value v4: Int(64) @block2
     value v5: Int(64) @block2
-    value v6: TypeRef("?") @block2
+    value v6: Generic { name: "Vec", args: [Int(64)] } @block2
     value v7: Int(64) @block2
     value v8: Int(64) @block2
     value v9: Int(64) @block2
@@ -23,9 +23,9 @@ module
     value v12: Int(64) @block2
     value v13: Int(64) @block2
     value v14: Int(64) @block2
-    value v15: TypeRef("?") @block2
-    value v16: TypeRef("?") @block3
-    value v17: TypeRef("?") @block4
+    value v15: Generic { name: "Iter", args: [Int(64)] } @block2
+    value v16: Bool @block3
+    value v17: Int(64) @block4
     value v18: Bool @block4
     value v19: Int(64) @block4
     value v20: Int(64) @block4
@@ -36,7 +36,7 @@ module
     value v25: TypeRef("?") @block0
     value v26: Int(64) @block8
     value v27: Int(64) @block8
-    value v28: TypeRef("?") @block10
+    value v28: Never @block10
     value v29: Bool @block10
     value v30: Int(64) @block10
     value v31: Int(64) @block10
@@ -58,7 +58,7 @@ module
     value v47: Int(64) @block13
     value v48: Int(64) @block13
     value v49: Int(64) @block13
-    value v50: TypeRef("?") @block15
+    value v50: Never @block15
     value v51: Bool @block15
     value v52: Int(64) @block15
     value v53: Int(64) @block15

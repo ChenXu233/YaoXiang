@@ -4,6 +4,7 @@
 
 use crate::ast;
 use crate::ast::Expr;
+use crate::frontend::core::sema::MonoType;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::middle::lower::AstToIrGenerator;
 use crate::tlog;
@@ -85,6 +86,27 @@ impl AstToIrGenerator {
         // 调用同一执行模型。
         self.generate_expr_ir(expr, result_reg.clone(), instructions, constants)?;
         let span = *span;
+
+        // 接收者类型（Try impl 的 Self）：优先表达式静态类型，退回已生成的操作数
+        // 类型。`?` 的四方法结果类型从这里解出（协议签名见 src/std/result.yx /
+        // src/std/option.yx：success -> T、residual -> E（Option 为 Void）、
+        // from_error -> Self；is_failure -> Bool 与类型无关）。解不出就保持显式未知。
+        let receiver_ty = self
+            .get_expr_mono_type(expr)
+            .or_else(|| self.operand_known_type(&result_reg));
+        let (payload_ty, residual_ty) = {
+            use crate::frontend::core::types::MonoType;
+            let mut resolved = receiver_ty.clone();
+            while let Some(MonoType::Ref { inner, .. }) = resolved {
+                resolved = Some(*inner);
+            }
+            match resolved {
+                Some(MonoType::Generic { args, .. }) if !args.is_empty() => {
+                    (Some(args[0].clone()), args.get(1).cloned())
+                }
+                _ => (None, None),
+            }
+        };
 
         // 接收者类型名 → 四个方法的目标名。
         // 优先按 span 查 typecheck 记录的实现类型名（接收者是任意表达式时
@@ -183,9 +205,17 @@ impl AstToIrGenerator {
             span: self.cur_span,
         };
         let e_reg = self.next_temp_reg();
-        instructions.push(call_method(&residual_name, e_reg.clone(), result_reg));
+        instructions.push(call_method(
+            &residual_name,
+            e_reg.clone(),
+            result_reg.clone(),
+        ));
         let err_reg = self.next_temp_reg();
-        instructions.push(call_method(&from_error_name, err_reg.clone(), e_reg));
+        instructions.push(call_method(
+            &from_error_name,
+            err_reg.clone(),
+            e_reg.clone(),
+        ));
         instructions.push(Instruction::Ret {
             value: Some(err_reg.clone()),
             span: self.cur_span,
@@ -195,6 +225,19 @@ impl AstToIrGenerator {
             target: end_target,
             span: self.cur_span,
         };
+        // 四方法的结果类型：is_failure 恒 Bool；success/`?` 值 = 成功载荷；
+        // residual = 失败载荷；from_error = 接收者类型（Self）。
+        self.note_value_type(&f_reg, MonoType::Bool);
+        if let Some(ty) = payload_ty {
+            self.note_value_type(&s_reg, ty.clone());
+            self.note_value_type(&result_reg, ty);
+        }
+        if let Some(ty) = residual_ty {
+            self.note_value_type(&e_reg, ty);
+        }
+        if let Some(ty) = receiver_ty {
+            self.note_value_type(&err_reg, ty);
+        }
         Ok(())
     }
 

@@ -234,6 +234,23 @@ impl CodegenContext {
             )
         });
 
+        // 4.6 模块级全局表（v5）：名字 + 类型（MonoType，与函数签名同载体），表序即槽位号。
+        // 事实源是 IR 的 `ModuleIR.globals`（`GlobalSlot { name, ty, index }`）。
+        // 类型号只在 .42 写侧由 `file::mono_type_id` 产生，装配期不引入第二套编号。
+        let globals: Vec<crate::middle::bytecode::GlobalInfo> = self
+            .module
+            .globals
+            .iter()
+            .map(|slot| crate::middle::bytecode::GlobalInfo {
+                name: slot.name.clone(),
+                ty: slot.ty.clone(),
+                // 不落盘的两项：初始化在模块初始化序列里运行时求值；
+                // 可变性未进 IR（见 GlobalInfo 文档）。
+                initializer: None,
+                is_mutable: false,
+            })
+            .collect();
+
         debug!("{}", t_simple(MSG::CodegenComplete, lang));
         Ok(BytecodeFile {
             header,
@@ -241,6 +258,7 @@ impl CodegenContext {
             const_pool,
             code_section: output.code_section,
             vtables,
+            globals,
             debug_section,
         })
     }
@@ -259,7 +277,8 @@ impl CodegenContext {
             version: BYTECODE_VERSION,
             flags: self.compute_flags(),
             entry_point,
-            section_count: 4,
+            // 未填写：由 `BytecodeFile::write_to` 按实际写出的段数计算
+            section_count: 0,
             file_size: 0,
             checksum: 0,
         }

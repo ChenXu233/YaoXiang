@@ -2,6 +2,7 @@
 //!
 //! 方法体逐字搬自原 `middle/ir/ir_gen.rs`（WBS 7.0.3），语义未改。
 
+use super::call::CallArgs;
 use crate::ast;
 use crate::ast::Expr;
 use crate::frontend::core::sema::MonoType;
@@ -25,11 +26,19 @@ impl AstToIrGenerator {
             self.generate_expr_ir(item_expr, item_reg.clone(), instructions, constants)?;
             item_regs.push(item_reg.clone());
         }
+        // 元组类型：逐位取元素的已定类型；任一位拿不到就保持显式未知。
+        let item_tys: Option<Vec<MonoType>> = item_regs
+            .iter()
+            .map(|reg| self.operand_known_type(reg))
+            .collect();
         instructions.push(Instruction::NewTuple {
             dst: result_reg.clone(),
             items: item_regs,
             span: self.cur_span,
         });
+        if let Some(tys) = item_tys {
+            self.note_value_type(&result_reg, MonoType::make_tuple(tys));
+        }
         Ok(())
     }
 
@@ -135,9 +144,19 @@ impl AstToIrGenerator {
             span: self.cur_span,
         });
 
+        // 元素类型：全部元素一致时列表类型 = Vec(元素类型)；不一致或拿不到则不猜
+        // （显式未知）。这是「列表字面量的类型」唯一来源——`arr = [1,2,3]` 之后
+        // `for x in arr` 的元素类型靠它落进具名槽（note_value_type）。
+        let mut element_ty: Option<MonoType> = None;
+        let mut homogeneous = true;
         for (idx, element) in elements.iter().enumerate() {
             let element_reg = self.next_temp_reg();
             self.generate_expr_ir(element, element_reg.clone(), instructions, constants)?;
+            match (self.operand_known_type(&element_reg), &element_ty) {
+                (Some(ty), None) => element_ty = Some(ty),
+                (Some(ty), Some(prev)) if *prev == ty => {}
+                _ => homogeneous = false,
+            }
 
             let index_reg = self.next_temp_reg();
             instructions.push(Instruction::Load {
@@ -153,23 +172,32 @@ impl AstToIrGenerator {
                 span: *span,
             });
         }
+        if homogeneous {
+            if let Some(ty) = element_ty {
+                self.note_value_type(&result_reg, MonoType::make_list(ty));
+            }
+        }
         Ok(())
     }
 
-    /// 生成内置容器构造（RFC-011 §「Vec(T) 的构造形式」）。
+    /// 形态②：内置容器构造（RFC-011 §「Vec(T) 的构造形式」）——内置容器的两层
+    /// 构造 `Vec(Int)()` / `Vec(Int)(1, 2, 3)` / `Vec(Int)(len = 64)`。
     ///
-    /// 三条形态：
-    /// - `Vec(Int)()` → 空容器（长度 0，元素事后追加）
-    /// - `Vec(Int)(1, 2, 3)` → 元素构造（长度 = 元素个数）
-    /// - `Vec(Int)(len = 64)` → 槽位分配（64 个零值槽位）
+    /// 内层 `Vec(Int)` 是**类型实参**，运行期擦除（与 struct 的
+    /// `Container(Int)(42, 43)` 同一规则）；真正要生成的是外层构造：
+    ///   - 无构造实参 → 空容器
+    ///   - 位置实参   → 元素构造（长度 = 元素个数）
+    ///   - `len = n`  → 槽位分配（n 个零值）
     ///
-    /// 前两者与容器字面量同形，直接复用 `generate_list_expr_ir`；
-    /// 第三者用 `AllocFixedArray` 分配 n 个 Void 占位（与 Array 字面量落点同款）。
-    pub(super) fn generate_builtin_container_ir(
+    /// 前两者与容器字面量同形，直接复用 `generate_list_expr_ir`（容器构造生成器因此
+    /// 与容器字面量同处本模块）；第三者用 `AllocFixedArray` 分配 n 个 Void 占位
+    /// （与 Array 字面量落点同款）。
+    ///
+    /// 此前这条路径根本不存在：`Vec(Int)()` 在类型检查阶段就报 E1001 unknown
+    /// variable 'Vec'（类型名不在值位置的白名单里）。
+    pub(super) fn emit_builtin_container_ctor(
         &mut self,
-        args: &[Expr],
-        named_args: &[(String, Expr)],
-        span: &Span,
+        call: &CallArgs<'_>,
         result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -177,7 +205,7 @@ impl AstToIrGenerator {
         // `len = n`：分配 n 个零值槽位。
         // 长度是**运行期**值（RFC-011：Vec 是运行时长度的地基），
         // 故用 AllocArray 而非编译期定长的 AllocFixedArray。
-        if let Some((_, len_expr)) = named_args.iter().find(|(n, _)| n == "len") {
+        if let Some((_, len_expr)) = call.named().iter().find(|(n, _)| n == "len") {
             // 空缓冲 + 长度写入。
             //
             // 不走 `AllocArray.size`：字节码 `NewListWithCap` 的容量是**字面量**
@@ -191,7 +219,7 @@ impl AstToIrGenerator {
                 dst: result_reg.clone(),
                 size: Operand::Const(ConstValue::Int(0)),
                 elem_size: Operand::Const(ConstValue::Int(1)),
-                span: *span,
+                span: call.span(),
             });
             instructions.push(Instruction::StoreField {
                 dst: result_reg.clone(),
@@ -199,13 +227,19 @@ impl AstToIrGenerator {
                 src: len_reg.clone(),
                 type_name: None,
                 field_name: Some("length".to_string()),
-                span: *span,
+                span: call.span(),
             });
             return Ok(());
         }
 
         // 元素构造 / 空构造：与 `[a, b, c]` / `[]` 同形
-        self.generate_list_expr_ir(args, span, result_reg, instructions, constants)
+        self.generate_list_expr_ir(
+            call.args(),
+            &call.span(),
+            result_reg,
+            instructions,
+            constants,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -264,17 +298,14 @@ impl AstToIrGenerator {
         let iterable_reg = self.next_temp_reg();
         self.generate_expr_ir(&gen.iterable, iterable_reg.clone(), instructions, constants)?;
 
-        // 创建迭代器
-        let iterator_reg = self.next_temp_reg();
-        instructions.push(Instruction::Call {
-            dst: Some(iterator_reg.clone()),
-            func: Operand::Const(ConstValue::String(
-                self.resolver().resolve_namespace("list", &["iter"]),
-            )),
-            args: vec![iterable_reg.clone()],
-            span: *span,
-            def: None,
-        });
+        // 创建迭代器（协议三调用的唯一实现：推导器同时给出结果类型）
+        let (iterator_reg, element_ty, has_next_fn, next_fn) = self.emit_iteration_protocol(
+            &gen.iterable,
+            iterable_reg.clone(),
+            false,
+            *span,
+            instructions,
+        );
 
         // 注册循环变量（具名变量：Local 槽，不产生 SSA 值）
         let var_reg = self.next_local_slot();
@@ -284,14 +315,7 @@ impl AstToIrGenerator {
         let loop_start_idx = instructions.len();
 
         // has_next?
-        let has_next_reg = self.next_temp_reg();
-        instructions.push(Instruction::Call {
-            dst: Some(has_next_reg.clone()),
-            func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
-            args: vec![iterator_reg.clone()],
-            span: *span,
-            def: None,
-        });
+        let has_next_reg = self.emit_has_next(&has_next_fn, &iterator_reg, *span, instructions);
 
         let jump_end_idx = instructions.len();
         instructions.push(Instruction::JmpIfNot {
@@ -301,14 +325,7 @@ impl AstToIrGenerator {
         });
 
         // next element
-        let element_reg = self.next_temp_reg();
-        instructions.push(Instruction::Call {
-            dst: Some(element_reg.clone()),
-            func: Operand::Const(ConstValue::String("std.list.next".to_string())),
-            args: vec![iterator_reg.clone()],
-            span: *span,
-            def: None,
-        });
+        let element_reg = self.emit_next(&next_fn, &iterator_reg, &element_ty, *span, instructions);
 
         // 存储到循环变量
         instructions.push(Instruction::Store {
