@@ -15,7 +15,7 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 
 | 产物 | 作用 |
 | --- | --- |
-| `docs/src/dev/test-gate-census.tsv` | 逐条判定表（2736 行 + 表头），与本页同目录 |
+| `docs/src/dev/test-gate-census.tsv` | 逐条判定表（2748 行 + 表头），与本页同目录 |
 | `scripts/dev/test-gate-census.py` | 生成器（可重跑、可 `--check`、可 `--selftest`） |
 
 ## 口径
@@ -26,11 +26,11 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 
 | 面 | 条数 |
 | --- | --- |
-| 根包 lib（`src/`，含各模块 `tests/` 子目录） | 2132 |
+| 根包 lib（`src/`，含各模块 `tests/` 子目录） | 2138 |
 | `tests/integration` | 463 |
 | `tests/formatter_integration.rs` | 52 |
 | `tests/yx_runner.rs` / `tests/yx_multifile_runner.rs` | 2 / 1 |
-| `tools/` | 77 |
+| `tools/` | 83 |
 | `benches/` | 9 |
 | **合计** | **2748**（346 个文件） |
 
@@ -79,7 +79,7 @@ WBS 0.6「大清理」的前置材料：把全仓 `#[test]` 按 [coding-rules �
 | 证明（spec-shaped 判据面 / 现状锚） | 574 |
 | 待判（两门皆不过，证明门待人工） | 552 |
 | 均不通过（体内无任何断言） | 6 |
-| **合计** | **2736** |
+| **合计** | **2748** |
 
 | 处置 | 条数 | 对比 0.6-19（2026-11-07） |
 | --- | --- | --- |

@@ -542,9 +542,8 @@ impl AstToIrGenerator {
     /// 写名（本地键）→ 类型身份：构造调用在「无调用点结果类型表」的树上用它取
     /// 字段表。
     ///
-    /// 来源是 typecheck 在 [`crate::frontend::core::sema::TypeCheckResult`] 里
-    /// **同笔携带**的正向映射（`type_identity_by_local_key`，扫 `env.types` 产出，
-    /// 别名与定义名两个写名都有条目）；不遍历索引按 value 反查、不用写名猜模块。
+    /// 来源由 `TypeEnvironment::add_type` 与 `type_identity_index` **同笔写入**
+    /// （别名与定义名两个写名都有条目）；不遍历索引按 value 反查、不用写名猜模块。
     pub(super) fn identity_for_written(
         &self,
         written: &str,
