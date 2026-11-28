@@ -16,8 +16,8 @@ use anyhow::{anyhow, bail, Result};
 
 use crate::frontend::core::sema::MonoType;
 use crate::middle::ir::ir::{
-    is_explicit_unknown_type, BasicBlock, ConstValue, FunctionBody, Instruction, ModuleIR, Operand,
-    ValueId,
+    is_explicit_unknown_type, BasicBlock, ConstValue, FunctionBody, Instruction, LocalSlot,
+    ModuleIR, Operand, ValueId,
 };
 use crate::middle::ir::verify::verify_ssa;
 use crate::util::span::Span;
@@ -55,6 +55,12 @@ pub(super) struct OwnedSignature {
 #[derive(Clone, Default)]
 pub(super) struct FunctionAnalysis {
     pub(super) locals: HashMap<usize, ScalarType>,
+    /// 无类型临时槽：模块 init 序列里由 `next_temp_reg` 分配的 `Operand::Local`
+    /// 临时寄存器，会在不同语句里被复用来承载不同类型的值。这里列出**观察到
+    /// 类型变化**的槽——发射层据此按每次写入分配独立存储（见 `write_local`），
+    /// 不再要求一个槽只有一种类型。具名槽（形参 / `LocalSlot` 声明的槽）不在
+    /// 此列，仍按「一个槽一种类型」校验。
+    pub(super) temp_locals: HashSet<usize>,
     pub(super) values: Vec<MonoType>,
 }
 
@@ -167,6 +173,18 @@ pub(super) fn analyze_module(
         reachable,
     };
     let init_instructions = module.init.iter().collect::<Vec<_>>();
+    // 模块 init 的临时寄存器没有声明类型（`LocalSlot` 只登记具名槽）。只有
+    // **直线** init 才能按写入顺序精确重定型；含控制流的 init 保持原有严格
+    // 规则（类型一变就带位置拒绝），不静默按某一条路径的类型发射。
+    let init_straight_line = !module.init.iter().any(|i| {
+        matches!(
+            i,
+            Instruction::Jmp { .. }
+                | Instruction::JmpIf { .. }
+                | Instruction::JmpIfNot { .. }
+                | Instruction::Phi { .. }
+        )
+    });
     let init = analyze_stream(
         module,
         &analysis.signatures,
@@ -178,6 +196,8 @@ pub(super) fn analyze_module(
         &init_instructions,
         &[],
         &[],
+        &module.init_locals,
+        init_straight_line,
         source_name,
         &module.source_files,
         &module.init_file_ids,
@@ -191,7 +211,13 @@ pub(super) fn analyze_module(
         .iter()
         .filter(|function| analysis.reachable.contains(&function.name))
     {
-        let FunctionBody::Code { blocks, values, .. } = &function.body else {
+        let FunctionBody::Code {
+            blocks,
+            values,
+            locals,
+            ..
+        } = &function.body
+        else {
             unreachable!("type declarations were rejected above")
         };
         let instructions = blocks
@@ -227,6 +253,8 @@ pub(super) fn analyze_module(
             &instructions,
             &value_types,
             &block_starts,
+            locals,
+            false,
             function_source,
             &module.source_files,
             &[],
@@ -522,6 +550,8 @@ fn analyze_stream(
     instructions: &[&Instruction],
     value_types: &[MonoType],
     block_starts: &[usize],
+    declared_locals: &[LocalSlot],
+    allow_local_type_change: bool,
     source_name: &str,
     source_files: &[String],
     file_ids: &[usize],
@@ -597,11 +627,19 @@ fn analyze_stream(
          -> Result<()> {
             match dst {
                 Operand::Local(slot) => {
+                    let declared = *slot < params.len() || declared_locals.get(*slot).is_some();
                     if let Some(old) = result.locals.insert(*slot, ty) {
                         if old != ty {
-                            return Err(unsupported(format!(
-                                "slot {slot} changes type from {old:?} to {ty:?}"
-                            )));
+                            // 模块 init 的临时寄存器由 `next_temp_reg` 分配，跨语句
+                            // 复用且没有声明类型（`LocalSlot` 只登记具名槽）。直线
+                            // init 里按写入顺序重定型是精确的；具名槽与非直线 init
+                            // 仍按「一个槽一种类型」拒绝（不静默给错类型）。
+                            if declared || !allow_local_type_change {
+                                return Err(unsupported(format!(
+                                    "slot {slot} changes type from {old:?} to {ty:?}"
+                                )));
+                            }
+                            result.temp_locals.insert(*slot);
                         }
                     }
                     Ok(())

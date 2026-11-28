@@ -2466,6 +2466,201 @@ mod enabled {
             "rejected build must not write a native artifact"
         );
     }
+
+    #[test]
+    fn test_native_global_scalars_match_vm() {
+        // Arrange：模块级 Int/Bool/String 全局；b 的初始化读 a，钉住初始化顺序。
+        let source = concat!(
+            "use std.assert\n",
+            "a: Int = 1\n",
+            "b: Int = a + 1\n",
+            "c: Bool = b == 2\n",
+            "s: String = \"one\"\n",
+            "main: () -> Void = {\n",
+            "    assert.assert(a == 1, \"int global initial value\")\n",
+            "    assert.assert(b == 2, \"initializer sees earlier globals in order\")\n",
+            "    assert.assert(c, \"bool global initializer\")\n",
+            "    assert.assert(s == \"one\", \"string global initial value\")\n",
+            "}\n",
+            "main()\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "global_scalars");
+
+        // Assert
+        // assert_native_matches_vm 已断言 VM 与 O0/O2 的退出码与 stdout 一致。
+    }
+
+    #[test]
+    fn test_native_global_writes_from_function_match_vm() {
+        // Arrange：三个全局各由另一个函数写入，回到 main 后必须看见新值。
+        let source = concat!(
+            "use std.assert\n",
+            "mut n: Int = 3\n",
+            "mut f: Bool = false\n",
+            "mut s: String = \"start\"\n",
+            "set: () -> Void = {\n",
+            "    n = 42\n",
+            "    f = true\n",
+            "    s = \"changed\"\n",
+            "}\n",
+            "main: () -> Void = {\n",
+            "    set()\n",
+            "    assert.assert(n == 42, \"int global write\")\n",
+            "    assert.assert(f, \"bool global write\")\n",
+            "    assert.assert(s == \"changed\", \"string global write\")\n",
+            "}\n",
+            "main()\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "global_writes");
+
+        // Assert
+        // assert_native_matches_vm 已断言 VM 与 O0/O2 的退出码与 stdout 一致。
+    }
+
+    #[test]
+    fn test_native_project_global_mutation_matches_vm() {
+        // Arrange：多文件项目——依赖单元的 Int/Bool/String 全局由其自身函数改写，
+        // 入口单元经 import 读到新值。
+        let root = TempDir::new().expect("global project tempdir");
+        write_project(
+            root.path(),
+            &[
+                (
+                    "yaoxiang.toml",
+                    "[package]\nname = \"global_project\"\nversion = \"0.1.0\"\n",
+                ),
+                (
+                    "lib.yx",
+                    concat!(
+                        "mut counter: Int = 0\n",
+                        "label: String = \"lib\"\n",
+                        "flag: Bool = true\n",
+                        "bump: () -> Int = {\n",
+                        "    counter = counter + 1\n",
+                        "    return counter\n",
+                        "}\n",
+                    ),
+                ),
+                (
+                    "main.yx",
+                    concat!(
+                        "use std.assert\n",
+                        "use lib.{bump, counter, label, flag}\n",
+                        "main: () -> Void = {\n",
+                        "    assert.assert(counter == 0, \"dependency global initial\")\n",
+                        "    assert.assert(label == \"lib\", \"dependency string global\")\n",
+                        "    assert.assert(flag, \"dependency bool global\")\n",
+                        "    assert.assert(bump() == 1, \"dependency global write via its own fn\")\n",
+                        "    assert.assert(counter == 1, \"dependency global write visible\")\n",
+                        "}\n",
+                    ),
+                ),
+            ],
+        );
+        let entry = root.path().join("main.yx");
+
+        // Act
+        let vm = Command::new(test_yx_bin())
+            .current_dir(root.path())
+            .arg("run")
+            .arg(&entry)
+            .output()
+            .expect("run VM global project fixture");
+
+        // Assert
+        assert_eq!(
+            vm.status.code(),
+            Some(0),
+            "VM global project exit: {}",
+            String::from_utf8_lossy(&vm.stderr)
+        );
+        for optimize in [false, true] {
+            let output = root
+                .path()
+                .join(format!("global_project_o{}", u8::from(optimize)));
+            build_native_project_with_options(
+                &entry,
+                &output,
+                false,
+                optimize,
+                CompileConfig::default(),
+            )
+            .unwrap_or_else(|e| panic!("global project build (O{}): {e:#}", u8::from(optimize)));
+            let native = run_native(&output);
+            assert_eq!(
+                native.status.code(),
+                vm.status.code(),
+                "global project status mismatch (O{}): {}",
+                u8::from(optimize),
+                String::from_utf8_lossy(&native.stderr)
+            );
+            assert_eq!(
+                native.stdout,
+                vm.stdout,
+                "global project stdout mismatch (O{})",
+                u8::from(optimize)
+            );
+        }
+    }
+
+    #[test]
+    fn test_native_unsupported_global_type_is_rejected() {
+        // Arrange：Float 全局不在支持集——必须带源码位置拒绝且不产生产物。
+        let dir = TempDir::new().expect("float global tempdir");
+        let source = dir.path().join("float_global.yx");
+        let executable = dir.path().join("float_global");
+        std::fs::write(&source, "pi: Float = 3.5\nmain: () -> Void = { }\nmain()\n")
+            .expect("write float global fixture");
+
+        // Act
+        let error = build_native_with_options(&source, &executable, false, false)
+            .expect_err("Float global must stay outside the support set");
+
+        // Assert
+        let detail = format!("{error:#}");
+        assert!(
+            detail.contains(&format!("{}:1:", source.display())),
+            "rejection must carry the initializer position: {detail}"
+        );
+        assert!(
+            !executable.exists(),
+            "rejected build must not write a native artifact"
+        );
+    }
+
+    #[test]
+    fn test_native_container_global_is_rejected() {
+        // Arrange：容器全局（List）不在支持集——构建期拒绝、不静默 Void。
+        // 注：拒绝落在容器构造指令上，该指令的 span 由 lower 留空（(0,0)），
+        // 因此这里只断言「点名不支持指令 + 不产生产物」。
+        let dir = TempDir::new().expect("list global tempdir");
+        let source = dir.path().join("list_global.yx");
+        let executable = dir.path().join("list_global");
+        std::fs::write(
+            &source,
+            "xs: List(Int) = [1, 2, 3]\nmain: () -> Void = { }\nmain()\n",
+        )
+        .expect("write list global fixture");
+
+        // Act
+        let error = build_native_with_options(&source, &executable, false, false)
+            .expect_err("container global must stay outside the support set");
+
+        // Assert
+        let detail = format!("{error:#}");
+        assert!(
+            detail.contains("AllocArray"),
+            "rejection must name the unsupported instruction: {detail}"
+        );
+        assert!(
+            !executable.exists(),
+            "rejected build must not write a native artifact"
+        );
+    }
 }
 
 #[cfg(not(all(feature = "llvm", target_os = "linux", target_arch = "x86_64")))]

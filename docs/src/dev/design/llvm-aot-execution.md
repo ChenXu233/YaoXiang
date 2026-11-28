@@ -10,7 +10,7 @@ description:
 x86-64 上，把一份真实的 YaoXiang 源程序编译成 ELF 可执行文件。在没有 LLVM 和 YaoXiang
 VM 的同类系统上运行它，既能算对结果，也能在出错时指出源码位置。生成一份 LLVM IR 文本不算完成。
 
-**状态：批次 3 已开工（值证据、无 `Phi` CFG 子集与多文件项目入口），批次 4.1（运行时 ABI 首版与 `String` 判等/顺序）与 4.2（`Int` 位运算与受检移位）已入库，发布验收未完成。**
+**状态：批次 3 已开工（值证据、无 `Phi` CFG 子集与多文件项目入口），批次 4.1（运行时 ABI 首版与 `String` 判等/顺序）、4.2（`Int` 位运算与受检移位）与 4.4（模块级全局）已入库，发布验收未完成。**
 [RFC-018](../../rfc/accepted/018-llvm-aot-compiler.md)
 已接受 LLVM 提前编译（AOT）的方向，并在附录 B 登记构建产物契约；[跟踪议题 #134](https://github.com/ChenXu233/YaoXiang/issues/134)
 是这项工作的入口。首批实现不占用 [RFC-039 施工表](../architecture/09-execution-wbs.md)
@@ -57,7 +57,10 @@ VM 的同类系统上运行它，既能算对结果，也能在出错时指出�
       移位（越界移位报 E6007 且与 VM 同源码位置，不静默 wrap，判据
       `test_native_shift_out_of_range_matches_vm_diagnostic`）；右移语义按有符号定义：
       `>>` 降 `Sar`（发 `ashr`）、`Shr` 归位逻辑右移（发 `lshr`，前端不产出，判据
-      `test_native_shr_instruction_uses_logical_shift`）。容器、闭包、资源、FFI 与并作未开始。
+      `test_native_shr_instruction_uses_logical_shift`）；4.4 已收口：模块级 `Int`/`Bool`/`String`
+      全局（声明、module init 写入、函数内读写的同一套类型规则，判据
+      `test_native_global_scalars_match_vm` 与 `test_native_project_global_mutation_matches_vm`）。
+      容器、闭包、资源、FFI 与并作未开始。
 
   **批次 4 前置（阻塞，2026-11-28 登记）**：
 
@@ -197,6 +200,14 @@ python scripts/dev/testsuite.py plan
 **支持集**：
 
 - 单文件脚本或多文件项目；`Int`、`Bool`、`String`、`Void` 标量与直接调用。
+- 模块级全局（批次 4.4）：`Int`/`Bool`/`String` 全局在入口块按类型物化（`String` 仍是
+  `{ptr, len}` 借用视图，无分配器），module init 按 IR 顺序写入，函数内可读可写、跨函数
+  与跨单元可见；初始化顺序与 VM 一致（后一个全局的初始化读得到前一个的值）。模块 init 的
+  临时寄存器由 `next_temp_reg` 分配、跨语句复用且没有声明类型：直线 init 里发射层按**每次
+  写入**分配存储（`temp_locals`），具名槽仍按「一个槽一种类型」校验；含控制流的 init 保持
+  原有的类型一变即拒绝，不按某条路径猜类型。判据 `test_native_global_scalars_match_vm`、
+  `test_native_global_writes_from_function_match_vm`、
+  `test_native_project_global_mutation_matches_vm`。
 - `String` 判等与顺序（批次 4.1）：`Eq`/`Ne`/`Lt`/`Le`/`Gt`/`Ge` 接受两侧同为 `String`，
   语义是按 UTF-8 字节的字典序（对合法 UTF-8 与码点序一致），内容相等不是指针相等；
   运行期入口与值形状见“运行时 ABI 约定（首版）”。判据
@@ -294,6 +305,11 @@ python scripts/dev/testsuite.py plan
   `source:line:column`；混型比较（`String` 与 `Int` 等）同样带位置拒绝。判据
   `test_native_string_operation_outside_slice_is_rejected`、
   `test_native_string_mixed_comparison_is_rejected_with_location`。
+- 不支持的全局类型（批次 4.4）：`Float`、容器、闭包、资源等仍带位置拒绝、不产生产物，不静默
+  按 `Void` 回落。`Float` 全局在初始化常量处点位（判据
+  `test_native_unsupported_global_type_is_rejected`）；容器全局落在容器构造指令上（判据
+  `test_native_container_global_is_rejected`），该指令的 span 由 lower 留空，诊断位置显示
+  `0:0`——这是 lower 侧的 span 缺口，不由本层补造。
 - 槽位缺指针（批次 4.3 收口：补齐证据 + 非 `Void` 硬失败）：`Void` 是唯一没有 LLVM 形态的
   标量（后端单元判据 `test_only_void_scalar_has_no_llvm_form`），分析层只放行 `Void`/`Int`/
   `Bool`/`String`，另外三种槽位都在入口块拿到 alloca、全局槽位由 `declare_globals` 物化——

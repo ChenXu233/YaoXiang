@@ -335,6 +335,19 @@ impl<'ctx> Emitter<'ctx> {
         slots.sort_unstable_by_key(|(slot, _)| *slot);
         let mut locals: HashMap<usize, Slot<'ctx>> = HashMap::with_capacity(slots.len());
         for (slot, ty) in slots {
+            // 无类型临时槽（模块 init 的 `next_temp_reg`）按 **每次写入** 分配存储：
+            // 一个槽会被复用来承载不同类型的值，入口块预分配会在类型变化时
+            // 落错存储。这里只占位，`write_local` 按写入类型惰性建 alloca。
+            if analysis.temp_locals.contains(&slot) {
+                locals.insert(
+                    slot,
+                    Slot {
+                        ty: ScalarType::Void,
+                        pointer: None,
+                    },
+                );
+                continue;
+            }
             let pointer = match llvm_type(self.context, ty) {
                 Some(llvm_ty) => Some(llvm(
                     self.builder.build_alloca(llvm_ty, &format!("slot.{slot}")),
@@ -1128,9 +1141,31 @@ impl<'ctx> Emitter<'ctx> {
         let Operand::Local(index) = operand else {
             bail!("unsupported destination reached LLVM emission: {operand:?}")
         };
-        let Some(slot) = locals.get(index).copied() else {
+        let Some(mut slot) = locals.get(index).copied() else {
             bail!("local slot {index} has no entry-block alloca; analysis lacks its type")
         };
+        if analysis.temp_locals.contains(index) {
+            // 无类型临时槽：按写入类型换一份存储（Void 没有 LLVM 形态，存 None）。
+            // 该槽只出现在模块 init 的直线段，alloca 落在当前块不影响支配关系。
+            if slot.ty != value.ty {
+                let pointer = match llvm_type(self.context, value.ty) {
+                    Some(llvm_ty) => Some(llvm(
+                        self.builder
+                            .build_alloca(llvm_ty, &format!("slot.{index}.{:?}", value.ty)),
+                    )?),
+                    None => None,
+                };
+                slot = Slot {
+                    ty: value.ty,
+                    pointer,
+                };
+                locals.insert(*index, slot);
+            }
+            if let (Some(pointer), Some(repr)) = (slot.pointer, value.repr) {
+                llvm(self.builder.build_store(pointer, repr))?;
+            }
+            return Ok(());
+        }
         if let (Some(pointer), Some(repr)) = (slot.pointer, value.repr) {
             llvm(self.builder.build_store(pointer, repr))?;
         }
