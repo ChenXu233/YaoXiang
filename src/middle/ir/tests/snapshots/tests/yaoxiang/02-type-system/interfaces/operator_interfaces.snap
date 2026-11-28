@@ -123,7 +123,7 @@ module
     value v53: Float(64) @block0
     value v54: TypeRef("Point") @block0
     value v55: Generic { name: "String", args: [] } @block0
-    value v56: TypeRef("?") @block0
+    value v56: TypeRef("Point") @block0
     value v57: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: ["Add", "Multiply"] }) @block0
     value v58: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: ["Add", "Multiply"] }) @block0
     value v59: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: ["Add", "Multiply"] }) @block0

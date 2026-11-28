@@ -76,7 +76,7 @@ module
     value v42: Float(64) @block0
     value v43: Float(64) @block0
     value v44: Never @block0
-    value v45: TypeRef("?") @block0
+    value v45: Bool @block0
     value v46: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Equal"] }) @block0
     value v47: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Equal"] }) @block0
     value v48: Generic { name: "String", args: [] } @block0

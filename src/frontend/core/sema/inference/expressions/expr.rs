@@ -1419,17 +1419,20 @@ impl<'a> ExpressionInferrer<'a> {
                     // 约束形参名不是类型身份：名字就是形参占位 `T.add`，mono 特化
                     // 时按类型实参改写（不经导入面——形参名不在类型名空间里）
                     let dispatch_name = format!("{pn}.{method}");
+                    // 约束形参延迟派发：结果位就是形参自身（mono 特化时改写）。
+                    let result_ty = MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&(pn)))
+                            .expect("type name must be bare and non-empty"),
+                    );
                     self.operator_dispatches.push(ops::OperatorDispatch {
                         span,
                         type_name: pn.clone(),
                         method,
                         dispatch_name,
                         negate: false,
+                        result_type: Some(result_ty.clone()),
                     });
-                    return Some(MonoType::TypeRef(
-                        Nominal::flat(AsRef::<str>::as_ref(&(pn)))
-                            .expect("type name must be bare and non-empty"),
-                    ));
+                    return Some(result_ty);
                 }
                 return None;
             }
@@ -1455,6 +1458,7 @@ impl<'a> ExpressionInferrer<'a> {
                 method,
                 dispatch_name,
                 negate: false,
+                result_type: Some(result_ty.clone()),
             });
         }
         Some(result_ty)
@@ -1605,6 +1609,8 @@ impl<'a> ExpressionInferrer<'a> {
                 method,
                 dispatch_name,
                 negate,
+                // `equal` 的返回位是 Bool；`!=` 取反后仍是 Bool。
+                result_type: Some(MonoType::Bool),
             });
             return Ok(MonoType::Bool);
         }
@@ -2441,6 +2447,7 @@ impl<'a> ExpressionInferrer<'a> {
                                 method,
                                 dispatch_name,
                                 negate: false,
+                                result_type: Some(value_ty.clone()),
                             });
                         }
                         Ok(value_ty.clone())

@@ -84,7 +84,13 @@ impl AstToIrGenerator {
         // 特化说明：方法调用不产生单态化请求，`std.` 前缀函数按 mono
         // 保留规则以未特化原版存活（解释器类型擦除执行），与显式方法
         // 调用同一执行模型。
-        self.generate_expr_ir(expr, result_reg.clone(), instructions, constants)?;
+        // 接收者先落**值**：具名槽（`Operand::Local`）不携带类型事实，而四方法的结果
+        // 类型要从接收者类型解出。调用方给的是 Local 时算进临时值，结果仍写回原 dst。
+        let receiver_reg = match &result_reg {
+            Operand::Local(_) => self.next_temp_reg(),
+            _ => result_reg.clone(),
+        };
+        self.generate_expr_ir(expr, receiver_reg.clone(), instructions, constants)?;
         let span = *span;
 
         // 接收者类型（Try impl 的 Self）：优先表达式静态类型，退回已生成的操作数
@@ -93,7 +99,7 @@ impl AstToIrGenerator {
         // from_error -> Self；is_failure -> Bool 与类型无关）。解不出就保持显式未知。
         let receiver_ty = self
             .get_expr_mono_type(expr)
-            .or_else(|| self.operand_known_type(&result_reg));
+            .or_else(|| self.operand_known_type(&receiver_reg));
         let (payload_ty, residual_ty) = {
             use crate::frontend::core::types::MonoType;
             let mut resolved = receiver_ty.clone();
@@ -172,7 +178,7 @@ impl AstToIrGenerator {
         instructions.push(call_method(
             &is_failure_name,
             f_reg.clone(),
-            result_reg.clone(),
+            receiver_reg.clone(),
         ));
         let fail_jmp_idx = instructions.len();
         instructions.push(Instruction::JmpIf {
@@ -185,7 +191,7 @@ impl AstToIrGenerator {
         instructions.push(call_method(
             &success_name,
             s_reg.clone(),
-            result_reg.clone(),
+            receiver_reg.clone(),
         ));
         instructions.push(Instruction::Load {
             dst: result_reg.clone(),
@@ -208,7 +214,7 @@ impl AstToIrGenerator {
         instructions.push(call_method(
             &residual_name,
             e_reg.clone(),
-            result_reg.clone(),
+            receiver_reg.clone(),
         ));
         let err_reg = self.next_temp_reg();
         instructions.push(call_method(
@@ -374,6 +380,8 @@ impl AstToIrGenerator {
                 // 生成方法调用（接收者居首），`!=` 对结果取反
                 if let Some(dispatch) = self.operator_dispatches.get(span).cloned() {
                     let negate = dispatch.negate;
+                    // 派发调用的结果类型与 `dispatch_name` 同一结算点（sema 记录）。
+                    let result_ty = dispatch.result_type.clone();
                     // 调用名即上游给出的名字（D-8）：限定已在方法身份里，这里不再查表
                     let dispatch_name = dispatch.dispatch_name;
                     instructions.push(Instruction::Call {
@@ -383,6 +391,9 @@ impl AstToIrGenerator {
                         span: self.cur_span,
                         def: None,
                     });
+                    if let Some(ty) = result_ty {
+                        self.note_value_type(&result_reg, ty);
+                    }
                     if negate {
                         instructions.push(Instruction::Not {
                             dst: result_reg.clone(),

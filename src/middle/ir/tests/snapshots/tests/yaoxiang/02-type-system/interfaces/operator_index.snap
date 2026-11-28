@@ -27,7 +27,7 @@ module
     value v6: Int(64) @block0
     value v7: Never @block0
     value v8: Bool @block0
-    value v9: TypeRef("?") @block0
+    value v9: Float(64) @block0
     value v10: Float(64) @block0
     value v11: Struct(StructType { name: "Grid", fields: [("cells", Generic { name: "Vec", args: [Float(64)] })], methods: {}, interfaces: ["Index"] }) @block0
     value v12: Int(64) @block0

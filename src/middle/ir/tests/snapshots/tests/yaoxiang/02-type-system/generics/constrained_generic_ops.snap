@@ -44,7 +44,7 @@ module
     slot[1] b : Int(64) @depth1
     locals_total=5
     values_total=3
-    value v0: TypeRef("?") @block0
+    value v0: TypeRef("T") @block0
     value v1: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Add"] }) @block0
     value v2: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Add"] }) @block0
     Load v1 <- %0

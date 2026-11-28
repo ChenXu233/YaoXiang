@@ -3854,6 +3854,7 @@ impl StatementChecker {
                                                 method,
                                                 dispatch_name,
                                                 negate: false,
+                                                result_type: remaining.first().cloned(),
                                             });
                                         }
                                         if let Some(result_ty) = remaining.first() {
@@ -3888,6 +3889,8 @@ impl StatementChecker {
                                                             method,
                                                             dispatch_name,
                                                             negate: false,
+                                                            // 约束形参延迟派发：结果位就是形参自身
+                                                            result_type: Some(operand.clone()),
                                                         },
                                                     );
                                                 }

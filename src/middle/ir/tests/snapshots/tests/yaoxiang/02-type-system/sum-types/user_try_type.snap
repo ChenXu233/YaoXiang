@@ -121,32 +121,33 @@ module
     slot[0] m : Int(64) @depth1
     slot[1] v : Int(64) @depth1
     locals_total=5
-    values_total=8
-    value v0: Bool @block0
-    value v1: TypeRef("?") @block0
+    values_total=9
+    value v0: Ref { mutable: false, inner: TypeRef("Maybe") } @block0
+    value v1: Bool @block0
     value v2: TypeRef("?") @block0
-    value v3: Ref { mutable: false, inner: TypeRef("Maybe") } @block0
-    value v4: Generic { name: "Maybe", args: [] } @block0
-    value v5: Int(64) @block0
+    value v3: TypeRef("?") @block0
+    value v4: Ref { mutable: false, inner: TypeRef("Maybe") } @block0
+    value v5: Generic { name: "Maybe", args: [] } @block0
     value v6: Int(64) @block0
     value v7: Int(64) @block0
+    value v8: Int(64) @block0
     Load %0 <- arg%0
-    Load %1 <- %0
-    Call v0 <- string("Maybe.is_failure") [%1] (def=d1)
-    JmpIf v0 -> instr(7)
-    Call v1 <- string("Maybe.success") [%1] (def=d2)
-    Load %1 <- v1
+    Load v0 <- %0
+    Call v1 <- string("Maybe.is_failure") [v0] (def=d1)
+    JmpIf v1 -> instr(7)
+    Call v2 <- string("Maybe.success") [v0] (def=d2)
+    Load %1 <- v2
     Jmp -> instr(10)
-    Call v2 <- string("Maybe.residual") [%1] (def=d3)
-    Call v3 <- string("Maybe.from_error") [v2] (def=d4)
-    Ret v3
-    Load v6 <- %1
-    Load v7 <- int(1)
-    Add v5 <- v6, v7
-    CreateVariant v4 <- Maybe::0 v5
+    Call v3 <- string("Maybe.residual") [v0] (def=d3)
+    Call v4 <- string("Maybe.from_error") [v3] (def=d4)
     Ret v4
+    Load v7 <- %1
+    Load v8 <- int(1)
+    Add v6 <- v7, v8
+    CreateVariant v5 <- Maybe::0 v6
+    Ret v5
     Drop %1
-    Ret v4
+    Ret v5
   fn main() -> Void
     slot[0] some_case : Int(64) @depth1
     slot[1] none_case : Int(64) @depth1

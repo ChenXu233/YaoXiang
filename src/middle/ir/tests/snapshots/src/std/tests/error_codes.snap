@@ -24,40 +24,41 @@ module
     slot[1] r : Int(64) @depth1
     slot[2] it : Int(64) @depth1
     locals_total=6
-    values_total=11
+    values_total=12
     value v0: Int(64) @block0
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     value v3: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block0
-    value v4: Bool @block0
-    value v5: TypeRef("?") @block0
-    value v6: TypeRef("?") @block0
-    value v7: TypeRef("?") @block0
-    value v8: Generic { name: "Result", args: [TypeRef("Any"), TypeRef("Error")] } @block0
-    value v9: TypeRef("Any") @block0
-    value v10: Generic { name: "Iterator", args: [TypeRef("Any")] } @block0
+    value v4: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block0
+    value v5: Bool @block0
+    value v6: Generic { name: "Iterator", args: [TypeRef("Any")] } @block0
+    value v7: TypeRef("Error") @block0
+    value v8: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block0
+    value v9: Generic { name: "Result", args: [TypeRef("Any"), TypeRef("Error")] } @block0
+    value v10: TypeRef("Any") @block0
+    value v11: Generic { name: "Iterator", args: [TypeRef("Any")] } @block0
     Load %0 <- arg%0
     Load v0 <- int(1)
     Load v1 <- int(10)
     Load v2 <- %0
     NewRange %1 <- v0, v1, v2
-    Load v3 <- %1
-    Call %2 <- string("std.range.iter") [v3] (def=d0)
-    Call v4 <- string("std.result.Result.is_failure") [%2] (def=_)
-    JmpIf v4 -> instr(12)
-    Call v5 <- string("std.result.Result.success") [%2] (def=_)
-    Load %2 <- v5
+    Load v4 <- %1
+    Call v3 <- string("std.range.iter") [v4] (def=d0)
+    Call v5 <- string("std.result.Result.is_failure") [v3] (def=_)
+    JmpIf v5 -> instr(12)
+    Call v6 <- string("std.result.Result.success") [v3] (def=_)
+    Load %2 <- v6
     Jmp -> instr(15)
-    Call v6 <- string("std.result.Result.residual") [%2] (def=_)
-    Call v7 <- string("std.result.Result.from_error") [v6] (def=_)
-    Ret v7
-    Load v10 <- %2
-    Call v9 <- string("std.range.next") [v10] (def=d1)
-    CreateVariant v8 <- Result::0 v9
+    Call v7 <- string("std.result.Result.residual") [v3] (def=_)
+    Call v8 <- string("std.result.Result.from_error") [v7] (def=_)
     Ret v8
+    Load v11 <- %2
+    Call v10 <- string("std.range.next") [v11] (def=d1)
+    CreateVariant v9 <- Result::0 v10
+    Ret v9
     Drop %2
     Drop %1
-    Ret v8
+    Ret v9
   fn main() -> Void
     slot[0] r : Int(64) @depth1
     slot[1] e : Int(64) @depth1

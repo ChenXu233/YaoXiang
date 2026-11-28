@@ -3,66 +3,68 @@ module
     slot[0] s : Int(64) @depth1
     slot[1] n : Int(64) @depth1
     locals_total=5
-    values_total=9
-    value v0: Ref { mutable: false, inner: Generic { name: "String", args: [] } } @block0
-    value v1: Bool @block0
-    value v2: TypeRef("?") @block0
-    value v3: TypeRef("?") @block0
-    value v4: TypeRef("?") @block0
+    values_total=10
+    value v0: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
+    value v1: Ref { mutable: false, inner: Generic { name: "String", args: [] } } @block0
+    value v2: Bool @block0
+    value v3: Int(64) @block0
+    value v4: TypeRef("Error") @block0
     value v5: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
-    value v6: Int(64) @block0
+    value v6: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
     value v7: Int(64) @block0
     value v8: Int(64) @block0
+    value v9: Int(64) @block0
     Load %0 <- arg%0
-    Load v0 <- %0
-    Call %1 <- string("std.string.parse_int") [v0] (def=d0)
-    Call v1 <- string("std.result.Result.is_failure") [%1] (def=_)
-    JmpIf v1 -> instr(8)
-    Call v2 <- string("std.result.Result.success") [%1] (def=_)
-    Load %1 <- v2
+    Load v1 <- %0
+    Call v0 <- string("std.string.parse_int") [v1] (def=d0)
+    Call v2 <- string("std.result.Result.is_failure") [v0] (def=_)
+    JmpIf v2 -> instr(8)
+    Call v3 <- string("std.result.Result.success") [v0] (def=_)
+    Load %1 <- v3
     Jmp -> instr(11)
-    Call v3 <- string("std.result.Result.residual") [%1] (def=_)
-    Call v4 <- string("std.result.Result.from_error") [v3] (def=_)
-    Ret v4
-    Load v7 <- %1
-    Load v8 <- int(2)
-    Mul v6 <- v7, v8
-    CreateVariant v5 <- Result::0 v6
+    Call v4 <- string("std.result.Result.residual") [v0] (def=_)
+    Call v5 <- string("std.result.Result.from_error") [v4] (def=_)
     Ret v5
+    Load v8 <- %1
+    Load v9 <- int(2)
+    Mul v7 <- v8, v9
+    CreateVariant v6 <- Result::0 v7
+    Ret v6
     Drop %1
-    Ret v5
+    Ret v6
   fn parse_chain(Ref { mutable: false, inner: Generic { name: "String", args: [] } }) -> Generic { name: "Result", args: [Int(64), TypeRef("Error")] }
     slot[0] s : Int(64) @depth1
     slot[1] d : Int(64) @depth1
     locals_total=5
-    values_total=9
-    value v0: Ref { mutable: false, inner: Generic { name: "String", args: [] } } @block0
-    value v1: Bool @block0
-    value v2: TypeRef("?") @block0
-    value v3: TypeRef("?") @block0
-    value v4: TypeRef("?") @block0
+    values_total=10
+    value v0: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
+    value v1: Ref { mutable: false, inner: Generic { name: "String", args: [] } } @block0
+    value v2: Bool @block0
+    value v3: Int(64) @block0
+    value v4: TypeRef("Error") @block0
     value v5: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
-    value v6: Int(64) @block0
+    value v6: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
     value v7: Int(64) @block0
     value v8: Int(64) @block0
+    value v9: Int(64) @block0
     Load %0 <- arg%0
-    Load v0 <- %0
-    Call %1 <- string("parse_double") [v0] (def=d1)
-    Call v1 <- string("std.result.Result.is_failure") [%1] (def=_)
-    JmpIf v1 -> instr(8)
-    Call v2 <- string("std.result.Result.success") [%1] (def=_)
-    Load %1 <- v2
+    Load v1 <- %0
+    Call v0 <- string("parse_double") [v1] (def=d1)
+    Call v2 <- string("std.result.Result.is_failure") [v0] (def=_)
+    JmpIf v2 -> instr(8)
+    Call v3 <- string("std.result.Result.success") [v0] (def=_)
+    Load %1 <- v3
     Jmp -> instr(11)
-    Call v3 <- string("std.result.Result.residual") [%1] (def=_)
-    Call v4 <- string("std.result.Result.from_error") [v3] (def=_)
-    Ret v4
-    Load v7 <- %1
-    Load v8 <- int(1)
-    Add v6 <- v7, v8
-    CreateVariant v5 <- Result::0 v6
+    Call v4 <- string("std.result.Result.residual") [v0] (def=_)
+    Call v5 <- string("std.result.Result.from_error") [v4] (def=_)
     Ret v5
+    Load v8 <- %1
+    Load v9 <- int(1)
+    Add v7 <- v8, v9
+    CreateVariant v6 <- Result::0 v7
+    Ret v6
     Drop %1
-    Ret v5
+    Ret v6
   fn main() -> Void
     slot[0] ok : Int(64) @depth1
     slot[1] err : Int(64) @depth1
