@@ -3303,9 +3303,10 @@ impl<'a> ExpressionInferrer<'a> {
             }
         }
 
-        // 记录实现的**类型身份**（ir_gen 按同一 AST span 查表命名四方法调用）：
-        // 接收者类型自身携带名义头（跨模块同名 Try 类型按定义模块限定），
-        // 拿不到名义头时才退回登记名（接口实现表的 impl_type 是定义侧裸名）。
+        // 记录实现的**类型身份**与两个载荷位（ir_gen 按同一 AST span 查表命名
+        // 四方法调用并落它们的结果类型）：接收者类型自身携带名义头（跨模块同名
+        // Try 类型按定义模块限定），拿不到名义头时才退回登记名（接口实现表的
+        // impl_type 是定义侧裸名）。三样同出 `query_try_impl` 的一次结算。
         let impl_identity = match &resolved {
             MonoType::Generic { name, .. } => Some(name.clone()),
             MonoType::Struct(s) => Some(s.name.clone()),
@@ -3313,7 +3314,14 @@ impl<'a> ExpressionInferrer<'a> {
             _ => None,
         }
         .unwrap_or_else(|| self.nominal_for(&impl_name));
-        self.try_expr_impls.push((span, impl_identity));
+        self.try_expr_impls.push((
+            span,
+            operator_interfaces::TryExprInfo {
+                impl_identity,
+                ok_ty: ok_ty.clone(),
+                err_ty,
+            },
+        ));
 
         Ok(ok_ty)
     }

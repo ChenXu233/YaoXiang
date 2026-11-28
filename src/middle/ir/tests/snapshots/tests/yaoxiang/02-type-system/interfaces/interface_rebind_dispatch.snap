@@ -19,7 +19,7 @@ module
     locals_total=6
     values_total=18
     value v0: TypeRef("Animal") @block0
-    value v1: TypeRef("?") @block0
+    value v1: Struct(StructType { name: "Bird", fields: [("name", Generic { name: "String", args: [] })], methods: {}, interfaces: ["Animal"] }) @block0
     value v2: Generic { name: "String", args: [] } @block0
     value v3: Int(64) @block0
     value v4: TypeRef("?") @block0

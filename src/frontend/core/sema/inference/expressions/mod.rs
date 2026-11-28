@@ -289,10 +289,7 @@ pub struct ExpressionInferrer<'a> {
     /// RFC-011a §6 存在类型强制点（具体→存在包装点，ir_gen 按 span 查表注入包装）
     pub existential_coercions: Vec<super::existential::ExistentialCoercion>,
     /// RFC-011b: 运算符派发点（显式接口实现命中处，ir_gen 按 span 注入方法调用）
-    pub try_expr_impls: Vec<(
-        crate::util::span::Span,
-        crate::frontend::core::types::identity::Nominal,
-    )>,
+    pub try_expr_impls: crate::frontend::core::sema::operator_interfaces::TryExprImpls,
     pub operator_dispatches:
         Vec<crate::frontend::core::sema::operator_interfaces::OperatorDispatch>,
     /// 依赖类型环境（效应查询）—— 由 StatementChecker 注入

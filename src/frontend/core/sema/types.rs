@@ -67,14 +67,11 @@ pub struct TypeCheckResult {
     /// RFC-011a §3：重载决议表（**调用点 `PlanId` 键控**，RFC-039 D20/WBS 4.5.2；
     /// ir_gen 据此把方法调用命名为决议出的混编名——同名多候选时裸名会撞函数表）
     pub overload_resolutions: OverloadResolutions,
-    /// RFC-011b `?` 表达式的 Try 实现**类型身份**（span 键控；ir_gen 据此
-    /// 命名四方法调用链——接收者是任意表达式时类型身份别无来处）。
-    /// 身份（module + 定义名）而非裸名：跨模块同名 Try 类型的四方法调用名
-    /// 按定义模块限定，单文件仍投影为裸名（D64 显示口径）。
-    pub try_expr_impls: Vec<(
-        crate::util::span::Span,
-        crate::frontend::core::types::identity::Nominal,
-    )>,
+    /// RFC-011b `?` 表达式的 Try 结算结果（span 键控）：实现**类型身份**（module +
+    /// 定义名；跨模块同名 Try 类型的四方法调用名按定义模块限定，单文件投影为裸名，
+    /// D64 显示口径）+ 成功载荷 + 残余载荷。三样同出一次结算：ir_gen 据此命名四方法
+    /// 并落它们的结果类型（接收者是任意表达式时，这几样都别无来处）。
+    pub try_expr_impls: super::operator_interfaces::TryExprImpls,
     /// #389 match scrutinee 推断类型（match 节点 span 键控；ir_gen 的
     /// generate_match_expr_ir 按 span 回查——AST 猜测器对调用/内联构造/
     /// 字段访问形态返回 None，Union 模式会被 #330 安全网误拦 E3008）

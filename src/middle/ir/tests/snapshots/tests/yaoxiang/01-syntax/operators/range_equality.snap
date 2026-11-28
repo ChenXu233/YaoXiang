@@ -27,7 +27,7 @@ module
     value v19: Never @block0
     value v20: Bool @block0
     value v21: Generic { name: "Range", args: [Int(64)] } @block0
-    value v22: TypeRef("?") @block0
+    value v22: Generic { name: "Range", args: [Int(64)] } @block0
     value v23: Int(64) @block0
     value v24: Int(64) @block0
     value v25: Int(64) @block0

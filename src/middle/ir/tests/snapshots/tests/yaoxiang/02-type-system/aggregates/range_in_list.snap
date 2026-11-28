@@ -12,12 +12,12 @@ module
     slot[9] p : Int(64) @depth2
     locals_total=16
     values_total=75
-    value v0: TypeRef("?") @block0
+    value v0: Generic { name: "Range", args: [Int(64)] } @block0
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
-    value v5: TypeRef("?") @block0
+    value v5: Generic { name: "Range", args: [Int(64)] } @block0
     value v6: Int(64) @block0
     value v7: Int(64) @block0
     value v8: Int(64) @block0

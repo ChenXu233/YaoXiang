@@ -183,10 +183,7 @@ pub struct StatementChecker {
     /// RFC-010: 和类型登记表（类型名 → 变体定义，声明序）
     sum_types: HashMap<String, Vec<crate::frontend::core::sema::environment::SumVariantDef>>,
     /// RFC-011b: 运算符派发点（显式接口实现命中处，ir_gen 按 span 注入方法调用）
-    pub try_expr_impls: Vec<(
-        crate::util::span::Span,
-        crate::frontend::core::types::identity::Nominal,
-    )>,
+    pub try_expr_impls: crate::frontend::core::sema::operator_interfaces::TryExprImpls,
     pub operator_dispatches:
         Vec<crate::frontend::core::sema::operator_interfaces::OperatorDispatch>,
     /// #389：match scrutinee 推断类型（match 节点 span 键控，ir_gen 回查）

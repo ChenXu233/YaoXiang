@@ -271,6 +271,11 @@ impl AstToIrGenerator {
             elem_size: Operand::Const(ConstValue::Int(1)),
             span: self.cur_span,
         });
+        // 推导式的结果类型 = Vec(元素类型)：元素表达式已是定型来源（字面量/调用/
+        // `?` 等），这里落一次；拿不到就保持显式未知（不猜）。
+        if let Some(element_ty) = self.expr_value_type(element) {
+            self.note_value_type(&result_reg, MonoType::make_list(element_ty));
+        }
 
         self.generate_comp_generators_ir(
             element,

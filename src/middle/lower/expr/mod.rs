@@ -304,6 +304,11 @@ impl AstToIrGenerator {
                     .build()
                 })? as u32;
             let payload_reg = self.next_temp_reg();
+            // 载荷值自身的类型：包装点绕过了常规 prologue（下面那段），这里补同一份
+            // 来源——`Dog(...)` 这类构造调用的结果类型只在表达式结果类型表里。
+            if let Some(ty) = self.expr_value_type(expr) {
+                self.note_value_type(&payload_reg, ty);
+            }
             self.generate_expr_ir_inner(expr, payload_reg.clone(), instructions, constants, env)?;
             // 包装点的结果类型 = 接口类型（值表用；不取具体实参类型）。
             self.note_value_type(

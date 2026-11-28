@@ -69,7 +69,7 @@ module
     values_total=70
     value v0: Never @block0
     value v1: Bool @block0
-    value v2: Int(64) @block0
+    value v2: Float(64) @block0
     value v3: Float(64) @block0
     value v4: Int(64) @block0
     value v5: Float(64) @block0
@@ -83,14 +83,14 @@ module
     value v13: Generic { name: "String", args: [] } @block0
     value v14: Never @block0
     value v15: Bool @block0
-    value v16: Int(64) @block0
+    value v16: Float(64) @block0
     value v17: Float(64) @block0
     value v18: Int(64) @block0
     value v19: Float(64) @block0
     value v20: Generic { name: "String", args: [] } @block0
     value v21: Never @block0
     value v22: Bool @block0
-    value v23: Int(64) @block0
+    value v23: Float(64) @block0
     value v24: Float(64) @block0
     value v25: Int(64) @block0
     value v26: Float(64) @block0

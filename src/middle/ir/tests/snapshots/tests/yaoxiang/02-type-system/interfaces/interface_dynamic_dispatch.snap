@@ -117,12 +117,12 @@ module
     locals_total=11
     values_total=116
     value v0: TypeRef("Animal") @block0
-    value v1: TypeRef("?") @block0
+    value v1: Struct(StructType { name: "Dog", fields: [("name", Generic { name: "String", args: [] }), ("age_years", Int(64))], methods: {}, interfaces: ["Animal"] }) @block0
     value v2: Generic { name: "String", args: [] } @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: TypeRef("Animal") @block0
-    value v6: TypeRef("?") @block0
+    value v6: Struct(StructType { name: "Cat", fields: [("lives", Int(64))], methods: {}, interfaces: ["Animal"] }) @block0
     value v7: Int(64) @block0
     value v8: Int(64) @block0
     value v9: TypeRef("?") @block0
@@ -212,7 +212,7 @@ module
     value v93: Generic { name: "String", args: [] } @block0
     value v94: Generic { name: "Vec", args: [TypeRef("Animal")] } @block0
     value v95: TypeRef("Animal") @block0
-    value v96: TypeRef("?") @block0
+    value v96: Struct(StructType { name: "Dog", fields: [("name", Generic { name: "String", args: [] }), ("age_years", Int(64))], methods: {}, interfaces: ["Animal"] }) @block0
     value v97: Generic { name: "String", args: [] } @block0
     value v98: Int(64) @block0
     value v99: Never @block0

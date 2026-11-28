@@ -100,24 +100,32 @@ impl AstToIrGenerator {
         let receiver_ty = self
             .get_expr_mono_type(expr)
             .or_else(|| self.operand_known_type(&receiver_reg));
-        let (payload_ty, residual_ty) = {
-            use crate::frontend::core::types::MonoType;
-            let mut resolved = receiver_ty.clone();
-            while let Some(MonoType::Ref { inner, .. }) = resolved {
-                resolved = Some(*inner);
-            }
-            match resolved {
-                Some(MonoType::Generic { args, .. }) if !args.is_empty() => {
-                    (Some(args[0].clone()), args.get(1).cloned())
+        // Try 结算结果（实现名 + 两个载荷位）：typecheck 在同一个 `?` 节点上算过
+        // （`query_try_impl` 一次查询给出三样），这是**首选来源**——用户 Try 类型的
+        // 载荷位不在类型实参里（非泛型 sum 如 `Maybe`），IR 侧反推不出来。
+        let try_info = self.try_expr_impls.get(&span).cloned();
+        let (payload_ty, residual_ty) = match &try_info {
+            Some(info) => (Some(info.ok_ty.clone()), Some(info.err_ty.clone())),
+            None => {
+                use crate::frontend::core::types::MonoType;
+                let mut resolved = receiver_ty.clone();
+                while let Some(MonoType::Ref { inner, .. }) = resolved {
+                    resolved = Some(*inner);
                 }
-                _ => (None, None),
+                match resolved {
+                    Some(MonoType::Generic { args, .. }) if !args.is_empty() => {
+                        (Some(args[0].clone()), args.get(1).cloned())
+                    }
+                    _ => (None, None),
+                }
             }
         };
 
         // 接收者**类型身份** → 四个方法的目标名。
         // 优先按 span 查 typecheck 记录的实现身份（接收者是任意表达式时这是
-        // 唯一来处）；退回表达式类型推导（局部变量形态）。
-        let base_identity = self.try_expr_impls.get(&span).cloned().or_else(|| {
+        // 唯一来处；同一次结算还带两个载荷位，见上面 `try_info`）；退回表达式
+        // 类型推导（局部变量形态）。
+        let base_identity = try_info.map(|info| info.impl_identity).or_else(|| {
             self.get_expr_mono_type(expr).and_then(|ty| {
                 let mut ty = ty;
                 while let crate::frontend::core::types::MonoType::Ref { inner, .. } = ty {

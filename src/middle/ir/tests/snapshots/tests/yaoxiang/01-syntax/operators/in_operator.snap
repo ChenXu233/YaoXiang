@@ -52,7 +52,7 @@ module
     value v46: Never @block0
     value v47: Bool @block0
     value v48: Int(64) @block0
-    value v49: TypeRef("?") @block0
+    value v49: Generic { name: "Range", args: [Int(64)] } @block0
     value v50: Int(64) @block0
     value v51: Int(64) @block0
     value v52: Int(64) @block0
@@ -64,7 +64,7 @@ module
     value v58: Bool @block0
     value v59: Bool @block0
     value v60: Int(64) @block0
-    value v61: TypeRef("?") @block0
+    value v61: Generic { name: "Range", args: [Int(64)] } @block0
     value v62: Int(64) @block0
     value v63: Int(64) @block0
     value v64: Int(64) @block0

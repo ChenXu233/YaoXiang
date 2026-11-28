@@ -15,7 +15,7 @@ module
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Generic { name: "String", args: [] } @block0
-    value v6: TypeRef("?") @block0
+    value v6: Generic { name: "Range", args: [Int(64)] } @block0
     value v7: Int(64) @block0
     value v8: Int(64) @block0
     value v9: Int(64) @block0

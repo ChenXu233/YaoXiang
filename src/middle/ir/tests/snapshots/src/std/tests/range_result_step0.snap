@@ -122,7 +122,7 @@ module
     value v33: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block0
     value v34: Generic { name: "String", args: [] } @block0
     value v35: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block0
-    value v36: TypeRef("?") @block0
+    value v36: Generic { name: "Range", args: [Int(64)] } @block0
     value v37: Int(64) @block0
     value v38: Int(64) @block0
     value v39: Int(64) @block0

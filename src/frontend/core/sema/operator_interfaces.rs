@@ -318,6 +318,28 @@ pub struct OperatorDispatch {
     pub result_type: Option<MonoType>,
 }
 
+#[derive(Debug, Clone)]
+/// `?` 表达式的 Try 结算结果（RFC-011b）：实现类型名 + 成功载荷 + 残余载荷。
+///
+/// 三个字段出自**同一处**登记表查询（[`query_try_impl`]）：`?` 的值类型是
+/// `ok`、失败路径传播的是 `err`。IR 侧无法从接收者类型反推——用户 Try 类型的
+/// 载荷位不在类型实参里（如非泛型 sum 类型 `Maybe`），所以这份事实必须随
+/// 结算点一起走。
+pub struct TryExprInfo {
+    /// Try 实现所在类型的**身份**（module + 定义名；`Result` / `Option` / 用户类型）。
+    /// IR 据此命名四方法：跨模块同名 Try 类型的调用名按定义模块限定，单文件投影
+    /// 为裸名（D64 口径）。
+    pub impl_identity: Nominal,
+    /// 成功载荷（`success` 的返回位，也是 `?` 表达式的值类型）
+    pub ok_ty: MonoType,
+    /// 残余载荷（`residual` 的返回位，失败路径传给 `from_error`）
+    pub err_ty: MonoType,
+}
+
+/// `?` 表达式结算结果的**收集形态**（`TypeCheckResult.try_expr_impls` 的载体）：
+/// span 键控，IR 侧按同一 span 回查实现名与两个载荷位。
+pub type TryExprImpls = Vec<(crate::util::span::Span, TryExprInfo)>;
+
 /// 名义头提取：Struct/TypeRef/Generic 取名字；内建标量无名字返回 None。
 fn type_head_name(ty: &MonoType) -> Option<&str> {
     match ty {

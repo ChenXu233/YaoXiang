@@ -429,6 +429,60 @@ impl AstToIrGenerator {
                 }
                 self.lookup_var_type(name).map(|poly| poly.body.clone())
             }
+            // 二元运算：结果类型由**运算类型规则**给出（不查表、不猜）。派发形态
+            // （`operator_dispatches` 命中）走边界的同一份结算，优先级最高。
+            ast::Expr::BinOp {
+                op,
+                left,
+                right,
+                span,
+                ..
+            } => {
+                if let Some(dispatch) = self.operator_dispatches.get(span) {
+                    return dispatch.result_type.clone();
+                }
+                use crate::ast::BinOp;
+                match op {
+                    // 谓词位恒 Bool（比较 / 逻辑 / 成员判定）
+                    BinOp::Eq
+                    | BinOp::Neq
+                    | BinOp::Lt
+                    | BinOp::Le
+                    | BinOp::Gt
+                    | BinOp::Ge
+                    | BinOp::And
+                    | BinOp::Or => Some(MonoType::Bool),
+                    // 区间：start/end/step 三槽的 Int 区间（#300）
+                    BinOp::Range => Some(MonoType::Generic {
+                        name: Nominal::flat(AsRef::<str>::as_ref(&("Range")))
+                            .expect("Range 是裸类型名"),
+                        args: vec![MonoType::Int(64)],
+                    }),
+                    // 赋值表达式：值 = 右值类型
+                    BinOp::Assign => self.expr_value_type(right),
+                    // 算术 / 位运算：两侧同型取该型；Int 与 Float 混合按 Float（数值提升）
+                    _ => {
+                        let l = self.expr_value_type(left);
+                        let r = self.expr_value_type(right);
+                        match (l, r) {
+                            (Some(l), Some(r)) if l == r => Some(l),
+                            (Some(MonoType::Int(_)), Some(MonoType::Float(_)))
+                            | (Some(MonoType::Float(_)), Some(MonoType::Int(_))) => {
+                                Some(MonoType::Float(64))
+                            }
+                            _ => None,
+                        }
+                    }
+                }
+            }
+            // 一元运算：取反恒 Bool，其余取子表达式类型
+            ast::Expr::UnOp {
+                op, expr: inner, ..
+            } => match op {
+                crate::ast::UnOp::Not => Some(MonoType::Bool),
+                crate::ast::UnOp::Neg | crate::ast::UnOp::Pos => self.expr_value_type(inner),
+                crate::ast::UnOp::Deref => self.expr_value_type(inner),
+            },
             // 字面量的类型是可信来源（与值表落库走同一条映射）。
             ast::Expr::Lit(literal, _) => {
                 crate::middle::lower::expr::lit::literal_const_value(literal).mono_type()
