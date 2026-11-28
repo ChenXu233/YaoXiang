@@ -529,7 +529,7 @@ python scripts/dev/testsuite.py plan
 
 - `len` 是 UTF-8 字节数，不是码点数。
 - 字符串不以 NUL 结尾，内容可以包含 0 字节；运行时一律按显式长度处理，禁止 `strlen` / `strcmp` / `printf("%s")` 一类以 NUL 为界的调用。该契约的端到端判据是含内嵌 NUL 的常量输出（`test_native_embedded_nul_stdout_matches_vm`）：把 `__yx_rt_print_str` 的 `fwrite(ptr, 1, len)` 换成 `fputs(ptr)` 会让它变红。
-- 已知缺口（前端，不属 L4）：`\0` 与 `\u{0}` 这类**转义拼写**在到达 IR 之前就被丢掉（`string.len("a\u{0}b")` 在 VM 与 AOT 都返回 2），因此含内嵌 NUL 的可达形态目前是源码里的**裸 NUL 字节**；该缺口归前端 escape 解码，L4 按 IR 事实物化。
+- 含 NUL 的可达形态既有源码里的**裸 NUL 字节**，也有 `\0` / `\u{0}` 两种**转义拼写**：前端 `decode_escape` 的 `0` 臂与 `u{...}` 码点解码都会把它解成真实的 NUL 字节并进入 IR（`string.len("a\u{0}b")` 在 VM 与 AOT 都是 3，输出 `61 00 62 0a`），三种写法的字节由同一条 `{ptr, len}` 物化路径承载，L4 按 IR 事实物化、不区分字面量在源码里怎么拼；判据 `test_native_embedded_nul_stdout_matches_vm` 与 `test_native_embedded_nul_comparison_matches_vm` 用裸字节写法钉该路径（VM 与 AOT 输出同为 `61 00 62 0a`）。
 - 批次 4.1 的字符串只有静态字面量一种来源：LLVM 全局常量，生命期等于进程，**永不释放**，语义是借用视图。
 - 字面量按**裸字节数组**物化（`[N x i8]`，`set_constant`），**不追加 NUL 终止符、不以 NUL 为界**：`{ptr, len}` 的 `len` 是真实字节数，含内嵌 NUL 的常量整段落盘。批次 4.6 修掉的正是 `build_global_string_ptr`（C 字符串通道）在第一个 NUL 处截断、而 `len` 仍按 `str::len()` 计数导致「长度与落盘字节不一致」的既有缺陷；判据 `test_native_embedded_nul_stdout_matches_vm`、`test_native_embedded_nul_comparison_matches_vm`（受控变异：把物化换回 C 字符串通道，两条判据都变红）。
 - 所有权是**编译期事实**：由 IR 的释放计划决定谁在哪个语句边界释放，L4 不重做所有权分析；值里不携带运行时所有权标记。

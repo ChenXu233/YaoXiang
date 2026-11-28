@@ -2478,8 +2478,10 @@ mod enabled {
     fn test_native_embedded_nul_stdout_matches_vm() {
         // Arrange：字符串常量含**内嵌 NUL 字节**——`String` 是 `{ptr,len}` 借用视图，长度是
         // 真实字节数，输出按显式长度落字节（不追加 NUL、不以 NUL 为界）。
-        // 注：`\\0` / `\\u{0}` 这类**转义拼写**在到达 IR 之前就被丢掉（前端 escape 解码
-        // 的既有缺口，见 t26 finding），因此这里用运行期真字节钉端到端契约。
+        // 注：含 NUL 的形态三种写法都可达——源码里的裸 NUL 字节，以及 `\\0` / `\\u{0}`
+        // 两种转义拼写（前端 `decode_escape` 的 `0` 臂与 `u{...}` 解码都会解成真实 NUL
+        // 字节并进入 IR），三种写法的字节由同一条 `{ptr,len}` 物化路径承载；这里用裸字节
+        // 钉端到端契约（VM 与 AOT 输出同为 `61 00 62 0a`）。
         let source = concat!(
             "use std.io\n",
             "main: () -> Void = {\n",
