@@ -15,9 +15,9 @@ module
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
-    value v4: TypeRef("?") @block0
+    value v4: Int(64) @block0
     value v5: Int(64) @block0
-    value v6: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
+    value v6: Fn { params: [Literal { name: "42", base_type: Int(64), value: Int(42) }], return_type: Int(64) } @block0
     value v7: Int(64) @block0
     value v8: Int(64) @block0
     Load %0 <- arg%0
@@ -42,9 +42,9 @@ module
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
-    value v4: TypeRef("?") @block0
+    value v4: Int(64) @block0
     value v5: Int(64) @block0
-    value v6: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
+    value v6: Fn { params: [Literal { name: "42", base_type: Int(64), value: Int(42) }], return_type: Int(64) } @block0
     value v7: Int(64) @block0
     value v8: Int(64) @block0
     Load %0 <- arg%0
@@ -73,9 +73,9 @@ module
     value v4: Int(64) @block0
     value v5: Int(64) @block0
     value v6: Int(64) @block0
-    value v7: TypeRef("?") @block0
+    value v7: Int(64) @block0
     value v8: Int(64) @block0
-    value v9: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
+    value v9: Fn { params: [Literal { name: "7", base_type: Int(64), value: Int(7) }], return_type: Int(64) } @block0
     value v10: Int(64) @block0
     value v11: Int(64) @block0
     Load %0 <- arg%0
@@ -108,9 +108,9 @@ module
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Generic { name: "String", args: [] } @block0
-    value v5: TypeRef("?") @block0
+    value v5: Int(64) @block0
     value v6: Int(64) @block0
-    value v7: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
+    value v7: Fn { params: [Literal { name: "42", base_type: Int(64), value: Int(42) }], return_type: Int(64) } @block0
     value v8: Int(64) @block0
     Load %0 <- arg%0
     Load v2 <- %0
@@ -133,7 +133,7 @@ module
     locals_total=9
     values_total=34
     value v0: Int(64) @block0
-    value v1: Fn { params: [TypeRef("N")], return_type: Int(64) } @block0
+    value v1: Fn { params: [Literal { name: "42", base_type: Int(64), value: Int(42) }], return_type: Int(64) } @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
@@ -141,27 +141,27 @@ module
     value v6: Int(64) @block0
     value v7: Int(64) @block0
     value v8: Int(64) @block0
-    value v9: TypeRef("?") @block0
+    value v9: Never @block0
     value v10: Bool @block0
     value v11: Int(64) @block0
     value v12: Int(64) @block0
     value v13: Generic { name: "String", args: [] } @block0
-    value v14: TypeRef("?") @block0
+    value v14: Never @block0
     value v15: Bool @block0
     value v16: Int(64) @block0
     value v17: Int(64) @block0
     value v18: Generic { name: "String", args: [] } @block0
-    value v19: TypeRef("?") @block0
+    value v19: Never @block0
     value v20: Bool @block0
     value v21: Int(64) @block0
     value v22: Int(64) @block0
     value v23: Generic { name: "String", args: [] } @block0
-    value v24: TypeRef("?") @block0
+    value v24: Never @block0
     value v25: Bool @block0
     value v26: Int(64) @block0
     value v27: Int(64) @block0
     value v28: Generic { name: "String", args: [] } @block0
-    value v29: TypeRef("?") @block0
+    value v29: Never @block0
     value v30: Bool @block0
     value v31: Int(64) @block0
     value v32: Int(64) @block0

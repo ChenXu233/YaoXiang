@@ -17,7 +17,7 @@ module
     value v9: TypeRef("?") @block0
     value v10: Int(64) @block0
     value v11: Int(64) @block0
-    value v12: TypeRef("?") @block0
+    value v12: Never @block0
     value v13: Bool @block0
     value v14: Int(64) @block0
     value v15: Int(64) @block0

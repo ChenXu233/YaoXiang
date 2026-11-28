@@ -4,7 +4,7 @@ module
   fn Vec3.add(Ref { mutable: false, inner: TypeRef("Vec3") }, Ref { mutable: false, inner: TypeRef("Vec3") }) -> TypeRef("Vec3")
     locals_total=7
     values_total=16
-    value v0: TypeRef("Vec3") @block0
+    value v0: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Add"] }) @block0
     value v1: TypeRef("?") @block0
     value v2: TypeRef("?") @block0
     value v3: TypeRef("?") @block0

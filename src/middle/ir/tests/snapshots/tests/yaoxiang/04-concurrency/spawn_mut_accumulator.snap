@@ -10,7 +10,7 @@ module
     locals_total=12
     values_total=42
     value v0: Int(64) @block0
-    value v1: TypeRef("?") @block0
+    value v1: Never @block0
     value v2: Bool @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
@@ -27,7 +27,7 @@ module
     value v15: TypeRef("?") @block0
     value v16: Int(64) @block0
     value v17: Int(64) @block0
-    value v18: TypeRef("?") @block0
+    value v18: Never @block0
     value v19: Bool @block0
     value v20: Int(64) @block0
     value v21: Int(64) @block0
@@ -46,7 +46,7 @@ module
     value v34: TypeRef("?") @block0
     value v35: Int(64) @block0
     value v36: Int(64) @block0
-    value v37: TypeRef("?") @block0
+    value v37: Never @block0
     value v38: Bool @block0
     value v39: Int(64) @block0
     value v40: Int(64) @block0

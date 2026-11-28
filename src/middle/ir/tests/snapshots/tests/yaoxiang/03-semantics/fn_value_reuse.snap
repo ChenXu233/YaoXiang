@@ -31,33 +31,33 @@ module
     slot[2] f2 : Int(64) @depth1
     locals_total=7
     values_total=39
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Fn { params: [Int(64)], return_type: Int(64) } @block0
     value v6: Generic { name: "String", args: [] } @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
     value v9: Int(64) @block0
     value v10: Int(64) @block0
     value v11: Int(64) @block0
     value v12: Generic { name: "String", args: [] } @block0
-    value v13: TypeRef("?") @block0
+    value v13: Never @block0
     value v14: Bool @block0
     value v15: Int(64) @block0
     value v16: Int(64) @block0
     value v17: Fn { params: [Int(64)], return_type: Int(64) } @block0
     value v18: Int(64) @block0
     value v19: Generic { name: "String", args: [] } @block0
-    value v20: TypeRef("?") @block0
+    value v20: Never @block0
     value v21: Bool @block0
     value v22: Int(64) @block0
     value v23: Int(64) @block0
     value v24: Int(64) @block0
     value v25: Generic { name: "String", args: [] } @block0
-    value v26: TypeRef("?") @block0
+    value v26: Never @block0
     value v27: Bool @block0
     value v28: Int(64) @block0
     value v29: Int(64) @block0
@@ -68,7 +68,7 @@ module
     value v34: Int(64) @block0
     value v35: Fn { params: [Int(64)], return_type: Int(64) } @block0
     value v36: Generic { name: "String", args: [] } @block0
-    value v37: TypeRef("?") @block0
+    value v37: Void @block0
     value v38: Generic { name: "String", args: [] } @block0
     MakeClosure %0 <- double env=[] (def=d0)
     Load v4 <- int(5)

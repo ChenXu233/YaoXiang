@@ -14,17 +14,17 @@ module
     value v6: Int(64) @block0
     value v7: Int(64) @block0
     value v8: Int(64) @block0
-    value v9: TypeRef("?") @block0
+    value v9: Never @block0
     value v10: Bool @block0
     value v11: Generic { name: "Range", args: [Int(64)] } @block0
     value v12: Generic { name: "Range", args: [Int(64)] } @block0
     value v13: Generic { name: "String", args: [] } @block0
-    value v14: TypeRef("?") @block0
+    value v14: Never @block0
     value v15: Bool @block0
     value v16: Generic { name: "Range", args: [Int(64)] } @block0
     value v17: Generic { name: "Range", args: [Int(64)] } @block0
     value v18: Generic { name: "String", args: [] } @block0
-    value v19: TypeRef("?") @block0
+    value v19: Never @block0
     value v20: Bool @block0
     value v21: Generic { name: "Range", args: [Int(64)] } @block0
     value v22: TypeRef("?") @block0
@@ -32,7 +32,7 @@ module
     value v24: Int(64) @block0
     value v25: Int(64) @block0
     value v26: Generic { name: "String", args: [] } @block0
-    value v27: TypeRef("?") @block0
+    value v27: Never @block0
     value v28: Bool @block0
     value v29: TypeRef("?") @block0
     value v30: TypeRef("?") @block0
@@ -41,7 +41,7 @@ module
     value v33: Int(64) @block0
     value v34: Generic { name: "String", args: [] } @block0
     value v35: Generic { name: "String", args: [] } @block0
-    value v36: TypeRef("?") @block0
+    value v36: Never @block0
     value v37: Bool @block0
     value v38: TypeRef("?") @block0
     value v39: TypeRef("?") @block0
@@ -50,7 +50,7 @@ module
     value v42: Int(64) @block0
     value v43: Generic { name: "String", args: [] } @block0
     value v44: Generic { name: "String", args: [] } @block0
-    value v45: TypeRef("?") @block0
+    value v45: Never @block0
     value v46: Bool @block0
     value v47: TypeRef("?") @block0
     value v48: TypeRef("?") @block0
@@ -63,7 +63,7 @@ module
     value v55: Int(64) @block0
     value v56: Int(64) @block0
     value v57: Generic { name: "String", args: [] } @block0
-    value v58: TypeRef("?") @block0
+    value v58: Never @block0
     value v59: Bool @block0
     value v60: TypeRef("?") @block0
     value v61: TypeRef("?") @block0
@@ -76,7 +76,7 @@ module
     value v68: Int(64) @block0
     value v69: Int(64) @block0
     value v70: Generic { name: "String", args: [] } @block0
-    value v71: TypeRef("?") @block0
+    value v71: Never @block0
     value v72: Bool @block0
     value v73: TypeRef("?") @block0
     value v74: TypeRef("?") @block0
@@ -91,7 +91,7 @@ module
     value v83: Int(64) @block0
     value v84: Int(64) @block0
     value v85: Generic { name: "String", args: [] } @block0
-    value v86: TypeRef("?") @block0
+    value v86: Never @block0
     value v87: Bool @block0
     value v88: TypeRef("?") @block0
     value v89: TypeRef("?") @block0

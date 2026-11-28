@@ -15,13 +15,13 @@ module
     value v7: Int(64) @block0
     value v8: Generic { name: "Vec", args: [Int(64)] } @block0
     value v9: TypeRef("?") @block0
-    value v10: TypeRef("?") @block0
+    value v10: Never @block0
     value v11: Bool @block0
-    value v12: TypeRef("?") @block0
+    value v12: Int(64) @block0
     value v13: Int(64) @block0
     value v14: Generic { name: "Vec", args: [Int(64)] } @block0
     value v15: Generic { name: "String", args: [] } @block0
-    value v16: TypeRef("?") @block0
+    value v16: Never @block0
     value v17: Bool @block0
     value v18: Int(64) @block0
     value v19: Int(64) @block0

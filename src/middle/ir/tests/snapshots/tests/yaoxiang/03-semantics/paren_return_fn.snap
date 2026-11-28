@@ -32,41 +32,41 @@ module
     slot[0] h : Int(64) @depth1
     locals_total=4
     values_total=36
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
-    value v2: TypeRef("?") @block0
+    value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Fn { params: [Int(64)], return_type: Int(64) } @block0
     value v6: Generic { name: "String", args: [] } @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
-    value v9: TypeRef("?") @block0
+    value v9: Int(64) @block0
     value v10: Int(64) @block0
     value v11: Fn { params: [], return_type: Int(64) } @block0
     value v12: Generic { name: "String", args: [] } @block0
-    value v13: TypeRef("?") @block0
+    value v13: Never @block0
     value v14: Bool @block0
-    value v15: TypeRef("?") @block0
+    value v15: Int(64) @block0
     value v16: Int(64) @block0
     value v17: Int(64) @block0
     value v18: Fn { params: [Int(64)], return_type: Int(64) } @block0
     value v19: Int(64) @block0
     value v20: Generic { name: "String", args: [] } @block0
-    value v21: TypeRef("?") @block0
+    value v21: Never @block0
     value v22: Bool @block0
     value v23: Int(64) @block0
     value v24: Int(64) @block0
     value v25: TypeRef("?") @block0
     value v26: Generic { name: "String", args: [] } @block0
-    value v27: TypeRef("?") @block0
+    value v27: Never @block0
     value v28: Bool @block0
     value v29: Int(64) @block0
     value v30: Int(64) @block0
     value v31: Int(64) @block0
     value v32: Fn { params: [Int(64)], return_type: Int(64) } @block0
     value v33: Generic { name: "String", args: [] } @block0
-    value v34: TypeRef("?") @block0
+    value v34: Void @block0
     value v35: Generic { name: "String", args: [] } @block0
     Load v4 <- int(5)
     Call v5 <- string("mk") [] (def=d3)

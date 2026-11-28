@@ -2,45 +2,45 @@ module
   fn main() -> Void
     locals_total=3
     values_total=44
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
     value v2: Bool @block0
     value v3: Bool @block0
     value v4: Bool @block0
     value v5: Generic { name: "String", args: [] } @block0
-    value v6: TypeRef("?") @block0
+    value v6: Never @block0
     value v7: Bool @block0
     value v8: Bool @block0
     value v9: Bool @block0
     value v10: Bool @block0
     value v11: Generic { name: "String", args: [] } @block0
-    value v12: TypeRef("?") @block0
+    value v12: Never @block0
     value v13: Bool @block0
     value v14: Bool @block0
     value v15: Bool @block0
     value v16: Bool @block0
     value v17: Bool @block0
     value v18: Generic { name: "String", args: [] } @block0
-    value v19: TypeRef("?") @block0
+    value v19: Never @block0
     value v20: Bool @block0
     value v21: Bool @block0
     value v22: Bool @block0
     value v23: Bool @block0
     value v24: Bool @block0
     value v25: Generic { name: "String", args: [] } @block0
-    value v26: TypeRef("?") @block0
+    value v26: Never @block0
     value v27: Bool @block0
     value v28: Bool @block0
     value v29: Bool @block0
     value v30: Bool @block0
     value v31: Generic { name: "String", args: [] } @block0
-    value v32: TypeRef("?") @block0
+    value v32: Never @block0
     value v33: Bool @block0
     value v34: Bool @block0
     value v35: Bool @block0
     value v36: Bool @block0
     value v37: Generic { name: "String", args: [] } @block0
-    value v38: TypeRef("?") @block0
+    value v38: Never @block0
     value v39: Bool @block0
     value v40: Bool @block0
     value v41: Int(64) @block0

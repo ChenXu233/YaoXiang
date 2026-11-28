@@ -22,7 +22,7 @@ module
     value v9: Int(64) @block0
     value v10: Generic { name: "Vec", args: [Int(64)] } @block0
     value v11: TypeRef("?") @block0
-    value v12: TypeRef("?") @block0
+    value v12: Never @block0
     value v13: Bool @block0
     value v14: Generic { name: "String", args: [] } @block0
     value v15: Int(64) @block0
@@ -37,7 +37,7 @@ module
     value v24: Int(64) @block0
     value v25: Generic { name: "Vec", args: [Int(64)] } @block0
     value v26: TypeRef("?") @block0
-    value v27: TypeRef("?") @block0
+    value v27: Never @block0
     value v28: Bool @block0
     value v29: Generic { name: "String", args: [] } @block0
     value v30: Int(64) @block0
@@ -53,7 +53,7 @@ module
     value v40: Generic { name: "Vec", args: [Int(64)] } @block0
     value v41: TypeRef("?") @block0
     value v42: Int(64) @block0
-    value v43: TypeRef("?") @block0
+    value v43: Never @block0
     value v44: Bool @block0
     value v45: Int(64) @block0
     value v46: Int(64) @block0
@@ -68,11 +68,11 @@ module
     value v55: Int(64) @block0
     value v56: Int(64) @block0
     value v57: Int(64) @block0
-    value v58: TypeRef("?") @block0
+    value v58: Generic { name: "Vec", args: [Int(64)] } @block0
     value v59: Generic { name: "Vec", args: [Int(64)] } @block0
     value v60: TypeRef("?") @block0
     value v61: TypeRef("?") @block0
-    value v62: TypeRef("?") @block0
+    value v62: Never @block0
     value v63: Bool @block0
     value v64: Generic { name: "String", args: [] } @block0
     AllocArray %0 size=int(5), elem=int(1)

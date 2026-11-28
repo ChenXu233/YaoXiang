@@ -8,8 +8,8 @@ module
     value v1: Int(64) @block0
     value v2: Generic { name: "Vec", args: [Int(64)] } @block0
     value v3: Int(64) @block0
-    value v4: TypeRef("?") @block0
-    value v5: TypeRef("?") @block0
+    value v4: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } @block0
+    value v5: Int(64) @block0
     value v6: Generic { name: "Vec", args: [Int(64)] } @block0
     value v7: Int(64) @block0
     AllocArray %0 size=int(1), elem=int(1)
@@ -37,11 +37,11 @@ module
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v5: TypeRef("?") @block0
+    value v5: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } @block0
     value v6: Int(64) @block0
     value v7: Generic { name: "Vec", args: [Int(64)] } @block0
     value v8: Int(64) @block0
-    value v9: TypeRef("?") @block0
+    value v9: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } @block0
     value v10: TypeRef("?") @block0
     value v11: Generic { name: "Vec", args: [Int(64)] } @block0
     value v12: Int(64) @block0
@@ -75,7 +75,7 @@ module
     values_total=5
     value v0: Generic { name: "String", args: [] } @block0
     value v1: Generic { name: "Result", args: [Int(64), TypeRef("Error")] } @block0
-    value v2: TypeRef("?") @block0
+    value v2: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     Load v0 <- string("42")
@@ -92,7 +92,7 @@ module
   fn main() -> Void
     locals_total=4
     values_total=14
-    value v0: TypeRef("?") @block0
+    value v0: Void @block0
     value v1: TypeRef("?") @block0
     value v2: TypeRef("?") @block0
     value v3: Generic { name: "String", args: [] } @block0

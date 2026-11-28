@@ -8,12 +8,12 @@ module
     values_total=10
     value v0: Int(64) @block0
     value v1: Generic { name: "Arc", args: [Int(64)] } @block0
-    value v2: TypeRef("?") @block0
+    value v2: Never @block0
     value v3: Bool @block0
     value v4: Generic { name: "String", args: [] } @block0
-    value v5: TypeRef("?") @block0
+    value v5: Void @block0
     value v6: Generic { name: "Arc", args: [Int(64)] } @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
     value v9: Generic { name: "String", args: [] } @block0
     Load %0 <- int(100)

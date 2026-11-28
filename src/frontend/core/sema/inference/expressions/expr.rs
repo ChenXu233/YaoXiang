@@ -2693,7 +2693,22 @@ impl<'a> ExpressionInferrer<'a> {
                 named_args,
                 span,
                 plan_id,
-            } => self.infer_call_expr(func, args, named_args, *span, *plan_id),
+            } => {
+                let ty = self.infer_call_expr(func, args, named_args, *span, *plan_id)?;
+                // 调用点结果类型落表（RFC-039 D20：与 `overload_resolutions` 同一身份）。
+                // 限定名 / native / 方法 / 泛型调用的**最终**类型只有 sema 有：IR 侧按
+                // 被调名反查原生签名取不到，值表遂落显式未知。
+                //
+                // 这里存**原样**推断结果：此刻 zonk 太早——`dict.new()` 的
+                // `Dict(K, V)` 要等后续使用点（`dict.set(d, "a", 1)`）才收敛。收敛
+                // 与「未收敛即不落」的过滤在导出点
+                // （`StatementChecker::finalize_call_result_types`）做一次；身份未分配
+                // 的合成调用（`PlanId::UNPLANNED`）不进表。
+                if plan_id.is_planned() {
+                    self.call_result_types.insert(*plan_id, ty.clone());
+                }
+                Ok(ty)
+            }
 
             // If 表达式
             crate::ast::Expr::If {

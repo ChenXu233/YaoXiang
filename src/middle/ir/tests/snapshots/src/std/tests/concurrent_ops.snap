@@ -3,14 +3,14 @@ module
     slot[0] tid : Int(64) @depth1
     locals_total=4
     values_total=11
-    value v0: TypeRef("?") @block0
+    value v0: Void @block0
     value v1: Int(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Void @block0
     value v3: Int(64) @block0
-    value v4: TypeRef("?") @block0
-    value v5: TypeRef("?") @block0
+    value v4: Void @block0
+    value v5: Never @block0
     value v6: Bool @block0
-    value v7: TypeRef("?") @block0
+    value v7: Int(64) @block0
     value v8: Int(64) @block0
     value v9: Generic { name: "String", args: [] } @block0
     value v10: Generic { name: "String", args: [] } @block0

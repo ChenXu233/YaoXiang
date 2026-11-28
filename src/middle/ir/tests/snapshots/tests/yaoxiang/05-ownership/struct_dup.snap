@@ -54,38 +54,38 @@ module
     values_total=109
     value v0: Int(64) @block0
     value v1: Int(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Never @block0
     value v3: Bool @block0
     value v4: TypeRef("?") @block0
     value v5: Int(64) @block0
     value v6: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v7: Generic { name: "String", args: [] } @block0
-    value v8: TypeRef("?") @block0
+    value v8: Never @block0
     value v9: Bool @block0
     value v10: TypeRef("?") @block0
     value v11: Int(64) @block0
     value v12: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v13: Generic { name: "String", args: [] } @block0
     value v14: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v15: TypeRef("?") @block0
+    value v15: Never @block0
     value v16: Bool @block0
     value v17: Int(64) @block0
     value v18: Int(64) @block0
     value v19: Generic { name: "String", args: [] } @block0
-    value v20: TypeRef("?") @block0
+    value v20: Never @block0
     value v21: Bool @block0
     value v22: TypeRef("?") @block0
     value v23: Int(64) @block0
     value v24: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v25: Generic { name: "String", args: [] } @block0
     value v26: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v27: TypeRef("?") @block0
+    value v27: Never @block0
     value v28: Bool @block0
     value v29: TypeRef("?") @block0
     value v30: Int(64) @block0
     value v31: TypeRef("Point") @block0
     value v32: Generic { name: "String", args: [] } @block0
-    value v33: TypeRef("?") @block0
+    value v33: Never @block0
     value v34: Bool @block0
     value v35: TypeRef("?") @block0
     value v36: Int(64) @block0
@@ -97,21 +97,21 @@ module
     value v42: Int(64) @block0
     value v43: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v44: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v45: TypeRef("?") @block0
+    value v45: Never @block0
     value v46: Bool @block0
     value v47: TypeRef("?") @block0
     value v48: Int(64) @block0
     value v49: TypeRef("?") @block0
     value v50: Struct(StructType { name: "Segment", fields: [("from", TypeRef("Point")), ("to", TypeRef("Point"))], methods: {}, interfaces: [] }) @block0
     value v51: Generic { name: "String", args: [] } @block0
-    value v52: TypeRef("?") @block0
+    value v52: Never @block0
     value v53: Bool @block0
     value v54: TypeRef("?") @block0
     value v55: Int(64) @block0
     value v56: TypeRef("?") @block0
     value v57: Struct(StructType { name: "Segment", fields: [("from", TypeRef("Point")), ("to", TypeRef("Point"))], methods: {}, interfaces: [] }) @block0
     value v58: Generic { name: "String", args: [] } @block0
-    value v59: TypeRef("?") @block0
+    value v59: Never @block0
     value v60: Bool @block0
     value v61: TypeRef("?") @block0
     value v62: Int(64) @block0
@@ -119,13 +119,13 @@ module
     value v64: Generic { name: "String", args: [] } @block0
     value v65: Generic { name: "String", args: [] } @block0
     value v66: Int(64) @block0
-    value v67: TypeRef("?") @block0
+    value v67: Never @block0
     value v68: Bool @block0
     value v69: TypeRef("?") @block0
     value v70: Generic { name: "String", args: [] } @block0
     value v71: Struct(StructType { name: "Named", fields: [("name", Generic { name: "String", args: [] }), ("id", Int(64))], methods: {}, interfaces: [] }) @block0
     value v72: Generic { name: "String", args: [] } @block0
-    value v73: TypeRef("?") @block0
+    value v73: Never @block0
     value v74: Bool @block0
     value v75: TypeRef("?") @block0
     value v76: Int(64) @block0
@@ -133,14 +133,14 @@ module
     value v78: Generic { name: "String", args: [] } @block0
     value v79: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
     value v80: Struct(StructType { name: "Point", fields: [("x", Int(64)), ("y", Int(64))], methods: {}, interfaces: [] }) @block0
-    value v81: TypeRef("?") @block0
+    value v81: Never @block0
     value v82: Bool @block0
     value v83: TypeRef("?") @block0
     value v84: Int(64) @block0
     value v85: TypeRef("?") @block0
     value v86: Struct(StructType { name: "Window", fields: [("view", Ref { mutable: false, inner: TypeRef("Point") })], methods: {}, interfaces: [] }) @block0
     value v87: Generic { name: "String", args: [] } @block0
-    value v88: TypeRef("?") @block0
+    value v88: Never @block0
     value v89: Bool @block0
     value v90: TypeRef("?") @block0
     value v91: Int(64) @block0
@@ -149,13 +149,13 @@ module
     value v94: Generic { name: "String", args: [] } @block0
     value v95: Int(64) @block0
     value v96: Int(64) @block0
-    value v97: TypeRef("?") @block0
+    value v97: Never @block0
     value v98: Bool @block0
     value v99: TypeRef("?") @block0
     value v100: Int(64) @block0
     value v101: Generic { name: "Tuple", args: [Int(64), Int(64)] } @block0
     value v102: Generic { name: "String", args: [] } @block0
-    value v103: TypeRef("?") @block0
+    value v103: Never @block0
     value v104: Bool @block0
     value v105: TypeRef("?") @block0
     value v106: Int(64) @block0

@@ -137,6 +137,8 @@ pub enum Obligation {
     ModuleNamespaces,
     /// `record_models`：typecheck（声明期一遍）→ IR 生成（量词传播）
     RecordModels,
+    /// `call_result_types`：typecheck → IR 生成（**`PlanId` 键控**——调用点身份）
+    CallResultTypes,
 }
 
 /// 红名单条目：已核实的「跨阶段消费者为零」字段的登记
@@ -312,11 +314,17 @@ const INVENTORY: &[ObligationSpec] = &[
         consumer: Stage::IrGeneration,
         red_list: None,
     },
+    ObligationSpec {
+        obligation: Obligation::CallResultTypes,
+        field: "call_result_types",
+        consumer: Stage::IrGeneration,
+        red_list: None,
+    },
 ];
 
 /// IrGeneration 臂在**唯一交付点**交出的义务集
-/// （`consumer_stage() == Stage::IrGeneration` 的 14 条，剔除红名单的 3 条
-/// ——它们没有可交付点）。漂移由 `test_ir_generation_delivery_set_matches_consumer_stage` 钉住。
+/// （`consumer_stage() == Stage::IrGeneration` 的全部义务；本清单内无红名单条目）。
+/// 漂移由 `test_ir_generation_delivery_set_matches_consumer_stage` 钉住。
 pub const IR_GENERATION_DELIVERED: &[Obligation] = &[
     Obligation::ReleasePlan,
     Obligation::EscapedRefs,
@@ -330,6 +338,7 @@ pub const IR_GENERATION_DELIVERED: &[Obligation] = &[
     Obligation::MatchScrutineeTypes,
     Obligation::ModuleNamespaces,
     Obligation::RecordModels,
+    Obligation::CallResultTypes,
 ];
 
 /// 义务**消费侧**的结算输入（RFC-039 D20 / WBS 4.5.1）。
@@ -355,8 +364,8 @@ pub enum ConsumptionState {
 }
 
 impl Obligation {
-    /// 全部 14 个义务（顺序 = 02 §义务字段表；3.4.4/3.4.5/3.4.9 清账后由 16 降为 13，
-    /// 6.9.5-B.2 新增 `record_models`）。
+    /// 全部 15 个义务（顺序 = 02 §义务字段表；3.4.4/3.4.5/3.4.9 清账后由 16 降为 13，
+    /// 6.9.5-B.2 新增 `record_models`，`call_result_types` 新增）。
     pub const ALL: &'static [Obligation] = &[
         Obligation::ProofCalls,
         Obligation::ReleasePlan,
@@ -372,6 +381,7 @@ impl Obligation {
         Obligation::MatchScrutineeTypes,
         Obligation::ModuleNamespaces,
         Obligation::RecordModels,
+        Obligation::CallResultTypes,
     ];
 
     /// 本义务的静态清单条目。
@@ -379,7 +389,7 @@ impl Obligation {
         INVENTORY
             .iter()
             .find(|s| s.obligation == self)
-            .expect("INVENTORY 必须覆盖全部 14 个义务（test_obligation_inventory_covers_every_variant 钉住）")
+            .expect("INVENTORY 必须覆盖全部 15 个义务（test_obligation_inventory_covers_every_variant 钉住）")
     }
 
     /// `TypeCheckResult` 里的字段名（逐字一致；静态门禁据此对账）。
@@ -420,6 +430,7 @@ impl Obligation {
             Obligation::MatchScrutineeTypes => !type_result.match_scrutinee_types.is_empty(),
             Obligation::ModuleNamespaces => !type_result.module_namespaces.is_empty(),
             Obligation::RecordModels => !type_result.record_models.is_empty(),
+            Obligation::CallResultTypes => !type_result.call_result_types.is_empty(),
         }
     }
 

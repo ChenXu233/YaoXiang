@@ -6,7 +6,7 @@ module
     value v0: Int(64) @block0
     value v1: Generic { name: "String", args: [] } @block0
     value v2: Bool @block0
-    value v3: TypeRef("?") @block0
+    value v3: Never @block0
     value v4: Bool @block0
     value v5: Generic { name: "String", args: [] } @block0
     Load v0 <- int(1)

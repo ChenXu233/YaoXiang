@@ -31,7 +31,7 @@ module
     value v10: TypeRef("?") @block0
     value v11: Bool @block0
     value v12: Generic { name: "String", args: [] } @block0
-    value v13: TypeRef("?") @block0
+    value v13: Never @block0
     value v14: Bool @block0
     value v15: Generic { name: "String", args: [] } @block0
     value v16: Generic { name: "String", args: [] } @block0

@@ -2,7 +2,7 @@ module
   fn always_fails() -> Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] }
     locals_total=3
     values_total=3
-    value v0: TypeRef("?") @block0
+    value v0: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } @block0
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     Load v1 <- int(1)
@@ -19,7 +19,7 @@ module
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v5: TypeRef("?") @block0
+    value v5: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } @block0
     value v6: Int(64) @block0
     value v7: Generic { name: "Vec", args: [Int(64)] } @block0
     value v8: Int(64) @block0
@@ -43,7 +43,7 @@ module
   fn main() -> Void
     locals_total=4
     values_total=10
-    value v0: TypeRef("?") @block0
+    value v0: Void @block0
     value v1: TypeRef("?") @block0
     value v2: TypeRef("?") @block0
     value v3: Generic { name: "String", args: [] } @block0

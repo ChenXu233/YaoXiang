@@ -21,13 +21,13 @@ module
     value v14: TypeRef("?") @block0
     value v15: TypeRef("?") @block0
     value v16: TypeRef("?") @block0
-    value v17: TypeRef("?") @block0
+    value v17: Never @block0
     value v18: Bool @block0
     value v19: TypeRef("?") @block0
     value v20: Int(64) @block0
     value v21: Generic { name: "Vec", args: [Int(64)] } @block0
     value v22: Int(64) @block0
-    value v23: TypeRef("?") @block0
+    value v23: Never @block0
     value v24: Bool @block0
     value v25: TypeRef("?") @block0
     value v26: Int(64) @block0

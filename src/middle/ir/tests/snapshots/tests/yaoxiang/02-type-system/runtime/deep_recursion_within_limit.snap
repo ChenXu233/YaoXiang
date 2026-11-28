@@ -9,7 +9,7 @@ module
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
-    value v6: Refined { base: TypeVar(TypeVar(40)), constraint: Call { func: "Terminates", args: [NamedVar("n")] } } @block0
+    value v6: Int(64) @block0
     value v7: Int(64) @block0
     value v8: Int(64) @block0
     value v9: Int(64) @block0
@@ -31,9 +31,9 @@ module
   fn main() -> Void
     locals_total=3
     values_total=6
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
-    value v2: Refined { base: TypeVar(TypeVar(40)), constraint: Call { func: "Terminates", args: [NamedVar("n")] } } @block0
+    value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Generic { name: "String", args: [] } @block0

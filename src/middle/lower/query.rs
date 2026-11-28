@@ -429,7 +429,17 @@ impl AstToIrGenerator {
                 }
                 self.lookup_var_type(name).map(|poly| poly.body.clone())
             }
-            ast::Expr::Call { func, .. } => {
+            ast::Expr::Call { func, plan_id, .. } => {
+                // 调用点结果类型：sema 在 `infer_call_expr` 返回处落的表（同一节点的
+                // 同一 `PlanId`，RFC-039 D20）。限定名 / native / 方法 / 泛型调用的
+                // **最终**类型只有它有——按被调名反查原生签名取不到（#593）。
+                if let Some(ty) = self
+                    .type_result
+                    .as_ref()
+                    .and_then(|tr| tr.call_result_types.get(plan_id))
+                {
+                    return Some(ty.clone());
+                }
                 let ast::Expr::Var(name, _) = func.as_ref() else {
                     return None;
                 };

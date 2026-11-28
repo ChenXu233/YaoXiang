@@ -26,12 +26,12 @@ module
     value v1: Float(64) @block0
     value v2: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v3: Struct(StructType { name: "PointView", fields: [("inner", Ref { mutable: false, inner: TypeRef("Point") })], methods: {}, interfaces: [] }) @block0
-    value v4: TypeRef("?") @block0
+    value v4: Never @block0
     value v5: Bool @block0
     value v6: Generic { name: "String", args: [] } @block0
-    value v7: TypeRef("?") @block0
+    value v7: Void @block0
     value v8: Float(64) @block0
-    value v9: TypeRef("?") @block0
+    value v9: Never @block0
     value v10: Bool @block0
     value v11: Generic { name: "String", args: [] } @block0
     Load v0 <- float(4613937818241073152)

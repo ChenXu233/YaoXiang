@@ -8,7 +8,7 @@ module
     value v1: TypeRef("?") @block0
     value v2: TypeRef("?") @block0
     value v3: TypeRef("?") @block0
-    value v4: TypeRef("?") @block0
+    value v4: Generic { name: "Option", args: [Int(64)] } @block0
     value v5: Int(64) @block0
     value v6: Int(64) @block0
     value v7: Int(64) @block0

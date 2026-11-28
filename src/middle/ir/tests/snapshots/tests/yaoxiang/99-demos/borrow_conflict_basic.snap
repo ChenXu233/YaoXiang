@@ -4,7 +4,7 @@ module
   fn Point.read(Ref { mutable: false, inner: TypeRef("Point") }) -> Void
     locals_total=3
     values_total=3
-    value v0: TypeRef("?") @block0
+    value v0: Void @block0
     value v1: TypeRef("?") @block0
     value v2: Ref { mutable: true, inner: TypeRef("Point") } @block0
     Load v2 <- %0
@@ -44,18 +44,18 @@ module
     values_total=16
     value v0: Float(64) @block0
     value v1: Float(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Void @block0
     value v3: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
-    value v4: TypeRef("?") @block0
+    value v4: Void @block0
     value v5: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v6: Float(64) @block0
     value v7: Float(64) @block0
-    value v8: TypeRef("?") @block0
+    value v8: Never @block0
     value v9: Bool @block0
     value v10: Generic { name: "String", args: [] } @block0
-    value v11: TypeRef("?") @block0
+    value v11: Void @block0
     value v12: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
-    value v13: TypeRef("?") @block0
+    value v13: Never @block0
     value v14: Bool @block0
     value v15: Generic { name: "String", args: [] } @block0
     Load v0 <- float(4607182418800017408)

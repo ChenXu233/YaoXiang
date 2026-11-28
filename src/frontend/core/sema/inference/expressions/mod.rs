@@ -311,6 +311,10 @@ pub struct ExpressionInferrer<'a> {
     /// #389：match scrutinee 推断类型（match 节点 span 键控）——IR 生成期
     /// generate_match_expr_ir 按 span 回查，替代对复合 scrutinee 的 AST 猜测
     pub match_scrutinee_types: HashMap<crate::util::span::Span, MonoType>,
+    /// 调用点结果类型（**调用点 `PlanId` 键控**，RFC-039 D20）：本推断器在
+    /// `infer_call_expr` 返回处落表，随委托回流 `StatementChecker`，最终由
+    /// `TypeCheckResult` 交给 IR 生成（`lower/query.rs::expr_value_type` 按同一身份回查）。
+    pub call_result_types: HashMap<crate::util::plan_id::PlanId, MonoType>,
     /// WBS 3.4.1：编译期不可求值的 const 泛型约束（span + 约束描述）——
     /// 事实收集，经 StatementChecker 回收、checker 发射 W1063（先例同构：
     /// instantiation_requests 等字段的同一条汇聚链）。
@@ -368,6 +372,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             declared_call_site_params: &EMPTY_CALL_SITE_PARAMS,
             match_scrutinee_types: HashMap::new(),
+            call_result_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             proof_fn_bases: &EMPTY_SIGNATURES,
             dep_env: None,
@@ -421,6 +426,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             declared_call_site_params: &EMPTY_CALL_SITE_PARAMS,
             match_scrutinee_types: HashMap::new(),
+            call_result_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             proof_fn_bases: &EMPTY_SIGNATURES,
             dep_env: None,
@@ -475,6 +481,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             declared_call_site_params: &EMPTY_CALL_SITE_PARAMS,
             match_scrutinee_types: HashMap::new(),
+            call_result_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             proof_fn_bases: &EMPTY_SIGNATURES,
             dep_env: None,
@@ -531,6 +538,7 @@ impl<'a> ExpressionInferrer<'a> {
             native_param_names: &EMPTY_NATIVE_PARAM_NAMES,
             declared_call_site_params: &EMPTY_CALL_SITE_PARAMS,
             match_scrutinee_types: HashMap::new(),
+            call_result_types: HashMap::new(),
             unevaluable_const_constraints: Vec::new(),
             proof_fn_bases: &EMPTY_SIGNATURES,
             dep_env: None,

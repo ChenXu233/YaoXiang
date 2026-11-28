@@ -12,9 +12,9 @@ module
     locals_total=4
     values_total=8
     value v0: Int(64) @block0
-    value v1: Fn { params: [TypeRef("m")], return_type: Int(64) } @block0
+    value v1: Fn { params: [Literal { name: "42", base_type: Int(64), value: Int(42) }], return_type: Int(64) } @block0
     value v2: Int(64) @block0
-    value v3: TypeRef("?") @block0
+    value v3: Never @block0
     value v4: Bool @block0
     value v5: Int(64) @block0
     value v6: Int(64) @block0

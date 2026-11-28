@@ -6,13 +6,13 @@ module
     locals_total=4
     values_total=10
     value v0: Int(64) @block0
-    value v1: TypeRef("?") @block0
+    value v1: Never @block0
     value v2: Bool @block0
     value v3: TypeRef("?") @block0
     value v4: Int(64) @block0
     value v5: Struct(StructType { name: "Point", fields: [("x", Int(64))], methods: {}, interfaces: [] }) @block0
     value v6: Generic { name: "String", args: [] } @block0
-    value v7: TypeRef("?") @block0
+    value v7: Bool @block0
     value v8: Struct(StructType { name: "Point", fields: [("x", Int(64))], methods: {}, interfaces: [] }) @block0
     value v9: Int(64) @block0
     Load v0 <- int(1)

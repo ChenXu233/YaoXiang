@@ -45,7 +45,7 @@ module
     locals_total=5
     values_total=16
     value v0: Int(64) @block0
-    value v1: TypeRef("?") @block0
+    value v1: Never @block0
     value v2: Bool @block0
     value v3: TypeRef("?") @block0
     value v4: Int(64) @block0
@@ -53,7 +53,7 @@ module
     value v6: Generic { name: "String", args: [] } @block0
     value v7: Void @block0
     value v8: Int(64) @block0
-    value v9: TypeRef("?") @block0
+    value v9: Never @block0
     value v10: Bool @block0
     value v11: Int(64) @block0
     value v12: Int(64) @block0

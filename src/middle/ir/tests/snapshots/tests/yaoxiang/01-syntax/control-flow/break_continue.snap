@@ -24,7 +24,7 @@ module
     value v8: Int(64) @block0
     value v9: Int(64) @block0
     value v10: TypeRef("?") @block0
-    value v11: TypeRef("?") @block0
+    value v11: Never @block0
     value v12: Bool @block0
     value v13: Int(64) @block0
     value v14: Int(64) @block0
@@ -41,7 +41,7 @@ module
     value v25: TypeRef("?") @block0
     value v26: Int(64) @block0
     value v27: Int(64) @block0
-    value v28: TypeRef("?") @block0
+    value v28: Never @block0
     value v29: Bool @block0
     value v30: Int(64) @block0
     value v31: Int(64) @block0
@@ -66,7 +66,7 @@ module
     value v50: TypeRef("?") @block0
     value v51: Int(64) @block0
     value v52: Int(64) @block0
-    value v53: TypeRef("?") @block0
+    value v53: Never @block0
     value v54: Bool @block0
     value v55: Int(64) @block0
     value v56: Int(64) @block0
@@ -91,7 +91,7 @@ module
     value v75: TypeRef("?") @block0
     value v76: Int(64) @block0
     value v77: Int(64) @block0
-    value v78: TypeRef("?") @block0
+    value v78: Never @block0
     value v79: Bool @block0
     value v80: Int(64) @block0
     value v81: Int(64) @block0
@@ -116,12 +116,12 @@ module
     value v100: Int(64) @block0
     value v101: Int(64) @block0
     value v102: Int(64) @block0
-    value v103: TypeRef("?") @block0
+    value v103: Never @block0
     value v104: Bool @block0
     value v105: Int(64) @block0
     value v106: Int(64) @block0
     value v107: Generic { name: "String", args: [] } @block0
-    value v108: TypeRef("?") @block0
+    value v108: Never @block0
     value v109: Bool @block0
     value v110: Int(64) @block0
     value v111: Int(64) @block0

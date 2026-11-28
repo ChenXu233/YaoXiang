@@ -4,7 +4,7 @@ module
   fn mk() -> TypeRef("Color")
     locals_total=2
     values_total=2
-    value v0: TypeRef("?") @block0
+    value v0: Generic { name: "Color", args: [] } @block0
     value v1: Void @block0
     Load v1 <- void
     CreateVariant v0 <- Color::1 v1
@@ -15,23 +15,23 @@ module
     slot[2] differ : Int(64) @depth1
     locals_total=6
     values_total=19
-    value v0: TypeRef("?") @block0
-    value v1: TypeRef("?") @block0
+    value v0: Generic { name: "Color", args: [] } @block0
+    value v1: Generic { name: "Color", args: [] } @block0
     value v2: Void @block0
     value v3: Void @block0
-    value v4: TypeRef("?") @block0
+    value v4: Never @block0
     value v5: Bool @block0
     value v6: Generic { name: "String", args: [] } @block0
     value v7: TypeRef("Color") @block0
-    value v8: TypeRef("?") @block0
+    value v8: Generic { name: "Color", args: [] } @block0
     value v9: Void @block0
-    value v10: TypeRef("?") @block0
+    value v10: Never @block0
     value v11: Bool @block0
     value v12: Generic { name: "String", args: [] } @block0
     value v13: TypeRef("Color") @block0
-    value v14: TypeRef("?") @block0
+    value v14: Generic { name: "Color", args: [] } @block0
     value v15: Void @block0
-    value v16: TypeRef("?") @block0
+    value v16: Never @block0
     value v17: Bool @block0
     value v18: Generic { name: "String", args: [] } @block0
     Load v2 <- void

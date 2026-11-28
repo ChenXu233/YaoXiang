@@ -25,7 +25,7 @@ module
     value v4: Int(64) @block0
     value v5: Float(64) @block0
     value v6: Int(64) @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
     value v9: TypeRef("?") @block0
     value v10: Float(64) @block0

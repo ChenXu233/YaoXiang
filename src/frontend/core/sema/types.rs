@@ -86,6 +86,15 @@ pub struct TypeCheckResult {
     ///
     /// 消费缺失即 `E3005`（`lower/stmt.rs` 的 `generate_method_ir`），无静默回退。
     pub method_def_ir_names: HashMap<PlanId, String>,
+    /// 调用点结果类型（**调用点 `PlanId` 键控**，RFC-039 D20；ir_gen 的
+    /// `expr_value_type` 按同一节点的同一身份回查）。
+    ///
+    /// 唯一产出点是 `infer_call_expr` 的返回处（`inference/expressions/expr.rs`
+    /// 的 Call 臂）：限定名 / native / 方法 / 泛型调用的**最终**类型只在 sema
+    /// 手里，IR 侧按被调名反查原生签名取不到，值表遂落显式未知 `TypeRef("?")`。
+    /// 落表前先 zonk；仍含推断变量（`TypeVar`）或身份未分配
+    /// （[`PlanId::UNPLANNED`]）的条目不落——IR 宁可显式未知，也不写未收敛变量。
+    pub call_result_types: HashMap<PlanId, MonoType>,
 }
 
 /// 一次方法调用重载决议的**载荷**（WBS 4.9.10 D-3）。

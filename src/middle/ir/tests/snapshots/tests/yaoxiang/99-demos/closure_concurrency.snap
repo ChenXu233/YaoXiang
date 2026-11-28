@@ -13,12 +13,12 @@ module
     value v4: TypeRef("?") @block0
     value v5: Int(64) @block0
     value v6: Int(64) @block0
-    value v7: TypeRef("?") @block0
+    value v7: Never @block0
     value v8: Bool @block0
     value v9: Generic { name: "String", args: [] } @block0
-    value v10: TypeRef("?") @block0
+    value v10: Void @block0
     value v11: Generic { name: "Tuple", args: [Int(64), Int(64)] } @block0
-    value v12: TypeRef("?") @block0
+    value v12: Never @block0
     value v13: Bool @block0
     value v14: Generic { name: "String", args: [] } @block0
     Load %0 <- int(100)

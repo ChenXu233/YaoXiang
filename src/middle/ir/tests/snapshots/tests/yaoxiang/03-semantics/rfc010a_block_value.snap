@@ -138,43 +138,43 @@ module
   fn main() -> Void
     locals_total=3
     values_total=46
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Generic { name: "String", args: [] } @block0
-    value v6: TypeRef("?") @block0
+    value v6: Never @block0
     value v7: Bool @block0
     value v8: Int(64) @block0
     value v9: Int(64) @block0
     value v10: Int(64) @block0
     value v11: Generic { name: "String", args: [] } @block0
-    value v12: TypeRef("?") @block0
+    value v12: Never @block0
     value v13: Bool @block0
     value v14: Int(64) @block0
     value v15: Int(64) @block0
     value v16: Generic { name: "String", args: [] } @block0
-    value v17: TypeRef("?") @block0
+    value v17: Never @block0
     value v18: Bool @block0
     value v19: Int(64) @block0
     value v20: Int(64) @block0
     value v21: Int(64) @block0
     value v22: Generic { name: "String", args: [] } @block0
-    value v23: TypeRef("?") @block0
+    value v23: Never @block0
     value v24: Bool @block0
     value v25: Int(64) @block0
     value v26: Int(64) @block0
     value v27: Int(64) @block0
     value v28: Generic { name: "String", args: [] } @block0
-    value v29: TypeRef("?") @block0
+    value v29: Never @block0
     value v30: Bool @block0
     value v31: Int(64) @block0
     value v32: Int(64) @block0
     value v33: Int(64) @block0
     value v34: Int(64) @block0
     value v35: Generic { name: "String", args: [] } @block0
-    value v36: TypeRef("?") @block0
+    value v36: Never @block0
     value v37: Bool @block0
     value v38: Int(64) @block0
     value v39: Int(64) @block0
@@ -182,7 +182,7 @@ module
     value v41: Generic { name: "String", args: [] } @block0
     value v42: Void @block0
     value v43: Void @block0
-    value v44: TypeRef("?") @block0
+    value v44: Void @block0
     value v45: Generic { name: "String", args: [] } @block0
     Load v4 <- int(4)
     Call v2 <- string("tail_expr") [v4] (def=d1)

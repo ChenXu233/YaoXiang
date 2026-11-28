@@ -35,36 +35,36 @@ module
     value v1: Float(64) @block0
     value v2: Float(64) @block0
     value v3: Float(64) @block0
-    value v4: TypeRef("?") @block0
+    value v4: Never @block0
     value v5: Bool @block0
     value v6: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v7: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v8: Generic { name: "String", args: [] } @block0
     value v9: Float(64) @block0
     value v10: Float(64) @block0
-    value v11: TypeRef("?") @block0
+    value v11: Never @block0
     value v12: Bool @block0
     value v13: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v14: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v15: Generic { name: "String", args: [] } @block0
-    value v16: TypeRef("?") @block0
+    value v16: Never @block0
     value v17: Bool @block0
     value v18: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v19: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v20: Generic { name: "String", args: [] } @block0
-    value v21: TypeRef("Point") @block0
+    value v21: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v22: Float(64) @block0
     value v23: Float(64) @block0
-    value v24: TypeRef("Point") @block0
+    value v24: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v25: Float(64) @block0
     value v26: Float(64) @block0
-    value v27: TypeRef("Point") @block0
+    value v27: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v28: Float(64) @block0
     value v29: Float(64) @block0
-    value v30: TypeRef("Point") @block0
+    value v30: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v31: Float(64) @block0
     value v32: Float(64) @block0
-    value v33: TypeRef("?") @block0
+    value v33: Never @block0
     value v34: Bool @block0
     value v35: Struct(StructType { name: "Line", fields: [("start", TypeRef("Point")), ("end", TypeRef("Point"))], methods: {}, interfaces: [] }) @block0
     value v36: Struct(StructType { name: "Line", fields: [("start", TypeRef("Point")), ("end", TypeRef("Point"))], methods: {}, interfaces: [] }) @block0
@@ -75,31 +75,31 @@ module
     value v41: Float(64) @block0
     value v42: Float(64) @block0
     value v43: Float(64) @block0
-    value v44: TypeRef("?") @block0
+    value v44: Never @block0
     value v45: TypeRef("?") @block0
     value v46: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Equal"] }) @block0
     value v47: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Equal"] }) @block0
     value v48: Generic { name: "String", args: [] } @block0
-    value v49: TypeRef("Point") @block0
+    value v49: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v50: Float(64) @block0
     value v51: Float(64) @block0
     value v52: Int(64) @block0
-    value v53: TypeRef("Point") @block0
+    value v53: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v54: Float(64) @block0
     value v55: Float(64) @block0
     value v56: Int(64) @block0
-    value v57: TypeRef("?") @block0
-    value v58: TypeRef("?") @block0
+    value v57: Never @block0
+    value v58: Bool @block0
     value v59: Generic { name: "Vec", args: [Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] })] } @block0
-    value v60: TypeRef("Point") @block0
+    value v60: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v61: Float(64) @block0
     value v62: Float(64) @block0
     value v63: Generic { name: "String", args: [] } @block0
-    value v64: TypeRef("?") @block0
+    value v64: Never @block0
     value v65: Bool @block0
-    value v66: TypeRef("?") @block0
+    value v66: Bool @block0
     value v67: Generic { name: "Vec", args: [Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] })] } @block0
-    value v68: TypeRef("Point") @block0
+    value v68: Struct(StructType { name: "Point", fields: [("x", Float(64)), ("y", Float(64))], methods: {}, interfaces: [] }) @block0
     value v69: Float(64) @block0
     value v70: Float(64) @block0
     value v71: Generic { name: "String", args: [] } @block0

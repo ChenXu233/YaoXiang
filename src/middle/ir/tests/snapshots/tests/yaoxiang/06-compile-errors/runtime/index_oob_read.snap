@@ -9,7 +9,7 @@ module
     value v3: Int(64) @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
-    value v6: TypeRef("?") @block0
+    value v6: Void @block0
     value v7: TypeRef("?") @block0
     value v8: Generic { name: "Vec", args: [Int(64)] } @block0
     value v9: Int(64) @block0

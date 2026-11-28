@@ -4,12 +4,12 @@ module
     slot[1] y : Int(64) @depth1
     locals_total=5
     values_total=8
-    value v0: TypeRef("?") @block0
+    value v0: Never @block0
     value v1: Bool @block0
     value v2: Generic { name: "String", args: [] } @block0
-    value v3: TypeRef("?") @block0
+    value v3: Void @block0
     value v4: Int(64) @block0
-    value v5: TypeRef("?") @block0
+    value v5: Never @block0
     value v6: Bool @block0
     value v7: Generic { name: "String", args: [] } @block0
     Load %0 <- int(42)
