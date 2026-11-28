@@ -1254,6 +1254,14 @@
     "example": "Box: Type = { v: Int, w: Pos(v) }\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.v = 2\n}",
     "error_output": "error[E1115]: witness-bearing record is immutable\n --> example.yx:4:5\n  |\n4 |     b.v = 2\n  |     ^^^^^^^ record 'Box' carries a witness field, so all of its fields must stay unchanged after construction"
   },
+  "E1116": {
+    "title": "Bare name collides with exports of multiple standard library units",
+    "message": "'{name}' is exported by multiple standard library units ({units}); a bare name cannot determine the call target",
+    "template": "'{name}' is exported by multiple standard library units ({units}); a bare name cannot determine the call target",
+    "help": "The same short name is exported by several standard library units, so there is no default target (previously repeated compilations of the same source picked one at random). Disambiguate explicitly, either way: import the item (`use std.string.{concat}`) and keep using the bare name, or write the qualified call `string.concat(...)`; the possible units are listed in this error.",
+    "example": "main: () -> Int = () => {\n    s = concat(\"foo\", \"bar\")\n    print(s)\n    0\n}\nmain()",
+    "error_output": "error[E1116]: Bare name collides with exports of multiple standard library units\n --> example.yx:2:9\n  |\n2 |     s = concat(\"foo\", \"bar\")\n  |         ^^^^^^ 'concat' is exported by multiple standard library units (std.string, std.list); a bare name cannot determine the call target"
+  },
   "W1007": {
     "title": "Module import cycle",
     "message": "Modules in the compilation set form an import cycle; initialization order inside the cycle is undecidable",

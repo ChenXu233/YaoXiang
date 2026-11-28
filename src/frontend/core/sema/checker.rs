@@ -771,6 +771,8 @@ impl TypeChecker {
         );
         // 设置 native 函数签名表
         body_checker.set_native_signatures(self.env.native_signatures.clone());
+        // #577：裸名歧义的标准库短名表随签名表同源注入（Var 臂 E1116 判据）
+        body_checker.set_ambiguous_std_short_names(self.env.ambiguous_std_short_names.clone());
         // #387：native arity 区间表随签名表同源传递
         body_checker.set_native_arities(self.env.native_arity.clone());
         // #454：native 形参名随签名表同源传递（命名实参按名绑定的唯一来源）
@@ -866,7 +868,14 @@ impl TypeChecker {
         let use_local_names: Vec<String> =
             self.imported_names.iter().map(|(n, _)| n.clone()).collect();
         for (name, poly) in self.env.vars.clone() {
-            let is_native = self.env.native_signatures.contains_key(&name);
+            // #577：native 短名的全集 = native_signatures 短名键 ∪ 歧义短名表——
+            // 后者是本循环「注册过短名但被 #577 跳过三表」的那部分（std.list.next
+            // 等）。判定必须并上它：std 单元体内对同名顶层函数绑定的赋值目标
+            // （list.yx reduce 的 `next = f(acc, ..)`）依赖 imported 旗标豁免
+            // E2010（见上注释）——只查 native_signatures 会因跳过注册而把这类
+            // 条目误标成本文件绑定，改判重赋值报 E2010（std 嵌入单元全红）。
+            let is_native = self.env.native_signatures.contains_key(&name)
+                || self.env.ambiguous_std_short_names.contains_key(&name);
             if is_native || use_local_names.iter().any(|n| n == &name) {
                 self.body_checker_mut().add_imported_var(name, poly);
             } else {

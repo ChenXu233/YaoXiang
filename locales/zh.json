@@ -1066,6 +1066,14 @@
     "example": "Box: Type = { v: Int, w: Pos(v) }\nmain: () -> Void = {\n    b: Box = Box(v = 1)\n    b.v = 2\n}",
     "error_output": "error[E1115]: witness-bearing 记录不可变\n --> example.yx:4:5\n  |\n4 |     b.v = 2\n  |     ^^^^^^^ 记录 'Box' 含 witness 字段，其全部字段在构造后必须保持不变"
   },
+  "E1116": {
+    "title": "裸名与多个标准库单元的导出同名",
+    "message": "'{name}' 同时是多个标准库单元（{units}）的导出，裸名无法确定调用目标",
+    "template": "'{name}' 同时是多个标准库单元（{units}）的导出，裸名无法确定调用目标",
+    "help": "同一短名由多个标准库单元导出，没有默认目标（此前同一份源码多次编译会随机选择目标）。显式消歧任选其一：写项导入 `use std.string.{concat}` 之后继续用裸名，或把调用写成限定名 `string.concat(...)`；可选单元以本错误列出的列表为准。",
+    "example": "main: () -> Int = () => {\n    s = concat(\"foo\", \"bar\")\n    print(s)\n    0\n}\nmain()",
+    "error_output": "error[E1116]: 裸名与多个标准库单元的导出同名\n --> example.yx:2:9\n  |\n2 |     s = concat(\"foo\", \"bar\")\n  |         ^^^^^^ 'concat' 同时是多个标准库单元（std.string, std.list）的导出，裸名无法确定调用目标"
+  },
   "E1064": {
     "title": "绑定位置索引无效",
     "template": "绑定位置索引无效：{positions}（函数共 {total} 个参数）",

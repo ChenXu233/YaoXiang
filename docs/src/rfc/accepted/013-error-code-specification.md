@@ -353,6 +353,7 @@ E1001::unknown_variable(&var_name)
 | E1113 | 编译期值参数缺少编译期证据         |
 | E1114 | witness 字段不可值级读取      |
 | E1115 | witness-bearing 记录不可变 |
+| E1116 | 裸名与多个标准库单元的导出同名       |
 <!-- code-table:E1xxx end -->
 
 > **RFC-011b 关联（2026-09-22 注）**：[RFC-011b: 运算符重载](011b-operator-overloading.md)

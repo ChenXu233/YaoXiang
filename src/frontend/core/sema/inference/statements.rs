@@ -62,6 +62,8 @@ macro_rules! apply_shared_inferrer_context {
         }
         // #321 W1003：导入名监视集随委托传入
         $inferrer.set_import_watch(&$self.import_watch);
+        // #577：裸名歧义短名表随委托传入（Var 臂 E1116 判定）
+        $inferrer.set_ambiguous_std_short_names(&$self.ambiguous_std_short_names);
         $inferrer.set_native_arities(&$self.native_arity);
         $inferrer.set_native_param_names(&$self.native_param_names);
         $inferrer.set_declared_call_site_params(&$self.declared_call_site_params);
@@ -93,6 +95,10 @@ pub struct StatementChecker {
         HashMap<String, Vec<crate::frontend::core::sema::passes::overload::OverloadCandidate>>,
     /// Native 函数签名表
     native_signatures: HashMap<String, MonoType>,
+    /// 裸名歧义的标准库短名表（issue #577，用户裁决乙案）：短名 → 导出它的
+    /// Std 单元列表。由 `add_native_function_types` 生产（与短名键跳过同一趟），
+    /// 消费面 = 表达式推断器 Var 臂：裸名查不到条目且命中本表 → E1116。
+    ambiguous_std_short_names: HashMap<String, Vec<String>>,
     /// Native 函数 arity 区间表（#387，随签名表同源灌装）
     native_arity: HashMap<String, (usize, Option<usize>)>,
     /// #454：Native 导出形参名（全限定名 + 短名 → 声明序形参名）
@@ -316,6 +322,7 @@ impl StatementChecker {
             checked_functions: HashMap::new(),
             overload_candidates: HashMap::new(),
             native_signatures: HashMap::new(),
+            ambiguous_std_short_names: HashMap::new(),
             native_arity: HashMap::new(),
             native_param_names: HashMap::new(),
             declared_call_site_params: HashMap::new(),
@@ -749,6 +756,15 @@ impl StatementChecker {
         signatures: HashMap<String, MonoType>,
     ) {
         self.native_signatures = signatures;
+    }
+
+    /// 裸名歧义的标准库短名表（issue #577）随签名表同源注入；委托宏转发给
+    /// 表达式推断器（Var 臂 E1116 的唯一消费面）。
+    pub fn set_ambiguous_std_short_names(
+        &mut self,
+        names: HashMap<String, Vec<String>>,
+    ) {
+        self.ambiguous_std_short_names = names;
     }
 
     /// 设置 native 函数 arity 区间表（#387）
@@ -3707,6 +3723,11 @@ impl StatementChecker {
                     self.note_import_use(name);
                     // 直接返回 scope 中的类型
                     Ok(poly.body)
+                } else if let Some(units) = self.ambiguous_std_short_names.get(name.as_str()) {
+                    // 裸名歧义的标准库短名（issue #577）：与 infer_expr 的 Var 臂
+                    // 同一判定——两个遍历器共用同一构造（E1116 单源），防止一臂
+                    // 拦一臂漏。顶层语句 RHS 走本臂。
+                    Err(Box::new(ambiguous_std_export_diag(name, units, *span)))
                 } else {
                     Err(Box::new(
                         ErrorCodeDefinition::unknown_variable(name)
@@ -4030,6 +4051,21 @@ impl StatementChecker {
             }
         }
     }
+}
+
+/// E1116 诊断的**单一构造实现**（issue #577）：两个 Var 臂
+/// （`StatementChecker::check_expr`——顶层语句 RHS，与
+/// `ExpressionInferrer::infer_expr`——函数体/调用 func 位）共用，
+/// 判定条件各自取本 walker 的歧义表，构造与文案单源（#509 的
+/// E1002 接受集文共享先例同款——同一行为不得两臂各写一份）。
+pub(super) fn ambiguous_std_export_diag(
+    name: &str,
+    units: &[String],
+    span: crate::util::span::Span,
+) -> Diagnostic {
+    crate::util::diagnostic::ErrorCodeDefinition::ambiguous_std_export(name, &units.join(", "))
+        .at(span)
+        .build()
 }
 
 /// #286: 检查 MonoType 是否含未解析的泛型参数（TypeRef/TypeVar）。

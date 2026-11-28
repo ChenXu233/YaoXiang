@@ -9,6 +9,7 @@
 use crate::ast::Module;
 use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::core::types::identity::Nominal;
+use std::collections::HashMap;
 
 // ============ 子模块声明 ============
 
@@ -200,6 +201,35 @@ pub fn add_native_function_types(
             .and_then(|(name, module)| Nominal::item(module, name))
     };
 
+    // 裸名歧义短名的唯一生产端（issue #577，用户裁决乙案）：先按短名枚举
+    // 「≥2 个 Std 单元同时导出同一 Function/Constant 名」的交集合。这些短名
+    // 没有权威赢家——lower 侧 short_to_qualified_map 按注册表 HashMap 迭代序
+    // 随机覆盖、run 期随机派发（静默错值 / E6007），check 面按静态序赢家签名
+    // 检查通过造成「check 绿、run 二义」。判定与注册必须同一趟信息源：歧义
+    // 短名跳过全部三条短名键（签名 / arity / 形参名——表间必须对齐，否则
+    // 「arity 有表项而签名无」又是一份平行事实），全限定名键照常；裸名引用
+    // 在 Var 臂查不到时按 `env.ambiguous_std_short_names` 发 E1116。
+    //
+    // 枚举口径对齐消费侧：`native_names()` 与 lower 侧 `short_to_qualified_map`
+    // （registry.rs）同走「全部 Std 单元的 Function/Constant 导出」——若改用
+    // `std_submodule_names()`（仅 std 根的直接子模块），嵌套 Std 单元会漏数。
+    let mut ambiguous: HashMap<String, Vec<String>> = HashMap::new();
+    for full_path in registry.native_names() {
+        let Some((unit, short)) = full_path.rsplit_once('.') else {
+            continue;
+        };
+        let units = ambiguous.entry(short.to_string()).or_default();
+        if !units.iter().any(|u| u == unit) {
+            units.push(unit.to_string());
+        }
+    }
+    ambiguous.retain(|_, units| units.len() >= 2);
+    // E1116 文案把单元列表插值进错误消息——native_names 的 HashMap 迭代序是
+    // 随机的，不排序则同一调用点的错误文案逐字不稳定（#577 的病根就是序）。
+    for units in ambiguous.values_mut() {
+        units.sort();
+    }
+
     // 遍历所有 std 子模块，自动注册导出的函数
     for submodule_name in registry.std_submodule_names() {
         let module_path = DefPath::item("std", &submodule_name).project();
@@ -223,6 +253,8 @@ pub fn add_native_function_types(
                     _ => continue,
                 };
 
+                let bare_is_ambiguous = ambiguous.contains_key(&export.name);
+
                 // 注册完全限定名
                 env.native_signatures
                     .insert(export.full_path.clone(), fn_ty.clone());
@@ -238,19 +270,27 @@ pub fn add_native_function_types(
                     };
                     env.native_param_names
                         .insert(export.full_path.clone(), info.clone());
-                    env.native_param_names.insert(export.name.clone(), info);
+                    if !bare_is_ambiguous {
+                        env.native_param_names.insert(export.name.clone(), info);
+                    }
                 }
 
-                // 注册短名称
-                env.native_signatures.insert(export.name.clone(), fn_ty);
+                // 注册短名称。歧义短名不注册（#577：没有权威赢家就不该有静默赢家）。
+                if !bare_is_ambiguous {
+                    env.native_signatures.insert(export.name.clone(), fn_ty);
+                }
 
                 // #387：同源灌装 arity 区间（? 可选 / ... 变参），键与签名表对齐
                 let arity = signature::parse_signature_arity(&export.signature);
                 env.native_arity.insert(export.full_path.clone(), arity);
-                env.native_arity.insert(export.name.clone(), arity);
+                if !bare_is_ambiguous {
+                    env.native_arity.insert(export.name.clone(), arity);
+                }
             }
         }
     }
+
+    env.ambiguous_std_short_names = ambiguous;
 
     // Register Native.c — the C ABI FFI entry point
     // Native.c: (lib: String) -> LibraryRef

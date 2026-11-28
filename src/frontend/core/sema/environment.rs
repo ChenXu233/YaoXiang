@@ -301,6 +301,14 @@ pub struct TypeEnvironment {
     /// `signature::export_signature_param_info`）——命名实参在原生导出上的按名绑定、
     /// 未知名/重复命名判定、以及「可选位允许缺席」都只从这张表取，调用点不各算一份。
     pub native_param_names: HashMap<String, ExportParamInfo>,
+    /// 裸名歧义的标准库短名表（issue #577，用户裁决乙案）：短名 → 导出该短名的
+    /// Std 单元全路径列表（`std.string`、`std.list`）。**仅收被 ≥2 个 Std 单元
+    /// 同时导出**的 Function/Constant 短名，由 [`crate::frontend::core::sema::add_native_function_types`]
+    /// 注册循环同趟枚举登记（登记-消费唯一生产端）。这些短名**不注册**短名键
+    /// （native_signatures / native_arity / native_param_names 三表对齐跳过）——
+    /// 没有权威赢家就不该有静默赢家；裸名引用在 Var 臂查不到条目时按本表发
+    /// E1116（显式消歧），单一导出与全限定名键不受影响。
+    pub ambiguous_std_short_names: HashMap<String, Vec<String>>,
     /// 模块注册表 - 提供统一的模块查询接口
     pub module_registry: crate::frontend::module::registry::ModuleRegistry,
     /// 已注册为「模块 Struct」的别名集合（#396：register_module_as_struct 与

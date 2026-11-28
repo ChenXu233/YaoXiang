@@ -166,4 +166,22 @@ define_codes!(E1XXX, {
     // 在无 witness 的记录上本来就合法，本码只对 witness-bearing 记录生效；B.2 起
     // 声明期分类产出 witness，本码用户可达。
     ("E1115", TypeCheck, false, witness_record_immutable(type_: &str) => .param("type", type_)),
+    // E1116 裸名与多个标准库单元的导出同名（issue #577，用户裁决乙案；与 #477
+    // 「用户定义优先 + 显式限定消歧」同一哲学——std vs std 的同名短名没有权威
+    // 赢家）。旧行为是「check 绿、run 二义」：check 面按静态序赢家（几乎恒为
+    // std.list）的签名检查通过，lower 侧 short_to_qualified_map 按注册表
+    // HashMap 迭代序随机覆盖，同一源码多次编译运行随机派发到不同单元——实参
+    // 兼容时静默给错值（exit 0），不兼容时运行期 E6007（exit 1）。修前实测
+    // 裸名 concat 20 连跑 = 12 红（E6007 indexing not supported，派到
+    // std.list.concat 对 String 做列表索引）+ 8 绿（派到 std.string.concat）。
+    // 编译期拒绝、强制显式消歧；发射点 = check 面 Var 臂单点（歧义短名的短名
+    // 键注册在生产端同一趟跳过——三表对齐，全限定名键与单一导出不受影响）。
+    // 运行时交集合（native_names() 口径 = lower 侧 short_to_qualified_map 同遍历，
+    // ModuleRegistry.with_std()，2026-11-28）：concat / contains / filter / get /
+    // has_next / is_empty / iter / len / map / new / next / reduce / reverse /
+    // set / sleep / to_string 共 16 名。其中 contains / is_empty / len 为三单元
+    // 交集；to_string 来自 11 个单元（int/string/list/tuple/dict/bool/range/set/
+    // char/float 类型方法单元 + std.convert）——`x.to_string()` 方法形态不经
+    // 裸名臂，不受影响；只拦裸名引用。
+    ("E1116", TypeCheck, false, ambiguous_std_export(name: &str, units: &str) => .param("name", name) .param("units", units)),
 });

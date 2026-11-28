@@ -206,6 +206,10 @@ pub struct ExpressionInferrer<'a> {
     overload_candidates: &'a HashMap<String, Vec<overload::OverloadCandidate>>,
     /// Native 函数签名引用
     native_signatures: &'a HashMap<String, MonoType>,
+    /// 裸名歧义的标准库短名表（issue #577，用户裁决乙案）：短名 → 导出它的
+    /// Std 单元列表。Var 臂裸名查不到条目且命中本表 → E1116；set_native_* 同源
+    /// 注入链（`add_native_function_types` 生产 → checker → 委托宏）。
+    ambiguous_std_short_names: Option<&'a HashMap<String, Vec<String>>>,
     /// 模块别名集合（#396）：Some 时，模块别名 Struct 上取成员失败报
     /// E1043（模块语义）而非 E1042（struct 语义）。测试等直构场景为 None。
     module_aliases: Option<&'a std::collections::HashSet<String>>,
@@ -349,6 +353,7 @@ impl<'a> ExpressionInferrer<'a> {
             fn_depth: 0,
             overload_candidates,
             native_signatures: &EMPTY_SIGNATURES,
+            ambiguous_std_short_names: None,
             module_aliases: None,
             module_namespaces: None,
             result_err: None,
@@ -403,6 +408,7 @@ impl<'a> ExpressionInferrer<'a> {
             fn_depth: 0,
             overload_candidates,
             native_signatures,
+            ambiguous_std_short_names: None,
             module_aliases: None,
             module_namespaces: None,
             result_err: None,
@@ -458,6 +464,7 @@ impl<'a> ExpressionInferrer<'a> {
             fn_depth: 0,
             overload_candidates,
             native_signatures,
+            ambiguous_std_short_names: None,
             module_aliases: None,
             module_namespaces: None,
             result_err,
@@ -515,6 +522,7 @@ impl<'a> ExpressionInferrer<'a> {
             fn_depth: 0,
             overload_candidates,
             native_signatures,
+            ambiguous_std_short_names: None,
             module_aliases: None,
             module_namespaces: None,
             result_err,

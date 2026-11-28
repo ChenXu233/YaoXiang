@@ -364,6 +364,14 @@ impl<'a> ExpressionInferrer<'a> {
         self.native_arity = arities;
     }
 
+    /// 设置裸名歧义的标准库短名表（issue #577，Var 臂 E1116 判据）
+    pub fn set_ambiguous_std_short_names(
+        &mut self,
+        names: &'a HashMap<String, Vec<String>>,
+    ) {
+        self.ambiguous_std_short_names = Some(names);
+    }
+
     /// RFC-011b：当前函数的约束形参（定义体延迟派发）
     pub fn set_current_fn_param_constraints(
         &mut self,
@@ -2280,6 +2288,21 @@ impl<'a> ExpressionInferrer<'a> {
                         universe_level: crate::frontend::core::types::mono::UniverseLevel::type0(),
                         type_params: Vec::new(),
                     })
+                } else if let Some(units) = self
+                    .ambiguous_std_short_names
+                    .as_ref()
+                    .and_then(|table| table.get(name.as_str()))
+                {
+                    // 裸名歧义的标准库短名（issue #577，用户裁决乙案）：该短名被
+                    // ≥2 个 Std 单元同时导出，短名注册已在生产端跳过（没有权威
+                    // 赢家就不该有静默赢家），走到这里的裸名必然未被本地定义、
+                    // 未被 use 项导入、未限定——check 面直接拒绝，不再放行到
+                    // lower 侧臂④按 HashMap 迭代序随机派发（静默错值 / E6007）。
+                    // 构造单源：与 StatementChecker::check_expr 的同名分支共用
+                    // ambiguous_std_export_diag（禁令三：同一行为不得两臂各写一份）。
+                    Err(super::super::statements::ambiguous_std_export_diag(
+                        name, units, *span,
+                    ))
                 } else {
                     Err(ErrorCodeDefinition::unknown_variable(name)
                         .at(*span)

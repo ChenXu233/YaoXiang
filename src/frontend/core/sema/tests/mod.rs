@@ -16,6 +16,7 @@
 //! - rfc010: RFC-010 统一类型语法测试
 //! - rfc011: RFC-011 泛型系统测试
 
+mod ambiguous_std_short_names;
 mod checker;
 mod const_param;
 mod environment;
