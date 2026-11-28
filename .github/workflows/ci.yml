@@ -211,7 +211,10 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 预算随测试规模调整：2026-11-24 该 job 耗时 12m34s，此后语料与快照增长，
+    # 15 分钟会在 Corpus parity 步骤把 job 砍掉（run 46156436120：前序步骤全绿、
+    # 末步 cancelled）。提到 25 分钟留余量，不改任何判据与测试口径。
+    timeout-minutes: 25
     needs: check
     steps:
       - uses: actions/checkout@v7
