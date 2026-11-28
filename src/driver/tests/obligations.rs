@@ -52,10 +52,10 @@ fn state_with(
     state
 }
 
-/// 三档表第一档：**空义务不报**——15 条全空时零发现（且结算确实跑了）。
+/// 三档表第一档：**空义务不报**——16 条全空时零发现（且结算确实跑了）。
 #[test]
 fn test_obligation_settlement_is_quiet_for_empty_obligations() {
-    // Arrange：15 个义务字段全空的合成产物
+    // Arrange：16 个义务字段全空的合成产物
     let state = state_with(ProgramKind::SingleFile, TypeCheckResult::default());
 
     // Act
@@ -68,12 +68,12 @@ fn test_obligation_settlement_is_quiet_for_empty_obligations() {
         settlement.findings
     );
     assert_eq!(
-        settlement.pairs, 15,
-        "有 typecheck 产物的单元必须参与全部 15 条义务的结算"
+        settlement.pairs, 16,
+        "有 typecheck 产物的单元必须参与全部 16 条义务的结算"
     );
     assert_eq!(
-        settlement.empty, 15,
-        "15 条义务全部走第一档（空义务）: {settlement:?}"
+        settlement.empty, 16,
+        "16 条义务全部走第一档（空义务）: {settlement:?}"
     );
 }
 
@@ -213,7 +213,7 @@ fn test_obligation_undrained_is_externalized_as_error() {
     );
 }
 
-/// 结算清单与 15 条义务的静态事实一致（字段名/交付集无漂移）。
+/// 结算清单与 16 条义务的静态事实一致（字段名/交付集无漂移）。
 #[test]
 fn test_obligation_inventory_is_complete_and_drift_free() {
     // Arrange
@@ -227,10 +227,10 @@ fn test_obligation_inventory_is_complete_and_drift_free() {
     // Assert
     assert_eq!(
         all.len(),
-        15,
-        "02 §义务字段表在 3.4.4/3.4.5/3.4.9 清账后共 13 条，6.9.5-B.2 新增 record_models，call_result_types 新增"
+        16,
+        "02 §义务字段表在 3.4.4/3.4.5/3.4.9 清账后共 13 条，6.9.5-B.2 新增 record_models，type_identity_index 与 expr_result_types 新增"
     );
-    assert_eq!(fields.len(), 15, "字段名必须逐条唯一");
+    assert_eq!(fields.len(), 16, "字段名必须逐条唯一");
     let ir_fields: Vec<Obligation> = all
         .iter()
         .copied()

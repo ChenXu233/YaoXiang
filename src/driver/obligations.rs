@@ -137,6 +137,8 @@ pub enum Obligation {
     ModuleNamespaces,
     /// `record_models`：typecheck（声明期一遍）→ IR 生成（量词传播）
     RecordModels,
+    /// `type_identity_index`：typecheck → IR 生成（**`Nominal` 键控**——类型身份）
+    TypeIdentityIndex,
     /// `expr_result_types`：typecheck → IR 生成（**`PlanId` 键控**——调用点身份）
     CallResultTypes,
 }
@@ -315,6 +317,12 @@ const INVENTORY: &[ObligationSpec] = &[
         red_list: None,
     },
     ObligationSpec {
+        obligation: Obligation::TypeIdentityIndex,
+        field: "type_identity_index",
+        consumer: Stage::IrGeneration,
+        red_list: None,
+    },
+    ObligationSpec {
         obligation: Obligation::CallResultTypes,
         field: "expr_result_types",
         consumer: Stage::IrGeneration,
@@ -338,6 +346,7 @@ pub const IR_GENERATION_DELIVERED: &[Obligation] = &[
     Obligation::MatchScrutineeTypes,
     Obligation::ModuleNamespaces,
     Obligation::RecordModels,
+    Obligation::TypeIdentityIndex,
     Obligation::CallResultTypes,
 ];
 
@@ -364,8 +373,8 @@ pub enum ConsumptionState {
 }
 
 impl Obligation {
-    /// 全部 15 个义务（顺序 = 02 §义务字段表；3.4.4/3.4.5/3.4.9 清账后由 16 降为 13，
-    /// 6.9.5-B.2 新增 `record_models`，`expr_result_types` 新增）。
+    /// 全部 16 个义务（顺序 = 02 §义务字段表；3.4.4/3.4.5/3.4.9 清账后由 16 降为 13，
+    /// 6.9.5-B.2 新增 `record_models`，`expr_result_types` 与 `type_identity_index` 新增）。
     pub const ALL: &'static [Obligation] = &[
         Obligation::ProofCalls,
         Obligation::ReleasePlan,
@@ -381,6 +390,7 @@ impl Obligation {
         Obligation::MatchScrutineeTypes,
         Obligation::ModuleNamespaces,
         Obligation::RecordModels,
+        Obligation::TypeIdentityIndex,
         Obligation::CallResultTypes,
     ];
 
@@ -431,6 +441,7 @@ impl Obligation {
             Obligation::ModuleNamespaces => !type_result.module_namespaces.is_empty(),
             Obligation::RecordModels => !type_result.record_models.is_empty(),
             Obligation::CallResultTypes => !type_result.expr_result_types.is_empty(),
+            Obligation::TypeIdentityIndex => !type_result.type_identity_index.is_empty(),
         }
     }
 
