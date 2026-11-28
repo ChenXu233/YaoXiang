@@ -416,39 +416,34 @@ impl AstToIrGenerator {
                     )
                 })
                 .collect(),
-            // 同一份 sum_types 的身份视图：本地键 → 身份走 typecheck 的派生索引
-            // （索引唯一写者是 env.add_type），不切名字、不猜模块。
+            // 同一份 sum_types 的身份视图：本地键 → 身份查 typecheck 同笔携带的
+            // **正向**映射（别名与定义名都有条目）；不切名字、不猜模块。
             sum_variants_by_identity: {
-                let local_to_identity: HashMap<&String, &Nominal> = type_result
-                    .type_identity_index
-                    .iter()
-                    .map(|(identity, local)| (local, identity))
-                    .collect();
                 let mut by_identity = HashMap::new();
                 for (local, variants) in &type_result.sum_types {
-                    // 身份来源：模块化身份走派生索引；**平坦名**（单文件/内建/幻名）
-                    // 不入索引（索引只收带模块身份，见 add_type）——其身份就是
-                    // 本地键的平路径，与 local_type_key 同口径。
-                    let identity = match local_to_identity.get(local) {
-                        Some(identity) => (*identity).clone(),
+                    // 身份来源：模块化身份走正向映射；**平坦名**（单文件/内建/幻名）
+                    // 不参与身份（映射只收带模块身份）——其身份就是本地键的平路径，
+                    // 与 local_type_key 同口径。
+                    let identity = match type_result.type_identity_by_local_key.get(local) {
+                        Some(identity) => identity.clone(),
                         None => {
                             let Some(flat) = Nominal::flat(local) else {
                                 debug_assert!(
                                     false,
-                                    "和类型本地键 '{local}' 既无身份索引项、也不是平坦名"
+                                    "和类型本地键 '{local}' 既无身份条目、也不是平坦名"
                                 );
                                 continue;
                             };
                             flat
                         }
                     };
-                    by_identity.insert(
-                        identity,
+                    // 一身份多本地键（别名 + 定义名双登记）：变体表同源，首个为准。
+                    by_identity.entry(identity).or_insert_with(|| {
                         variants
                             .iter()
                             .map(|v| (v.name.clone(), v.params.clone()))
-                            .collect::<Vec<(String, Vec<MonoType>)>>(),
-                    );
+                            .collect::<Vec<(String, Vec<MonoType>)>>()
+                    });
                 }
                 by_identity
             },
@@ -544,22 +539,21 @@ impl AstToIrGenerator {
         self.struct_definitions_by_identity.get(identity)
     }
 
-    /// **写名（本地键）→ 类型身份**：构造调用在「无调用点结果类型表」的树上
-    /// 用它取字段表。
+    /// 写名（本地键）→ 类型身份：构造调用在「无调用点结果类型表」的树上用它取
+    /// 字段表。
     ///
-    /// 来源与和类型身份视图同一份派生索引（type_identity_index，唯一写者
-    /// add_type）：本地键在本单元唯一（别名导入已把同名写名分开），故反查
-    /// 无歧义；单文件/平坦名不在索引里 → None，调用方回退裸名表（既有行为）。
+    /// 来源是 typecheck 在 [`crate::frontend::core::sema::TypeCheckResult`] 里
+    /// **同笔携带**的正向映射（`type_identity_by_local_key`，扫 `env.types` 产出，
+    /// 别名与定义名两个写名都有条目）；不遍历索引按 value 反查、不用写名猜模块。
     pub(super) fn identity_for_written(
         &self,
         written: &str,
     ) -> Option<Nominal> {
         self.type_result
             .as_ref()?
-            .type_identity_index
-            .iter()
-            .find(|(_, local)| local.as_str() == written)
-            .map(|(identity, _)| identity.clone())
+            .type_identity_by_local_key
+            .get(written)
+            .cloned()
     }
 
     /// 按身份取和类型变体表；平路径身份（单文件/本地键同名）才回退本地键。

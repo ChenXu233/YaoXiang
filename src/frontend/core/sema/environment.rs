@@ -326,6 +326,14 @@ pub struct TypeEnvironment {
     /// 唯一写者是 [`Self::add_type`]（随同笔登记，首登记为准）；本批（L3-1b S3）
     /// 只建立写入与穿透，不接任何查询，消费者仍读 `types` 的本地键。
     type_identity_index: HashMap<Nominal, String>,
+    /// 本地表键（写名）→ 类型身份：与 [`Self::type_identity_index`] **同笔**写入
+    /// （唯一写者仍是 [`Self::add_type`]，首登记为准）。
+    ///
+    /// 为什么需要两向：索引只留「身份 → 第一个写名」；别名 + 定义名双登记
+    /// （`use a.{Temp}` + `use a.{Temp as TempB}`）时第二个写名在索引里没有
+    /// 条目。消费者（lower）按写名取身份必须查这张**正向**表，才不会有
+    /// 「第二键落空 → 回落平路径/裸名」的静默面（D64：身份已存在不得回退）。
+    local_type_identities: HashMap<String, Nominal>,
 }
 
 impl TypeEnvironment {
@@ -593,9 +601,15 @@ impl TypeEnvironment {
             _ => None,
         };
         if let Some(identity) = identity {
+            // 两向同笔：身份→首个本地键（索引）、本地键→身份（正向表）。
+            // 正向表按**写名**各记一条，别名与定义名双登记因此都有条目；
+            // 同一本地键重复登记首登记为准（与索引同口径）。
             self.type_identity_index
-                .entry(identity)
+                .entry(identity.clone())
                 .or_insert_with(|| name.clone());
+            self.local_type_identities
+                .entry(name.clone())
+                .or_insert(identity);
         }
         self.types.insert(name, poly);
     }
@@ -611,6 +625,14 @@ impl TypeEnvironment {
     /// `env.types` 的派生索引（身份→本地键）；穿透到子检查器与消费者查询。
     pub fn type_identity_index(&self) -> &HashMap<Nominal, String> {
         &self.type_identity_index
+    }
+
+    /// `env.types` 的正向派生表（本地键/写名 → 身份）；与
+    /// [`Self::type_identity_index`] 同笔写入（唯一写者 [`Self::add_type`]）。
+    /// 消费者按写名取身份只读这张表：索引只留首个写名，别名的第二个写名
+    /// 在索引里没有条目（读索引会落空后错误回退）。
+    pub fn type_identity_by_local_key(&self) -> &HashMap<String, Nominal> {
+        &self.local_type_identities
     }
 
     /// 名义类型 → 本地表键（身份→本地键；平路径裸名即键）。
@@ -1270,6 +1292,73 @@ mod tests {
         assert!(
             env.get_type("Second").is_some() && env.get_type("Flat").is_some(),
             "both local keys must remain queryable in env.types"
+        );
+    }
+
+    #[test]
+    fn test_type_identity_forward_map_registers_alias_and_definition_keys() {
+        // Arrange：同一身份 m.T 用别名 TempB 与定义名 Temp 双登记
+        let mut env = TypeEnvironment::default();
+        env.add_type("Temp".to_string(), struct_poly("m", "T"));
+        env.add_type("TempB".to_string(), struct_poly("m", "T"));
+
+        // Act
+        let identity = Nominal::item("m", "T").expect("identity must be valid");
+        let forward = env.type_identity_by_local_key();
+
+        // Assert：两个写名都解析到同一身份（索引只留首个，第二键不落空）
+        assert_eq!(
+            forward.get("Temp"),
+            Some(&identity),
+            "definition-name key must resolve to its identity"
+        );
+        assert_eq!(
+            forward.get("TempB"),
+            Some(&identity),
+            "alias key must resolve to the same identity (second key must not miss)"
+        );
+        assert_eq!(
+            env.type_identity_index().get(&identity),
+            Some(&"Temp".to_string()),
+            "identity index keeps the first-written local key"
+        );
+    }
+
+    #[test]
+    fn test_type_identity_forward_map_excludes_flat_and_first_registration_wins() {
+        // Arrange：flat（无模块）定义 + 同一本地键重复登记（第二次换了身份）
+        let mut env = TypeEnvironment::default();
+        env.add_type(
+            "Local".to_string(),
+            PolyType::mono(MonoType::Struct(crate::frontend::core::types::StructType {
+                name: Nominal::flat("Local").expect("flat identity must be valid"),
+                fields: Vec::new(),
+                methods: HashMap::new(),
+                interfaces: Vec::new(),
+            })),
+        );
+        env.add_type("Temp".to_string(), struct_poly("a", "T"));
+        env.add_type("Temp".to_string(), struct_poly("b", "T"));
+
+        // Act
+        let forward = env.type_identity_by_local_key();
+        let first = Nominal::item("a", "T").expect("a.T");
+        let second = Nominal::item("b", "T").expect("b.T");
+
+        // Assert：flat 不进正向表（合法回退平路径）；同一写名首登记为准
+        assert!(
+            !forward.contains_key("Local"),
+            "flat definitions are not identities and must not enter the forward map"
+        );
+        assert_eq!(
+            forward.get("Temp"),
+            Some(&first),
+            "same local key keeps the first registration (identity b.T must not overwrite)"
+        );
+        assert_ne!(
+            forward.get("Temp"),
+            Some(&second),
+            "second registration of the same local key must not win"
         );
     }
 }

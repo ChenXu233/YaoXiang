@@ -1436,6 +1436,7 @@ impl TypeChecker {
             implementation_proofs: self.env.implementation_proofs.clone(),
             interface_impl_registry: self.env.interface_impl_registry.clone(),
             type_identity_index: self.env.type_identity_index().clone(),
+            type_identity_by_local_key: self.env.type_identity_by_local_key().clone(),
             sum_types: self.env.sum_types.clone(),
             sum_type_param_names: self
                 .env

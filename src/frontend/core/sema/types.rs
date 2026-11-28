@@ -62,6 +62,15 @@ pub struct TypeCheckResult {
     /// 同一编译集里的同名类型（a.T / b.T）因此各按自己的身份取字段/变体，
     /// 不从名字串反解模块（D64；§2.5 执行口径「身份不得从名字串反解」）。
     pub type_identity_index: HashMap<crate::frontend::core::types::identity::Nominal, String>,
+    /// 本地键（写名）→ 类型身份：与 [`Self::type_identity_index`] 同一份事实的
+    /// **正向**投影；由 `TypeEnvironment::add_type` 与索引**同笔**写入，
+    /// 结果构造处平移（单源：唯一写者 add_type）。
+    ///
+    /// 两向都保留的原因：索引（身份→本地键）只留第一个写名；别名 + 定义名
+    /// 双登记时第二个写名在索引里没有条目。lower 按写名取身份只查这张表，
+    /// 不得遍历索引按 value 反查（O(n) 且丢多写名）。
+    pub type_identity_by_local_key:
+        HashMap<String, crate::frontend::core::types::identity::Nominal>,
     /// RFC-011b 运算符派发点（span 键控；ir_gen 据此把原生指令换为方法调用）
     pub operator_dispatches: Vec<super::operator_interfaces::OperatorDispatch>,
     /// RFC-011a §3：重载决议表（**调用点 `PlanId` 键控**，RFC-039 D20/WBS 4.5.2；

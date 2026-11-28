@@ -589,6 +589,8 @@ test_parser_module_declarations_resolve_to_existing_files	src/frontend/core/pars
 test_parser_module_tree_has_no_orphan_rust_files	src/frontend/core/parser/tests/wiring.rs	assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_type_identity_index_is_only_written_by_add_type	src/frontend/core/sema/environment.rs	assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_type_identity_index_first_registration_wins	src/frontend/core/sema/environment.rs	assert_eqx2 assertx1 is_somex2 expectx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_type_identity_forward_map_registers_alias_and_definition_keys	src/frontend/core/sema/environment.rs	assert_eqx3 expectx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_type_identity_forward_map_excludes_flat_and_first_registration_wins	src/frontend/core/sema/environment.rs	assert_eqx1 assert_nex1 assertx1 expectx3	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_method_key_for_nominal_uses_module_and_definition_name	src/frontend/core/sema/import_face.rs	assert_eqx1 expectx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_method_key_for_nominal_flat_matches_string_path	src/frontend/core/sema/import_face.rs	assert_eqx2 expectx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_method_key_for_nominal_alias_uses_definition_identity	src/frontend/core/sema/import_face.rs	assert_eqx2 assert_nex1 expectx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
@@ -1800,6 +1802,8 @@ test_closure_capture_early_error_does_not_leak	src/middle/lower/expr/tests/closu
 test_corpus_over_budget_forms_fit_after_allocation	src/middle/lower/tests/budget.rs	assertx3	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_lower_struct_identity_view_keeps_same_named_definitions_apart	src/middle/lower/tests/identity_keys.rs	assert_eqx3 assertx3 expectx4	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_lower_sum_identity_view_resolves_by_identity_not_bare_name	src/middle/lower/tests/identity_keys.rs	assert_eqx2 assertx2 is_somex1 is_nonex1 unwrapx1 expectx5	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_lower_written_name_identity_resolves_alias_and_definition_keys	src/middle/lower/tests/identity_keys.rs	assert_eqx4 assertx2 is_somex1 expectx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_aliased_import_write_name_keeps_definition_identity_end_to_end	src/middle/lower/tests/identity_keys.rs	assert_eqx2 assertx1 expectx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_range_pattern_compiles_to_closed_ge_le_chain	src/middle/lower/tests/pattern_range.rs	matchesx1 assertx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_range_pattern_negative_bounds_compile_to_negative_constants	src/middle/lower/tests/pattern_range.rs	assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_ir_view_type_args_normalize_list_to_vec	src/middle/lower/tests/query.rs	assert_eqx1 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
