@@ -7,6 +7,7 @@
 
 use crate::frontend::compiler::Compiler;
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::middle::ir::ir::{
     partition_blocks, BasicBlock, ConstValue, FunctionBody, Instruction, Operand, ValueId,
     ValueInfo,
@@ -623,7 +624,9 @@ fn test_ssa_phi_unknown_type_is_propagated_explicitly() {
     ];
     let blocks = partition_blocks(instructions);
     let values = vec![
-        value_info(MonoType::TypeRef("?".to_string())),
+        value_info(MonoType::TypeRef(
+            Nominal::flat("?").expect("'?' is a valid bare type name"),
+        )),
         value_info(bool_ty()),
     ];
 
@@ -646,7 +649,7 @@ fn test_ssa_phi_unknown_type_is_propagated_explicitly() {
         .expect("then/else 汇合必须插入 Phi");
     assert_eq!(
         output.values[phi.0 as usize].ty,
-        MonoType::TypeRef("?".to_string()),
+        MonoType::TypeRef(Nominal::flat("?").expect("'?' is a valid bare type name")),
         "原值与全部输入均未知时，Phi 必须保留显式未知，不得发明具体类型"
     );
 }
@@ -655,7 +658,9 @@ fn test_ssa_phi_unknown_type_is_propagated_explicitly() {
 fn test_ssa_phi_conflicting_known_inputs_reports_error() {
     // Arrange：原值未知，但两个输入已带互斥的已知类型。
     let values = vec![
-        value_info(MonoType::TypeRef("?".to_string())),
+        value_info(MonoType::TypeRef(
+            Nominal::flat("?").expect("'?' is a valid bare type name"),
+        )),
         value_info(int_ty()),
         value_info(bool_ty()),
     ];
@@ -704,8 +709,12 @@ fn test_ssa_unreachable_use_is_skipped() {
         ),
     ];
     let values = vec![
-        value_info(MonoType::TypeRef("?".to_string())),
-        value_info(MonoType::TypeRef("?".to_string())),
+        value_info(MonoType::TypeRef(
+            Nominal::flat("?").expect("'?' is a valid bare type name"),
+        )),
+        value_info(MonoType::TypeRef(
+            Nominal::flat("?").expect("'?' is a valid bare type name"),
+        )),
     ];
 
     // Act
@@ -785,7 +794,7 @@ fn test_ssa_partial_predecessor_undefined_is_materialized() {
     };
     assert_eq!(
         output.values[missing_id.0 as usize].ty,
-        MonoType::TypeRef("?".to_string()),
+        MonoType::TypeRef(Nominal::flat("?").expect("'?' is a valid bare type name")),
         "部分前驱物化值必须记显式未知类型"
     );
     assert_eq!(
@@ -810,7 +819,9 @@ fn test_ssa_partial_predecessor_undefined_is_materialized() {
 fn test_ssa_reachable_zero_def_value_is_materialized() {
     // Arrange：ValueId(0) 全函数 0 定义，但在可达块 0 被 Ret 使用。
     let blocks = vec![block(0, vec![ret(Operand::Value(ValueId(0)))], vec![])];
-    let values = vec![value_info(MonoType::TypeRef("?".to_string()))];
+    let values = vec![value_info(MonoType::TypeRef(
+        Nominal::flat("?").expect("'?' is a valid bare type name"),
+    ))];
 
     // Act
     let output = construct_ssa(blocks, values, 0, &[]).expect("可达 0 定义值必须能物化");

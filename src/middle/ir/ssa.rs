@@ -20,6 +20,7 @@
 //! 其余内部不一致（入口块需要 Phi、Phi 类型冲突等）返回显式错误，由
 //! `lower/scope.rs` 收敛为既有 E3005，不猜类型、不写占位值。
 
+use crate::frontend::core::types::identity::Nominal;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::frontend::core::sema::MonoType;
@@ -192,7 +193,7 @@ fn materialize_undef(
     let id = ValueId(values.len() as u32);
     // 物化的是入口 Load Void，类型不可知：保留显式未知，不冒充原值类型。
     values.push(ValueInfo {
-        ty: MonoType::TypeRef("?".to_string()),
+        ty: MonoType::TypeRef(Nominal::flat("?").expect("'?' is a valid bare type name")),
         debug_name: None,
         defining_block: blocks[entry_index].label,
     });
@@ -323,7 +324,8 @@ pub fn construct_ssa(
     if !undefined_used.is_empty() {
         let mut prefix = Vec::new();
         for var in undefined_used {
-            values[var].ty = MonoType::TypeRef("?".to_string());
+            values[var].ty =
+                MonoType::TypeRef(Nominal::flat("?").expect("'?' is a valid bare type name"));
             let span = use_span(&blocks, uses[var][0]);
             prefix.push(Instruction::Load {
                 dst: Operand::Value(ValueId(var as u32)),
@@ -858,5 +860,7 @@ pub(crate) fn resolve_phi_type(
 
     // 原值表为显式未知：已知输入同型则收敛到该类型；否则沿用仓库既有的
     // 显式未知标记（TypeRef("?")），不发明具体类型、不静默用 Int(64) 占位。
-    Ok(incoming_type.unwrap_or_else(|| MonoType::TypeRef("?".to_string())))
+    Ok(incoming_type.unwrap_or_else(|| {
+        MonoType::TypeRef(Nominal::flat("?").expect("'?' is a valid bare type name"))
+    }))
 }

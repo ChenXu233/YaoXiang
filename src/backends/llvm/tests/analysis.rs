@@ -8,6 +8,7 @@
 
 use crate::backends::llvm::analysis::analyze_module;
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand, ValueId,
     ValueInfo,
@@ -125,7 +126,7 @@ fn test_native_explicit_unknown_value_is_rejected() {
     let function = base_function(
         MonoType::Int(64),
         vec![ValueInfo {
-            ty: MonoType::TypeRef("?".to_string()),
+            ty: MonoType::TypeRef(Nominal::flat("?").expect("'?' is a valid bare type name")),
             debug_name: None,
             defining_block: 0,
         }],
@@ -335,7 +336,9 @@ fn phi_with_unknown_incoming_module() -> ModuleIR {
             locals: vec![],
             values: vec![
                 ValueInfo {
-                    ty: MonoType::TypeRef("?".to_string()),
+                    ty: MonoType::TypeRef(
+                        Nominal::flat("?").expect("'?' is a valid bare type name"),
+                    ),
                     debug_name: None,
                     defining_block: 0,
                 },
@@ -430,7 +433,9 @@ fn dead_unknown_incoming_phi_module() -> ModuleIR {
             locals: vec![],
             values: vec![
                 ValueInfo {
-                    ty: MonoType::TypeRef("?".to_string()),
+                    ty: MonoType::TypeRef(
+                        Nominal::flat("?").expect("'?' is a valid bare type name"),
+                    ),
                     debug_name: None,
                     defining_block: 0,
                 },
@@ -590,7 +595,7 @@ fn test_native_phi_unknown_destination_is_rejected() {
     let module = two_block_phi_module(
         vec![],
         vec![(0, Operand::Const(ConstValue::Int(1)))],
-        MonoType::TypeRef("?".to_string()),
+        MonoType::TypeRef(Nominal::flat("?").expect("'?' is a valid bare type name")),
     );
 
     // Act

@@ -14,6 +14,7 @@ use crate::frontend::core::parser::parse;
 use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::{
     ConstValue, FrameId, Instruction, LocalSlot, ModuleIR, Operand, ValueInfo,
@@ -1667,7 +1668,10 @@ fn test_ssa_phi_known_conflict_with_unknown_still_fails() {
             value_info(MonoType::Int(64), 4),
             value_info(MonoType::Int(64), 1),
             value_info(MonoType::Bool, 2),
-            value_info(MonoType::TypeRef("?".to_string()), 3),
+            value_info(
+                MonoType::TypeRef(Nominal::flat("?").expect("'?' is a valid bare type name")),
+                3,
+            ),
             value_info(MonoType::Bool, 0),
             value_info(MonoType::Bool, 2),
         ],
@@ -1703,7 +1707,10 @@ fn test_ssa_phi_single_known_plus_unknown_passes() {
         vec![
             value_info(MonoType::Int(64), 3),
             value_info(MonoType::Int(64), 1),
-            value_info(MonoType::TypeRef("?".to_string()), 2),
+            value_info(
+                MonoType::TypeRef(Nominal::flat("?").expect("'?' is a valid bare type name")),
+                2,
+            ),
             value_info(MonoType::Bool, 0),
         ],
     );
@@ -1733,7 +1740,10 @@ fn test_ssa_phi_same_known_plus_unknown_passes() {
             value_info(MonoType::Int(64), 4),
             value_info(MonoType::Int(64), 1),
             value_info(MonoType::Int(64), 2),
-            value_info(MonoType::TypeRef("?".to_string()), 3),
+            value_info(
+                MonoType::TypeRef(Nominal::flat("?").expect("'?' is a valid bare type name")),
+                3,
+            ),
             value_info(MonoType::Bool, 0),
             value_info(MonoType::Bool, 2),
         ],
@@ -1840,7 +1850,10 @@ fn test_verify_ssa_negative_controls() {
             value_info(MonoType::Int(64), 4),
             value_info(MonoType::Int(64), 1),
             value_info(MonoType::Bool, 2),
-            value_info(MonoType::TypeRef("?".to_string()), 3),
+            value_info(
+                MonoType::TypeRef(Nominal::flat("?").expect("'?' is a valid bare type name")),
+                3,
+            ),
             value_info(MonoType::Bool, 0),
             value_info(MonoType::Bool, 2),
         ],
