@@ -309,36 +309,52 @@ impl ModuleRegistry {
         })
     }
 
+    /// 全部 Std 单元代码导出（Function/Constant）的一次性枚举：
+    /// 返回 `(模块路径, 导出名, 全限定名)`。
+    ///
+    /// **短名分组的唯一迭代源**（禁令三：同一行为不得多处各写一份迭代体）。
+    /// 两个消费面共享同一分组键 `export.name`：
+    /// - lower 侧 [`Self::short_to_qualified_map`]——裸名解析的静默覆盖随机源；
+    /// - sema 侧裸名歧义枚举（`add_native_function_types`，issue #577）。
+    ///
+    /// 歧义判定与静默覆盖源若用不同分组键，就是平行事实——故枚举键取
+    /// `export.name`（**不是** `full_path` 末段：点式 FFI 导出如 `int.to_string`
+    /// 的 full_path 前缀是 FFI 名片段，不是模块），单元归属取模块路径（模块
+    /// 身份）。
+    pub(crate) fn std_code_exports(&self) -> Vec<(&str, &str, &str)> {
+        let mut out = Vec::new();
+        for (path, module) in &self.modules {
+            if module.source == ModuleSource::Std {
+                for export in module.exports.values() {
+                    if export.kind == ExportKind::Function || export.kind == ExportKind::Constant {
+                        out.push((
+                            path.as_str(),
+                            export.name.as_str(),
+                            export.full_path.as_str(),
+                        ));
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// 获取模块路径下所有可用的短名称到完整路径的映射
     ///
     /// 用于 IR 生成时解析函数调用。
     pub fn short_to_qualified_map(&self) -> HashMap<String, String> {
-        let mut map = HashMap::new();
-        for module in self.modules.values() {
-            if module.source == ModuleSource::Std {
-                for export in module.exports.values() {
-                    if export.kind == ExportKind::Function || export.kind == ExportKind::Constant {
-                        map.insert(export.name.clone(), export.full_path.clone());
-                    }
-                }
-            }
-        }
-        map
+        self.std_code_exports()
+            .into_iter()
+            .map(|(_, name, full_path)| (name.to_string(), full_path.to_string()))
+            .collect()
     }
 
     /// 获取所有 native 函数名列表（用于 IR 生成的快速查找）
     pub fn native_names(&self) -> Vec<String> {
-        let mut names = Vec::new();
-        for module in self.modules.values() {
-            if module.source == ModuleSource::Std {
-                for export in module.exports.values() {
-                    if export.kind == ExportKind::Function || export.kind == ExportKind::Constant {
-                        names.push(export.full_path.clone());
-                    }
-                }
-            }
-        }
-        names
+        self.std_code_exports()
+            .into_iter()
+            .map(|(_, _, full_path)| full_path.to_string())
+            .collect()
     }
 
     /// 限定名指向什么——registry 侧单一查询接口（issue #494 / WBS 3.6.6）。

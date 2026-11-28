@@ -175,13 +175,19 @@ define_codes!(E1XXX, {
     // 裸名 concat 20 连跑 = 12 红（E6007 indexing not supported，派到
     // std.list.concat 对 String 做列表索引）+ 8 绿（派到 std.string.concat）。
     // 编译期拒绝、强制显式消歧；发射点 = check 面 Var 臂单点（歧义短名的短名
-    // 键注册在生产端同一趟跳过——三表对齐，全限定名键与单一导出不受影响）。
-    // 运行时交集合（native_names() 口径 = lower 侧 short_to_qualified_map 同遍历，
-    // ModuleRegistry.with_std()，2026-11-28）：concat / contains / filter / get /
-    // has_next / is_empty / iter / len / map / new / next / reduce / reverse /
-    // set / sleep / to_string 共 16 名。其中 contains / is_empty / len 为三单元
-    // 交集；to_string 来自 11 个单元（int/string/list/tuple/dict/bool/range/set/
-    // char/float 类型方法单元 + std.convert）——`x.to_string()` 方法形态不经
-    // 裸名臂，不受影响；只拦裸名引用。
+    // 键注册在生产端跳过——生产端一次调用内先枚举后注册、三表对齐，全限定名
+    // 键与单一导出不受影响）。
+    // 分组键 = export.name（与 lower 侧 short_to_qualified_map 的实际键同源，
+    // registry.std_code_exports() 单一迭代源），单元归属 = 模块路径。交集合
+    // （ModuleRegistry.with_std()，2026-11-29）：concat / contains / filter /
+    // get / has_next / is_empty / iter / len / map / new / next / reduce /
+    // reverse / set / sleep 共 15 名；其中 contains / is_empty / len 为三单元
+    // 交集。to_string **不在**交集合：它只由 std.convert 一个单元以裸名导出；
+    // `int.to_string` / `float.to_string` 等是点式 FFI 导出的**整名**（export!
+    // 第一参数，src/std/convert.rs），其 full_path 前缀是 FFI 名片段不是模块
+    // ——按 full_path 末段反推会把它们拆成裸名 to_string、误判 11 单元歧名
+    // （歧义枚举曾因按末段分组犯过这个假阳性：裸名 to_string 本确定解析到
+    // std.convert.to_string，不得拒）。`x.to_string()` 方法形态不经裸名
+    // 臂，不受影响；只拦裸名引用。
     ("E1116", TypeCheck, false, ambiguous_std_export(name: &str, units: &str) => .param("name", name) .param("units", units)),
 });

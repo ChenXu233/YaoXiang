@@ -201,23 +201,30 @@ pub fn add_native_function_types(
             .and_then(|(name, module)| Nominal::item(module, name))
     };
 
-    // 裸名歧义短名的唯一生产端（issue #577，用户裁决乙案）：先按短名枚举
+    // 裸名歧义短名的唯一生产端（issue #577，用户裁决乙案）：先枚举
     // 「≥2 个 Std 单元同时导出同一 Function/Constant 名」的交集合。这些短名
     // 没有权威赢家——lower 侧 short_to_qualified_map 按注册表 HashMap 迭代序
     // 随机覆盖、run 期随机派发（静默错值 / E6007），check 面按静态序赢家签名
-    // 检查通过造成「check 绿、run 二义」。判定与注册必须同一趟信息源：歧义
-    // 短名跳过全部三条短名键（签名 / arity / 形参名——表间必须对齐，否则
-    // 「arity 有表项而签名无」又是一份平行事实），全限定名键照常；裸名引用
-    // 在 Var 臂查不到时按 `env.ambiguous_std_short_names` 发 E1116。
+    // 检查通过造成「check 绿、run 二义」。判定与注册共用同一信息源，且都在
+    // 本函数内先枚举后注册：歧义短名跳过全部三条短名键（签名 / arity / 形参
+    // 名——表间必须对齐，否则「arity 有表项而签名无」又是一份平行事实），
+    // 全限定名键照常；裸名引用在 Var 臂查不到时按
+    // `env.ambiguous_std_short_names` 发 E1116。
     //
-    // 枚举口径对齐消费侧：`native_names()` 与 lower 侧 `short_to_qualified_map`
-    // （registry.rs）同走「全部 Std 单元的 Function/Constant 导出」——若改用
-    // `std_submodule_names()`（仅 std 根的直接子模块），嵌套 Std 单元会漏数。
+    // 分组键 = `export.name`，单元归属 = 模块路径（模块身份），与 lower 侧
+    // `short_to_qualified_map` 的实际键同源（`registry.std_code_exports()` 是
+    // 两侧共用的唯一迭代源）。**不得**从 `full_path` 末段反推短名或单元——
+    // 点式 FFI 导出（如 `int.to_string`，src/std/convert.rs）的 full_path 就是
+    // native FFI 名本身，其前缀（`int`）不是模块；按末段分组会把
+    // `int.to_string` / `float.to_string` 等整名都拆成裸名 `to_string`，把只由
+    // std.convert 一个单元导出的 to_string 误判为 11 单元歧名——裸名
+    // to_string 本确定解析到 std.convert.to_string（修后首版曾因按末段分组
+    // 误拒它，与 lower 侧 map 的实际键集不符；按 `export.name` 重枚举交集合
+    // 可复现对账：16 名 → 15 名，to_string 退出）。乙案边界 = 「裸名命中
+    // ≥2 个 Std 单元的同名导出」，`export.name` 为整名的点式 FFI 导出不构成
+    // 裸名命中。
     let mut ambiguous: HashMap<String, Vec<String>> = HashMap::new();
-    for full_path in registry.native_names() {
-        let Some((unit, short)) = full_path.rsplit_once('.') else {
-            continue;
-        };
+    for (unit, short, _) in registry.std_code_exports() {
         let units = ambiguous.entry(short.to_string()).or_default();
         if !units.iter().any(|u| u == unit) {
             units.push(unit.to_string());

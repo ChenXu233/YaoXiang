@@ -96,7 +96,8 @@ pub struct StatementChecker {
     /// Native 函数签名表
     native_signatures: HashMap<String, MonoType>,
     /// 裸名歧义的标准库短名表（issue #577，用户裁决乙案）：短名 → 导出它的
-    /// Std 单元列表。由 `add_native_function_types` 生产（与短名键跳过同一趟），
+    /// Std 单元列表。由 `add_native_function_types` 生产（同一次调用内先枚举
+    /// 本表后注册短名键，跳过判定读同一张枚举结果），
     /// 消费面 = 表达式推断器 Var 臂：裸名查不到条目且命中本表 → E1116。
     ambiguous_std_short_names: HashMap<String, Vec<String>>,
     /// Native 函数 arity 区间表（#387，随签名表同源灌装）

@@ -1514,6 +1514,10 @@ impl TypeChecker {
             body_checker.set_import_face(self.env.import_face.clone());
             // 设置 native 函数签名表
             body_checker.set_native_signatures(self.env.native_signatures.clone());
+            // #577：裸名歧义的标准库短名表随签名表同源注入（Var 臂 E1116 判据）
+            // ——漏一处会让懒构造入口把歧名报成 E1001（码义错：注入点必须与
+            // init_body_checker 对齐，直接调 check_stmt 的入口不经后者）
+            body_checker.set_ambiguous_std_short_names(self.env.ambiguous_std_short_names.clone());
             // #387：native arity 区间表随签名表同源传递
             body_checker.set_native_arities(self.env.native_arity.clone());
             // #454：native 形参名随签名表同源传递（命名实参按名绑定的唯一来源）

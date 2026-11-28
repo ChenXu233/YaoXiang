@@ -4,19 +4,27 @@
 //! Std 单元的同名导出 ⇒ 编译期报错，强制显式消歧；与 #477（用户定义优先 +
 //! 限定名消歧）同一哲学。判据本体：
 //! - 生产端：`add_native_function_types`（src/frontend/core/sema/mod.rs）按
-//!   `native_names()`（与 lower 侧 `short_to_qualified_map` 同一遍历口径）枚举
+//!   `registry.std_code_exports()`（与 lower 侧 `short_to_qualified_map` 共用的
+//!   唯一迭代源，分组键 = `export.name`、单元归属 = 模块路径）枚举
 //!   「≥2 个 Std 单元导出同一 Function/Constant 短名」的交集合，登记进
 //!   `env.ambiguous_std_short_names`；歧义短名跳过 native_signatures /
 //!   native_arity / native_param_names 三表的短名键（全限定名键照常）。
-//! - 消费端：表达式推断器 Var 臂——裸名查不到条目且命中歧义表 ⇒ E1116。
+//! - 消费端：两个 Var 臂——顶层语句 RHS 的 `check_expr` 臂与函数体表达式
+//!   推断的 `infer_expr` 臂（Call 的 func 位经 `infer_call_expr` 到达）——
+//!   裸名查不到条目且命中歧义表 ⇒ E1116。两条注入链各自补齐：
+//!   `init_body_checker` 与懒构造 `body_checker_mut`。
 //!
 //! 本文件测试**直驱**生产端：`TypeChecker::new` 内部跑真实
 //! `add_native_function_types`（checker.rs 注册段），不手工构造歧义表。
 //!
 //! 覆盖：
 //! 1. 歧义短名不进三表短名键、进歧义表且单元列表有序（生产端事实）；
-//! 2. 裸名引用歧义短名报 E1116（消费端行为）；
-//! 3. 防误伤：use 项导入 / 本地同名定义 / 单一导出短名 / 限定名调用全部放行。
+//! 2. 裸名引用歧义短名报 E1116（消费端行为，顶层 RHS 臂）；
+//! 3. 函数体内 Call 形态报 E1116（消费端行为，infer_expr 臂——locales
+//!    E1116 example 的形态）；
+//! 4. 懒构造入口（不经 `check_module` 的 `check_stmt`）报 E1116 而非 E1001
+//!    （F2：懒构造注入点与 init_body_checker 对齐）；
+//! 5. 防误伤：use 项导入 / 本地同名定义 / 单一导出短名 / 限定名调用全部放行。
 
 use crate::frontend::core::lexer::tokenize;
 use crate::frontend::core::parser::parse;
@@ -112,6 +120,56 @@ fn test_bare_reference_to_ambiguous_short_name_reports_e1116() {
     assert!(
         !codes.iter().any(|c| c == "E1001" || c == "E1027"),
         "歧义短名不得被报成未知变量（码义必须精确），实际诊断: {codes:?}"
+    );
+}
+
+#[test]
+fn test_ambiguous_call_in_function_body_reports_e1116_via_infer_expr() {
+    // Arrange：函数体内 Call 形态（locales E1116 的 example）——func 位 Var
+    // 经 infer_call_expr 的 infer_expr(func) 到达 infer_expr 的 Var 臂，与顶层
+    // RHS 的 check_expr Var 臂是两个入口；本条是 infer_expr 臂的唯一直驱——
+    // 删掉该臂时其余夹具（顶层 RHS 形态）全绿，只本条红
+    let source = "main: () -> Int = () => {\n    s = concat(\"foo\", \"bar\")\n    print(s)\n    0\n}\nmain()";
+
+    // Act
+    let codes = diagnostics_via_pipeline(source);
+
+    // Assert：E1116 发射且不是「未知变量」——infer_expr 臂与 check_expr 臂
+    // 必须同判（两遍历器一个歧义表）
+    assert!(
+        codes.iter().any(|c| c == "E1116"),
+        "函数体内 Call 形态的裸名歧名必须报 E1116（infer_expr Var 臂），实际诊断: {codes:?}"
+    );
+    assert!(
+        !codes.iter().any(|c| c == "E1001" || c == "E1027"),
+        "歧名不得被报成未知变量（码义必须精确），实际诊断: {codes:?}"
+    );
+}
+
+#[test]
+fn test_lazily_constructed_body_checker_reports_e1116_for_ambiguous_bare_name() {
+    // Arrange：裸名歧义短名的顶层值引用；不经 check_module，直接 check_stmt——
+    // body_checker 由懒构造点（body_checker_mut）现场构建，该构造点漏注入
+    // 会让歧名报 E1001 而非 E1116（码义错），本条钉住注入点对齐
+    let module = parse_module(&bare_reference("concat"));
+    let mut checker = TypeChecker::new("ambiguous-std-probe");
+
+    // Act：逐条顶层语句检查（与 check_module pass3 同形态），收集诊断码
+    let mut codes = Vec::new();
+    for stmt in &module.items {
+        if let Err(e) = checker.check_stmt(stmt) {
+            codes.push(e.code.clone());
+        }
+    }
+
+    // Assert：懒构造入口与 init_body_checker 同判——E1116，不得是未知变量
+    assert!(
+        codes.iter().any(|c| c == "E1116"),
+        "懒构造入口的裸名歧名引用必须报 E1116（歧义表随懒构造同源注入），实际诊断: {codes:?}"
+    );
+    assert!(
+        !codes.iter().any(|c| c == "E1001" || c == "E1027"),
+        "懒构造入口不得把歧名报成未知变量（码义必须精确），实际诊断: {codes:?}"
     );
 }
 

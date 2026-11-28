@@ -304,7 +304,9 @@ pub struct TypeEnvironment {
     /// 裸名歧义的标准库短名表（issue #577，用户裁决乙案）：短名 → 导出该短名的
     /// Std 单元全路径列表（`std.string`、`std.list`）。**仅收被 ≥2 个 Std 单元
     /// 同时导出**的 Function/Constant 短名，由 [`crate::frontend::core::sema::add_native_function_types`]
-    /// 注册循环同趟枚举登记（登记-消费唯一生产端）。这些短名**不注册**短名键
+    /// 在同一次调用内先枚举后注册（登记-消费唯一生产端；不是注册循环的同一次
+    /// 遍历——枚举按 `export.name` × 模块路径分组先完成，注册循环随后逐导出
+    /// 查表跳过短名键）。这些短名**不注册**短名键
     /// （native_signatures / native_arity / native_param_names 三表对齐跳过）——
     /// 没有权威赢家就不该有静默赢家；裸名引用在 Var 臂查不到条目时按本表发
     /// E1116（显式消歧），单一导出与全限定名键不受影响。
