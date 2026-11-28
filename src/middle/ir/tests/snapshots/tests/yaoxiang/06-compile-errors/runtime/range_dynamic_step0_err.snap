@@ -10,12 +10,12 @@ module
     value v2: Int(64) @block0
     value v3: TypeRef("?") @block0
     value v4: Generic { name: "Range", args: [Int(64)] } @block0
-    value v5: TypeRef("?") @block0
+    value v5: Generic { name: "Iterator", args: [TypeRef("Any")] } @block0
     value v6: TypeRef("?") @block0
     value v7: Int(64) @block0
     value v8: Bool @block0
-    value v9: TypeRef("?") @block0
-    value v10: TypeRef("?") @block0
+    value v9: Bool @block0
+    value v10: TypeRef("Any") @block0
     value v11: Void @block0
     value v12: Int(64) @block0
     value v13: Int(64) @block0

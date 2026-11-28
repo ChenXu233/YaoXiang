@@ -57,9 +57,9 @@ module
     value v41: Int(64) @block0
     value v42: Int(64) @block0
     value v43: Int(64) @block0
-    value v44: TypeRef("?") @block0
-    value v45: TypeRef("?") @block0
-    value v46: TypeRef("?") @block0
+    value v44: Generic { name: "Iter", args: [Void] } @block0
+    value v45: Bool @block0
+    value v46: Void @block0
     value v47: Bool @block0
     value v48: Int(64) @block0
     value v49: Int(64) @block0
@@ -82,9 +82,9 @@ module
     value v66: Int(64) @block0
     value v67: Int(64) @block0
     value v68: Int(64) @block0
-    value v69: TypeRef("?") @block0
-    value v70: TypeRef("?") @block0
-    value v71: TypeRef("?") @block0
+    value v69: Generic { name: "Iter", args: [Void] } @block0
+    value v70: Bool @block0
+    value v71: Void @block0
     value v72: Bool @block0
     value v73: Int(64) @block0
     value v74: Int(64) @block0

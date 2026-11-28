@@ -23,9 +23,9 @@ module
     value v12: Int(64) @block0
     value v13: Int(64) @block0
     value v14: Int(64) @block0
-    value v15: TypeRef("?") @block0
-    value v16: TypeRef("?") @block0
-    value v17: TypeRef("?") @block0
+    value v15: Generic { name: "Iter", args: [Void] } @block0
+    value v16: Bool @block0
+    value v17: Void @block0
     value v18: Bool @block0
     value v19: Int(64) @block0
     value v20: Int(64) @block0

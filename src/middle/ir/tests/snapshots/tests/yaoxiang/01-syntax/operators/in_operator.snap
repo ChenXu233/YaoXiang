@@ -50,7 +50,7 @@ module
     value v44: Int(64) @block0
     value v45: Generic { name: "String", args: [] } @block0
     value v46: Never @block0
-    value v47: TypeRef("?") @block0
+    value v47: Bool @block0
     value v48: Int(64) @block0
     value v49: TypeRef("?") @block0
     value v50: Int(64) @block0
@@ -62,7 +62,7 @@ module
     value v56: Generic { name: "String", args: [] } @block0
     value v57: Never @block0
     value v58: Bool @block0
-    value v59: TypeRef("?") @block0
+    value v59: Bool @block0
     value v60: Int(64) @block0
     value v61: TypeRef("?") @block0
     value v62: Int(64) @block0
