@@ -921,7 +921,7 @@ fn test_native_local_loop_repeated_write_is_allowed() {
 fn string_value_info(block: usize) -> ValueInfo {
     ValueInfo {
         ty: MonoType::Generic {
-            name: "String".to_string(),
+            name: Nominal::flat("String").expect("String is a valid bare type name"),
             args: Vec::new(),
         },
         debug_name: None,

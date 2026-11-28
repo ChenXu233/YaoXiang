@@ -1768,7 +1768,8 @@ mod enabled {
     fn string_value_info(block: usize) -> yaoxiang::middle::ir::ir::ValueInfo {
         yaoxiang::middle::ir::ir::ValueInfo {
             ty: yaoxiang::frontend::core::sema::MonoType::Generic {
-                name: "String".to_string(),
+                name: yaoxiang::frontend::core::types::identity::Nominal::flat("String")
+                    .expect("String is a valid bare type name"),
                 args: Vec::new(),
             },
             debug_name: None,
