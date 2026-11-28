@@ -1781,6 +1781,10 @@ test_namespace_constant_value_keeps_zero_arg_call	src/middle/lower/expr/tests/ac
 test_native_constant_alias_value_keeps_zero_arg_call	src/middle/lower/expr/tests/access.rs	assertx3	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_native_fn_alias_value_loads_native_fn	src/middle/lower/expr/tests/access.rs	assertx3	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_method_def_via_namespace_materializes_closure	src/middle/lower/expr/tests/access.rs	assertx3	病史	函数体/注释点名 issue/回归/缺陷/事故	留
+test_struct_empty_constructor_keeps_zero_value_fill	src/middle/lower/expr/tests/call.rs	assert_eqx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_struct_partial_constructor_without_default_reports_internal_error	src/middle/lower/expr/tests/call.rs	assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_named_constructor_missing_field_without_default_reports_internal_error	src/middle/lower/expr/tests/call.rs	assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_named_argument_uncovered_slot_reports_internal_error	src/middle/lower/expr/tests/call.rs	assert_eqx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_lambda_free_variable_uses_explicit_environment	src/middle/lower/expr/tests/closure.rs	assertx1 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_spawn_task_uses_synthesized_environment	src/middle/lower/expr/tests/closure.rs	assertx1 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_spawn_for_body_uses_synthesized_environment	src/middle/lower/expr/tests/closure.rs	assert_eqx1 matchesx1 assertx3 is_okx1 helperx3	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留

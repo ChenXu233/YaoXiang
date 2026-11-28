@@ -84,7 +84,7 @@ pub(super) struct CallArgs<'a> {
 
 impl<'a> CallArgs<'a> {
     /// 从调用节点的实参面构造（寄存器为空，等 `collect_regs` 求值）。
-    fn new(
+    pub(super) fn new(
         args: &'a [Expr],
         named: &'a [(String, Expr)],
         span: Span,
@@ -208,6 +208,44 @@ impl<'a> CallArgs<'a> {
             regs.push(reg);
         }
         Ok(regs)
+    }
+
+    /// 命名实参槽位必须**全部**被覆盖：收下槽位向量并按形参声明序落成寄存器。
+    ///
+    /// 与 `bind_named_slots` 的分工：那边只按形参位搬运，缺席位**合法**——命名
+    /// 空间调用丢弃缺席位、由被调方自行处理可选位（`assert.assert(cond = ...)`
+    /// 省略 `?msg` 就走那条）。本函数服务普通函数调用路径，那条路径的形参名表
+    /// 不含可选位（`fn_param_names` 与导出 `param_names` 的必需下限都是表长），
+    /// 所以任何缺席位都意味着类型检查与 lowering 判定不一致。
+    pub(super) fn require_complete_slots(
+        &mut self,
+        key: &str,
+        param_names: &[String],
+        slots: Vec<Option<Operand>>,
+    ) -> Result<(), Diagnostic> {
+        let missing: Vec<usize> = slots
+            .iter()
+            .enumerate()
+            .filter(|(_, slot)| slot.is_none())
+            .map(|(index, _)| index)
+            .collect();
+        if let Some(&first) = missing.first() {
+            let param = param_names
+                .get(first)
+                .map(String::as_str)
+                .unwrap_or("<超签位>");
+            return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                "调用 {} 的实参槽位未覆盖：{} 个形参位缺席（首个槽位 {}，形参 {}）——类型检查与 lowering 判定不一致",
+                key,
+                missing.len(),
+                first,
+                param
+            ))
+            .at(self.span)
+            .build());
+        }
+        self.regs = slots.into_iter().flatten().collect();
+        Ok(())
     }
 
     /// 用重排结果替换位置实参寄存器（结构体构造器按字段名重排后使用）。
@@ -1080,11 +1118,15 @@ impl AstToIrGenerator {
                                         constants,
                                     )?;
                                 } else {
-                                    instructions.push(Instruction::Load {
-                                        dst: default_reg.clone(),
-                                        src: Operand::Const(ConstValue::Int(0)),
-                                        span: self.cur_span,
-                                    });
+                                    // 命名式构造没有「部分构造」形态：缺位由类型检查按
+                                    // E1010 拒绝。走到这里 = 两侧判定不一致，响亮失败
+                                    // （旧行为：静默补 Int(0)，把未指定的字段当零值传下去）。
+                                    return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                                        "结构体 {} 的字段 {} 既无实参也无默认值——类型检查与 lowering 判定不一致",
+                                        name, data_fields[i].1.name
+                                    ))
+                                    .at(call.span())
+                                    .build());
                                 }
                                 *slot = Some(default_reg.clone());
                             }
@@ -1112,24 +1154,40 @@ impl AstToIrGenerator {
                     // 数据字段数才是构造参数上限；witness 字段不占槽位
                     let data_fields = Self::data_ctor_fields(&fields);
                     let present = call.regs().len();
+                    // 空构造（`Pair(Int)()`）的字段取**零值**，数据事后赋值——SPEC
+                    // §4.3 与语料 `generic_constructor.yx` 的「空构造」用例，零值可被
+                    // 用户程序观察到（那边断言 `z.first == 0`），属**合法零初始化**，
+                    // 不是兜底。
+                    // 部分构造（`Pair(Int)(1)`）没有对应语义：缺位由类型检查按 E1010
+                    // 拒绝，走到这里是内部不一致，响亮失败（旧行为静默补 Int(0)）。
+                    let is_empty_construction = present == 0;
                     if present < data_fields.len() {
-                        for (_, field) in data_fields.iter().skip(present) {
+                        for (data_index, (_, field)) in data_fields.iter().enumerate().skip(present)
+                        {
                             let default_reg = self.next_temp_reg();
-                            if let Some(default_expr) = &field.default {
+                            match &field.default {
                                 // 有默认值：生成默认值表达式 IR
-                                self.generate_expr_ir(
+                                Some(default_expr) => self.generate_expr_ir(
                                     default_expr,
                                     default_reg.clone(),
                                     instructions,
                                     constants,
-                                )?;
-                            } else {
-                                // 无默认值：用零值填充（语义检查阶段应已报错）
-                                instructions.push(Instruction::Load {
-                                    dst: default_reg.clone(),
-                                    src: Operand::Const(ConstValue::Int(0)),
-                                    span: self.cur_span,
-                                });
+                                )?,
+                                None if is_empty_construction => {
+                                    instructions.push(Instruction::Load {
+                                        dst: default_reg.clone(),
+                                        src: Operand::Const(ConstValue::Int(0)),
+                                        span: self.cur_span,
+                                    });
+                                }
+                                None => {
+                                    return Err(ErrorCodeDefinition::ir_internal_error(&format!(
+                                        "结构体 {} 的第 {} 个数据字段 {} 既无实参也无默认值——类型检查与 lowering 判定不一致",
+                                        name, data_index, field.name
+                                    ))
+                                    .at(call.span())
+                                    .build())
+                                }
                             }
                             call.push_reg(default_reg.clone());
                         }
@@ -1196,24 +1254,9 @@ impl AstToIrGenerator {
                         instructions,
                         constants,
                     )?;
-                    // 未覆盖的槽位：保持缺席，由类型检查阶段报 E1010。
-                    // 运行期为安全起见补 0（正常路径不会到这里）。
-                    call.set_regs(
-                        slots
-                            .into_iter()
-                            .map(|s| {
-                                s.unwrap_or_else(|| {
-                                    let r = self.next_temp_reg();
-                                    instructions.push(Instruction::Load {
-                                        dst: r.clone(),
-                                        src: Operand::Const(ConstValue::Int(0)),
-                                        span: self.cur_span,
-                                    });
-                                    r.clone()
-                                })
-                            })
-                            .collect(),
-                    );
+                    // 未覆盖的槽位 = 类型检查与 lowering 判定不一致：响亮失败，
+                    // 不补 0（旧行为把未指定的形参当零值传下去，错误无声无息）。
+                    call.require_complete_slots(diag_key, names, slots)?;
                 }
             }
 
