@@ -710,7 +710,11 @@ main = () => {
 }
 /// WBS 4.9.8 修复轮 R1 / issue #465（先红后绿，值级断言）：**算子接口**两臂
 /// （Index / Equal）同样必须派发到定义单元。修复前 `u[0]` 走 a 的 `v+1.0`（3.0）、
-/// `u == t` 走 a 的 `true`——两臂拼调用名时用的是 typecheck 过来的短类型名。
+/// `u == u` 走 a 的 `true`——两臂拼调用名时用的是 typecheck 过来的短类型名。
+/// D64 起 a.Temp 与 b.Temp 是**不同名义类型**，`==` 只在同型两侧成立
+/// （旧夹具的 `u == t` 靠裸名混同取 b 的 equal，那是 L3 要消除的串味）。
+/// D59 分流：**B 类收紧**（原先被混同的静默错派改为类型错误；两臂仍各与
+/// 自身比较，判据覆盖不变）。
 #[test]
 fn test_multifile_cross_unit_same_named_type_operator_arms_dispatch_to_defining_unit() {
     // Arrange - 两单元同名类型各带 Index / Equal（a = v+1/true、b = v*10/false）
@@ -745,11 +749,11 @@ main = () => {
     t = Temp(1.0)
     u = TempB(2.0)
     x: Float = u[0]
-    same: Bool = u == t
-    rev: Bool = t == u
+    same: Bool = u == u
+    rev: Bool = t == t
     assert.assert(x == 20.0, "u[0] 必须走 b.Temp.index（v*10）")
-    assert.assert(!same, "u == t（左操作数 = b 侧）必须走 b.Temp.equal（false）")
-    assert.assert(rev, "t == u（左操作数 = a 侧）必须走 a.Temp.equal（true）")
+    assert.assert(!same, "u == u（b 侧）必须走 b.Temp.equal（false）")
+    assert.assert(rev, "t == t（a 侧）必须走 a.Temp.equal（true）")
 }
 "#;
 

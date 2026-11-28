@@ -127,16 +127,6 @@ pub struct TypePath {
 }
 
 impl TypePath {
-    /// **L3-1a 临时通道**：接收既有的整串限定名（含点）原样保存，不做切分。
-    ///
-    /// 仅用于「当前表示里已经带点、但还没有身份表可查」的构造点；L3-1b 改为
-    /// 身份表解析后删除本构造器，届时所有构造都必须走 flat/item。
-    pub fn qualified_legacy(name: &str) -> Self {
-        Self {
-            inner: DefPath::item("", name),
-        }
-    }
-
     /// 匿名/合成形态的空名（无名义头的 Struct/Enum 用）：不是身份，仅保持今天的空名打印。
     pub fn anonymous() -> Self {
         Self {
@@ -263,14 +253,6 @@ impl Hash for TypePath {
 pub struct Nominal(TypePath);
 
 impl Nominal {
-    /// **L3-1a 临时通道**：接收既有的整串限定名（含点）原样保存，不做切分。
-    ///
-    /// 仅用于「当前表示里已经带点、但还没有身份表可查」的构造点；L3-1b 改为
-    /// 身份表解析后删除本构造器。
-    pub fn qualified_legacy(name: &str) -> Self {
-        Self(TypePath::qualified_legacy(name))
-    }
-
     /// 匿名/合成形态的空名（无名义头的 Struct/Enum 用）：不是身份，仅保持今天的空名打印。
     pub fn anonymous() -> Self {
         Self(TypePath::anonymous())

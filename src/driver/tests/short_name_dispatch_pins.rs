@@ -19,11 +19,11 @@
 //!    （或该方法派发被激活）时，零开销臂会开始产出 `{Type}.to_string` 短名
 //!    调用 → 钉 ① 变红；
 //! ② `Try` 四方法派发链（`src/middle/lower/expr/op.rs` `generate_try_expr_ir`）
-//!    ——**别名导入的**用户 Try 类型不可达：实现登记按定义侧类型名键控，
+//!    ——**别名导入的**用户 Try 类型此前不可达：实现登记按定义侧类型名键控，
 //!    `use lib.{Maybe as MaybeB}` 后 `?` 的接收者叶子名是别名 `MaybeB`，
-//!    typecheck `E1082` 硬错先挡（实测 `'MaybeB' does not implement the
-//!    'Try' interface`）。当 E1082 对别名导入放开时，编译会走到派发臂 →
-//!    钉 ② 变红。
+//!    typecheck `E1082` 硬错先挡。D64（类型表示层身份）起别名解析到定义侧身份
+//!    `lib.Maybe`，可达性前提消失；钉 ② 改为钉**终点名**（`lib.Maybe.*`，
+//!    回落别名叶子名即翻红）。
 //!
 //! 与 #465 同族的病理（放开任一前置即成静默错派）：短类型名是裸名义名，不
 //! 携带定义模块；跨单元同名类型按裸名派发会落到**导入面**提供者（#465 红态
@@ -43,7 +43,6 @@
 //!    已限定名经 `resolve_call_target` 原样通过，终点不变。
 
 use super::driver::{make_script_project, run_merged_slot_values, run_multi};
-use crate::frontend::module::orchestrator::OrchestratorError;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 
 /// 合并 IR 里全部静态 Call 的被调名（函数体 + init 段；与 method_dispatch.rs 同一读取面）。
@@ -181,34 +180,44 @@ r = MaybeB.just(4)
 t = bump(&r)
 ";
 
-/// 钉 ②：**别名导入的**用户 Try 类型在导入单元用 `?` 被 typecheck `E1082` 拒绝。
-/// E1082 对别名导入放开（实现登记按别名可达）时本测试变红——届时派发臂会拿到
-/// 别名类型的接收者，调用名必须同经方法身份判据（#465 同族短名病理；
-/// 先红已实测：typecheck 判据临时按别名后缀匹配放开 → 编译走到派发臂，判据
-/// 恢复 → 绿）。
+/// 钉 ②（D64 语义更新）：**别名导入的**用户 Try 类型与定义侧是**同一身份**
+/// （`lib.Maybe`），`?` 在导入单元因此可达——终点名必须同经方法身份判据
+/// 落到定义单元的限定名（`lib.Maybe.*`），不得回落别名叶子名（`MaybeB.*`，
+/// #465 同族短名病理）。
+///
+/// 历史：L3 之前别名导入时实现登记按定义侧名键控、typecheck 查不到 ⇒ E1082
+/// 硬错先挡；本测试当时钉 `E1082`。D64 让类型身份随别名解析到 (lib, Maybe)，
+/// 该拒绝面不再成立——本测试改为钉可达后的**派发名**（判据更强：短名回落会
+/// 在此翻红）。D59 分流：**B 类收紧**（旧 E1082 是身份缺口造成的假拒绝；
+/// 新判据比旧判据更强——除「可编译」外还钉终点名且禁止回落别名叶子名）。
 #[test]
-fn test_aliased_imported_user_try_type_rejected_by_e1082() {
+fn test_aliased_imported_user_try_type_dispatch_uses_definition_identity() {
     // Arrange：lib 定义 Maybe+Try，入口以别名 MaybeB 导入后在自己的函数里用 `?`
     let (_dir, entry) = make_script_project(&[("lib.yx", TRY_LIB), ("main.yx", ALIASED_TRY_ENTRY)]);
 
     // Act
     let outcome = run_multi(&entry).expect("driver run failed");
 
-    // Assert：编译失败，且失败面是 typecheck 的 E1082（Try 接口判据，非旁路错误）
-    let failure = outcome
-        .failure
-        .expect("别名导入的用户 Try 类型用 ? 必须被 typecheck 拒绝（E1082）——若此处编译通过，说明 E1082 判据已放开，钉 ② 失效需回头核对派发臂");
-    let OrchestratorError::TypeCheck { diagnostics, .. } = &failure else {
-        panic!("失败面必须是 TypeCheck 契约（? 的拒绝发生在类型检查层），实际：{failure:?}");
-    };
+    // Assert：D64 身份下可编译（别名解析到定义侧身份 lib.Maybe）
     assert!(
-        diagnostics.iter().any(|d| d.code == "E1082"),
-        "拒绝码必须是 E1082（? 接收者未实现 Try——实现登记按定义侧类型名键控，别名叶子名查不到），实际诊断：{:?}",
-        diagnostics
-            .iter()
-            .map(|d| (d.code.as_str(), d.message.as_str()))
-            .collect::<Vec<_>>()
+        outcome.failure.is_none(),
+        "别名导入的用户 Try 类型与定义侧同一身份（D64），? 必须可达：{:?}",
+        outcome.failure
     );
+    let callees = call_names(&outcome.module.expect("must produce IR"));
+    // Assert：四个 Try 方法调用名 = 定义单元限定名，不得是别名叶子名
+    for method in ["is_failure", "success", "residual", "from_error"] {
+        let qualified = format!("lib.Maybe.{method}");
+        assert!(
+            callees.iter().any(|c| c == &qualified),
+            "? 的 {method} 派发必须落到定义单元限定名 {qualified}（D-8），实际调用名：{callees:?}"
+        );
+        let aliased = format!("MaybeB.{method}");
+        assert!(
+            !callees.iter().any(|c| c == &aliased),
+            "? 的 {method} 派发不得回落别名叶子名 {aliased}，实际调用名：{callees:?}"
+        );
+    }
 }
 
 /// 对照 ④：**同单元**用户 Try 类型 `?` 的终点名带本单元键（可达路径现状）。

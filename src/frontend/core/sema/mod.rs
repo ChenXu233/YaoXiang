@@ -188,6 +188,17 @@ pub fn add_native_function_types(
     use crate::frontend::module::ExportKind;
 
     let registry = ModuleRegistry::with_std();
+    // std **已声明**类型名 → 模块键（D64）：native 签名串里的 `Result(T, E)` /
+    // `Json` / `Spanned` 必须与注解侧解析到同一身份，否则「按规范写的调用」
+    // 会在 unify 处被判异（std 声明类型在单文件也带模块身份）。幻名
+    // （File / Error）与类型族不在此表，保持平路径。
+    let std_declared = registry.std_type_origins();
+    let resolve_std_identity = |written: &str| -> Option<Nominal> {
+        std_declared
+            .iter()
+            .find(|(name, _)| name == written)
+            .and_then(|(name, module)| Nominal::item(module, name))
+    };
 
     // 遍历所有 std 子模块，自动注册导出的函数
     for submodule_name in registry.std_submodule_names() {
@@ -203,7 +214,11 @@ pub fn add_native_function_types(
                             // 注册进 native_signatures，劫持消费者调用点（std.test 首次行使暴露）
                             continue;
                         }
-                        signature::parse_signature(&export.signature, env)?
+                        let parsed = signature::parse_signature(&export.signature, env)?;
+                        crate::frontend::core::types::substitute::resolve_nominal_identities(
+                            &parsed,
+                            &resolve_std_identity,
+                        )
                     }
                     _ => continue,
                 };

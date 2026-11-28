@@ -48,7 +48,12 @@ impl<'a> ExpressionInferrer<'a> {
         named_args: &[(String, crate::ast::Expr)],
         span: crate::util::span::Span,
     ) -> Result<MonoType> {
-        let Some(variants) = self.sum_types.get(type_name) else {
+        // 和类型名 → 类型身份（D64）：别名导入/跨模块同名类型在类型层可分。
+        let nominal = self.type_identity(type_name).unwrap_or_else(|| {
+            Nominal::flat(AsRef::<str>::as_ref(&(type_name)))
+                .expect("type name must be bare and non-empty")
+        });
+        let Some(variants) = self.sum_variants(&nominal) else {
             return Err(
                 ErrorCodeDefinition::field_not_found(variant_name, type_name)
                     .at(span)
@@ -69,8 +74,7 @@ impl<'a> ExpressionInferrer<'a> {
         // 载荷签名 = 变体参数经类型实参替换
         // 非泛型和类型（Color）不在 generic_type_defs，形参表为空
         let param_names = self
-            .generic_type_defs
-            .get(type_name)
+            .generic_def(&nominal)
             .map(|d| d.type_param_names.clone())
             .unwrap_or_default();
         let subst_params: Vec<MonoType> = vdef
@@ -121,11 +125,10 @@ impl<'a> ExpressionInferrer<'a> {
                 ));
             }
         }
-        Ok(MonoType::Generic {
-            name: Nominal::flat(AsRef::<str>::as_ref(&(type_name)))
-                .expect("type name must be bare and non-empty"),
+        Ok(self.resolve_identity(MonoType::Generic {
+            name: nominal,
             args: concrete,
-        })
+        }))
     }
 
     /// 函数调用表达式的类型推断（自 `infer_expr` 的 Call 臂抽出）。
@@ -375,10 +378,10 @@ impl<'a> ExpressionInferrer<'a> {
         if let crate::ast::Expr::Var(type_name, _) = func {
             // func_ty 在此处可能是 MetaType（Var 臂开口）或 Struct（类型声明的
             // scope 镜像先命中 Var 臂）——两者都收成 Generic 形态
-            if self.sum_types.contains_key(type_name) {
+            let type_nominal = self.nominal_for(type_name);
+            if self.sum_variants(&type_nominal).is_some() {
                 let type_param_count = self
-                    .generic_type_defs
-                    .get(type_name)
+                    .generic_def(&type_nominal)
                     .map(|d| d.type_param_names.len())
                     .unwrap_or(0);
                 if args.len() != type_param_count {
@@ -407,31 +410,24 @@ impl<'a> ExpressionInferrer<'a> {
                             // 输出一致的 `Generic{名, []}`（TypeRef 与之不 unify）；
                             // 其余按名收名义引用
                             if let crate::ast::Expr::Var(n, _) = a {
-                                if self.sum_types.contains_key(n) {
+                                let n_nominal = self.nominal_for(n);
+                                if self.sum_variants(&n_nominal).is_some() {
                                     let has_params = self
-                                        .generic_type_defs
-                                        .get(n)
+                                        .generic_def(&n_nominal)
                                         .map(|d| !d.type_param_names.is_empty())
                                         .unwrap_or(false);
                                     if has_params {
-                                        return Some(MonoType::TypeRef(
-                                            Nominal::flat(AsRef::<str>::as_ref(&(n.clone())))
-                                                .expect("type name must be bare and non-empty"),
-                                        ));
+                                        return Some(MonoType::TypeRef(n_nominal));
                                     }
                                     return Some(MonoType::Generic {
-                                        name: Nominal::flat(AsRef::<str>::as_ref(&(n.clone())))
-                                            .expect("type name must be bare and non-empty"),
+                                        name: n_nominal,
                                         args: vec![],
                                     });
                                 }
                                 if self.generic_type_defs.contains_key(n)
                                     || self.type_defs.contains_key(n)
                                 {
-                                    return Some(MonoType::TypeRef(
-                                        Nominal::flat(AsRef::<str>::as_ref(&(n.clone())))
-                                            .expect("type name must be bare and non-empty"),
-                                    ));
+                                    return Some(MonoType::TypeRef(n_nominal));
                                 }
                             }
                             // 元组类型实参（`Result((Json, Int), Error)`）：语法
@@ -444,29 +440,21 @@ impl<'a> ExpressionInferrer<'a> {
                                             e,
                                             self.type_defs,
                                             self.generic_type_defs,
+                                            self.import_face,
+                                            self.type_identity_index,
                                         )
                                         .or_else(|| {
-                                            if self.sum_types.contains_key(n) {
+                                            let n_nominal = self.nominal_for(n);
+                                            if self.sum_variants(&n_nominal).is_some() {
                                                 let has_params = self
-                                                    .generic_type_defs
-                                                    .get(n)
+                                                    .generic_def(&n_nominal)
                                                     .map(|d| !d.type_param_names.is_empty())
                                                     .unwrap_or(false);
                                                 if has_params {
-                                                    return Some(MonoType::TypeRef(
-                                                        Nominal::flat(AsRef::<str>::as_ref(
-                                                            &(n.clone()),
-                                                        ))
-                                                        .expect(
-                                                            "type name must be bare and non-empty",
-                                                        ),
-                                                    ));
+                                                    return Some(MonoType::TypeRef(n_nominal));
                                                 }
                                                 return Some(MonoType::Generic {
-                                                    name: Nominal::flat(AsRef::<str>::as_ref(
-                                                        &(n.clone()),
-                                                    ))
-                                                    .expect("type name must be bare and non-empty"),
+                                                    name: n_nominal,
                                                     args: vec![],
                                                 });
                                             }
@@ -487,14 +475,20 @@ impl<'a> ExpressionInferrer<'a> {
                         }
                         // 具名类型解包失败（Any 等非注册名）时保留
                         // 名义引用 TypeRef(名)——错拼名由类型名校验拦截
-                        concrete_type_from_expr_arg(a, self.type_defs, self.generic_type_defs)
-                            .or_else(|| match a {
-                                crate::ast::Expr::Var(n, _) => Some(MonoType::TypeRef(
-                                    Nominal::flat(AsRef::<str>::as_ref(&(n.clone())))
-                                        .expect("type name must be bare and non-empty"),
-                                )),
-                                _ => None,
-                            })
+                        concrete_type_from_expr_arg(
+                            a,
+                            self.type_defs,
+                            self.generic_type_defs,
+                            self.import_face,
+                            self.type_identity_index,
+                        )
+                        .or_else(|| match a {
+                            crate::ast::Expr::Var(n, _) => Some(MonoType::TypeRef(
+                                Nominal::flat(AsRef::<str>::as_ref(&(n.clone())))
+                                    .expect("type name must be bare and non-empty"),
+                            )),
+                            _ => None,
+                        })
                     })
                     .collect::<Option<Vec<_>>>()
                     .ok_or_else(|| {
@@ -505,11 +499,10 @@ impl<'a> ExpressionInferrer<'a> {
                         .at(span)
                         .build()
                     })?;
-                return Ok(MonoType::Generic {
-                    name: Nominal::flat(AsRef::<str>::as_ref(&(type_name.clone())))
-                        .expect("type name must be bare and non-empty"),
+                return Ok(self.resolve_identity(MonoType::Generic {
+                    name: type_nominal,
                     args: concrete,
-                });
+                }));
             }
         }
 
@@ -1169,6 +1162,8 @@ impl<'a> ExpressionInferrer<'a> {
                                 &args[i],
                                 self.type_defs,
                                 self.generic_type_defs,
+                                self.import_face,
+                                self.type_identity_index,
                             )
                             .is_some()
                     };
@@ -1198,6 +1193,8 @@ impl<'a> ExpressionInferrer<'a> {
                                 &args[i],
                                 self.type_defs,
                                 self.generic_type_defs,
+                                self.import_face,
+                                self.type_identity_index,
                             ) {
                                 full_args[i] = concrete;
                             }
@@ -1401,8 +1398,9 @@ impl<'a> ExpressionInferrer<'a> {
                                 && !is_ctor_reference(t, self.generic_type_defs)
                         }) {
                             return Ok(MonoType::Generic {
-                                name: Nominal::flat(AsRef::<str>::as_ref(&(fn_name.clone())))
-                                    .expect("type name must be bare and non-empty"),
+                                // 与注解侧同一身份（D64）：构造器名的身份必须成对注入，
+                                // 否则同一形态一侧 Generic 平路径、一侧身份，unify 判异。
+                                name: self.nominal_for(fn_name),
                                 args: type_args,
                             });
                         }
@@ -1857,11 +1855,17 @@ impl<'a> ExpressionInferrer<'a> {
                         // 再 type_defs 解析用户自定义类型；都不匹配则跳过
                         if let MonoType::TypeRef(name) = &resolved_param {
                             if !is_iface_param {
-                                resolved_param =
-                                    match self.type_defs.get(name.bare()).map(|p| &p.body) {
-                                        Some(def_ty) => self.solver.resolve_type(def_ty),
-                                        None => continue,
-                                    };
+                                match self.type_def(name).map(|p| &p.body) {
+                                    Some(def_ty) => {
+                                        resolved_param = self.solver.resolve_type(def_ty)
+                                    }
+                                    // 平路径未知名（类型参数/幻名）沿用旧口径：跳过结构比较。
+                                    None if name.module().is_empty() => continue,
+                                    // **已声明类型**（身份非空）但本单元没有定义体：
+                                    // 不跳过——按名义身份判等（D64）；跳过等于把同名
+                                    // 跨模块类型判成可互传（静默混同）。
+                                    None => {}
+                                }
                             }
                         }
                         if let Err(failure) = decide(

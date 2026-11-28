@@ -1140,20 +1140,25 @@ pub(in crate::driver) fn resolved_method_marks(
         // `inst_map`）展开成具体类型组（原组保留），再逐组走同一套归因：
         // 展开出的 "Vec3.add" 以其自身类型名查 `owners` 归到定义单元，
         // 原 "T.add" 照旧归记录方。
-        let dispatch_bases = result
+        // 结构化派发点 (类型名, 方法名)：类型名与成员名分别来自
+        // OperatorDispatch 的两个字段，展开也按字段走——不从拼接串里
+        // 切回首段（D64 §2.5：身份不得从名字串反解）。
+        let dispatch_entries = result
             .operator_dispatches
             .iter()
-            .map(|d| format!("{}.{}", d.type_name, d.method));
-        for base in expand_dispatch_groups(dispatch_bases, &inst_map) {
-            let type_name = base.split('.').next().unwrap_or(&base);
-            let mut defining: HashSet<String> = owners.get(type_name).cloned().unwrap_or_default();
+            .map(|d| (d.type_name.clone(), d.method.clone()));
+        for (type_name, method) in expand_dispatch_entries(dispatch_entries, &inst_map) {
+            // 名字组的键 = 声明域两段名的**唯一投影**（DefPath::project）。
+            let group = DefPath::method("", &type_name, &method).project();
+            let mut defining: HashSet<String> =
+                owners.get(type_name.as_str()).cloned().unwrap_or_default();
             defining.insert(recorder_unit.clone());
             for key in defining {
                 marks
                     .operator_by_unit
                     .entry(key)
                     .or_default()
-                    .insert(base.clone());
+                    .insert(group.clone());
             }
         }
     }
@@ -1289,20 +1294,19 @@ pub(in crate::driver) fn declared_type_param_names<'a>(
 /// 派发组按实例化映射展开（WBS 3.20.4 / issue #510，展开逻辑的**单点**，
 /// 两臂共用）：组 "{P}.{m}" 若 P 在映射中 ⇒ 追加全部 "{X}.{m}"（X ∈ map[P]）；
 /// **原组保留**——用户类型可能真叫 "T"，且展开是追加不是替换。
-pub(in crate::driver) fn expand_dispatch_groups(
-    groups: impl IntoIterator<Item = String>,
+pub(in crate::driver) fn expand_dispatch_entries(
+    entries: impl IntoIterator<Item = (String, String)>,
     map: &HashMap<String, HashSet<String>>,
-) -> HashSet<String> {
+) -> HashSet<(String, String)> {
     let mut expanded = HashSet::new();
-    for group in groups {
-        expanded.insert(group.clone());
-        if let Some((param, method)) = group.split_once('.') {
-            if let Some(type_names) = map.get(param) {
-                for type_name in type_names {
-                    expanded.insert(format!("{type_name}.{method}"));
-                }
+    for (type_name, method) in entries {
+        if let Some(type_names) = map.get(&type_name) {
+            for concrete in type_names {
+                expanded.insert((concrete.clone(), method.clone()));
             }
         }
+        // **原组保留**——用户类型可能真叫 "T"，且展开是追加不是替换。
+        expanded.insert((type_name, method));
     }
     expanded
 }

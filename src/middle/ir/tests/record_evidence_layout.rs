@@ -306,7 +306,8 @@ fn module_ir_with_import(
     // 与 driver 的 IrGeneration 臂同源（arms.rs 的 seed_cross_file_types）：
     // 导入类型的字段布局由**定义方 AST** 预注册，量词再由 record_models 补齐。
     // 不预注册时导入字段访问会在 IR 侧报 E3005「无法解析字段索引」。
-    generator.seed_cross_file_types(&[&lib_parsed.module, &entry_parsed.module]);
+    // 本夹具的 typecheck 未开限定（`TypeChecker::new` 默认），身份是平路径 ⇒ 单元键传空串。
+    generator.seed_cross_file_types(&[("", &lib_parsed.module), ("", &entry_parsed.module)]);
     generator
         .generate_module_ir(&entry_parsed.module)
         .expect("导入夹具必须能生成 IR")

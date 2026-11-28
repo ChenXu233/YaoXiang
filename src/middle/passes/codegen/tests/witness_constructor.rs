@@ -54,6 +54,8 @@ fn module_with_type_decl(fields: Vec<TypeDeclField>) -> ModuleIR {
                         Nominal::flat(AsRef::<str>::as_ref(&("Box")))
                             .expect("type name must be bare and non-empty"),
                     ),
+                    identity: Nominal::flat(AsRef::<str>::as_ref(&("Box")))
+                        .expect("type name must be bare and non-empty"),
                 },
             },
             generic_params: None,

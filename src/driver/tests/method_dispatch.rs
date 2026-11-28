@@ -152,12 +152,21 @@ fn test_cross_unit_distinct_type_names_keep_their_own_dispatch() {
 /// ⇒ `u[0]` 得 3.0（应 20.0）、`u == t` 得 true（应 false）——两臂拼调用名时用的是
 /// typecheck 过来的**短类型名**（不经接收者身份，WBS 4.9.10 后由
 /// `OperatorDispatch::dispatch_name` 一次定死）。
+///
+/// D64 起（类型表示层身份）：`a.Temp` 与 `b.Temp` 是**不同名义类型**，`==` 只在
+/// 同型两侧成立。故本夹具的两条比较各自与自身比较（`u == u` / `t == t`），
+/// 仍钉「别名引入实例的算子派发归定义单元」这条语义；跨型比较（`u == t`）的
+/// 旧行为是裸名混同下的静默错派，D64 后按 D59 **B 类收紧**改为类型错误——
+/// 这是判据收紧，不是放宽：旧断言依赖的「同名即同型」前提已被 D64 移除。
 #[test]
 fn test_cross_unit_same_named_type_operator_arms_dispatch_use_defining_unit() {
     // Arrange：两单元同名类型各带 Index / Equal 实现，实现可区分（a = v+1/true、b = v*10/false）
     let index_a: &str = "Temp: Type = { v: Float, Index(Temp, Int, Float), Equal(Temp, Temp) }\n\nTemp.index: (self: &Temp, key: &Int) -> Float = (self, key) => {\n    self.v + 1.0\n}\n\nTemp.equal: (self: &Temp, other: &Temp) -> Bool = (self, other) => {\n    true\n}\n";
     let index_b: &str = "Temp: Type = { v: Float, Index(Temp, Int, Float), Equal(Temp, Temp) }\n\nTemp.index: (self: &Temp, key: &Int) -> Float = (self, key) => {\n    self.v * 10.0\n}\n\nTemp.equal: (self: &Temp, other: &Temp) -> Bool = (self, other) => {\n    false\n}\n";
-    let entry_src: &str = "use a.{Temp}\nuse b.{Temp as TempB}\n\nt = Temp(1.0)\nu = TempB(2.0)\nxi = u[0]\nne = u == t\nre = t == u\n";
+    // D64：a.Temp 与 b.Temp 是**不同名义类型**——`==` 只在同型两侧之间成立，
+    // 故两侧各与自身比较（跨型比较是类型错误；旧夹具靠裸名混同取 b 的 equal，
+    // 那正是 L3 要消除的串味）。
+    let entry_src: &str = "use a.{Temp}\nuse b.{Temp as TempB}\n\nt = Temp(1.0)\nu = TempB(2.0)\nxi = u[0]\nne = u == u\nre = t == t\n";
     let (_dir, entry) =
         make_script_project(&[("a.yx", index_a), ("b.yx", index_b), ("main.yx", entry_src)]);
 
@@ -181,10 +190,15 @@ fn test_cross_unit_same_named_type_operator_arms_dispatch_use_defining_unit() {
     assert_eq!(
         count("b.Temp.equal"),
         1,
-        "左操作数为 b 侧实例的 == 必须派发到 b.Temp.equal，实际调用名：{callees:?}"
+        "b 侧实例的 == 必须派发到 b.Temp.equal，实际调用名：{callees:?}"
+    );
+    assert_eq!(
+        count("a.Temp.equal"),
+        1,
+        "a 侧实例的 == 必须派发到 a.Temp.equal，实际调用名：{callees:?}"
     );
 
-    // Assert（行为）：u[0] = 2.0*10.0 = 20.0；u == t 走 b 的 false
+    // Assert（行为）：u[0] = 2.0*10.0 = 20.0；两侧同型比较各走自己的实现
     let values = run_merged_slot_values(merged);
     assert!(
         values.iter().any(|v| v == "Float(20.0)"),
@@ -192,11 +206,11 @@ fn test_cross_unit_same_named_type_operator_arms_dispatch_use_defining_unit() {
     );
     assert!(
         values.iter().any(|v| v == "Bool(false)"),
-        "u == t（左操作数 = b 侧）应为 b 的 false（修复前是 a 的 true），实际全局值：{values:?}"
+        "u == u（b 侧）应为 b 的 false，实际全局值：{values:?}"
     );
     assert!(
         values.iter().any(|v| v == "Bool(true)"),
-        "t == u（左操作数 = a 侧）应走 a 的 true（验收表述的方向；修复前亦成立），实际全局值：{values:?}"
+        "t == t（a 侧）应走 a 的 true，实际全局值：{values:?}"
     );
 }
 

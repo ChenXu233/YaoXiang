@@ -119,13 +119,104 @@ impl<'a> ExpressionInferrer<'a> {
         self.import_face = Some(face);
     }
 
+    /// 写出类型名 → 类型身份：委托导入面的**唯一实现**（D64）。
+    ///
+    /// 只有经 TypeDefinition 声明的类型解析出身份；幻名/类型族/内建/类型参数
+    /// 返回 None（调用方保持平路径）。
+    pub(super) fn type_identity(
+        &self,
+        written: &str,
+    ) -> Option<crate::frontend::core::types::identity::Nominal> {
+        self.import_face?.type_identity(
+            crate::frontend::core::sema::import_face::WrittenTypeName::from_ast(written),
+        )
+    }
+
+    /// 把刚由**写出名**构造出的平路径类型升格为身份（构造器/变体/枚举路径）。
+    ///
+    /// 与 [`Self::mono_from_annotation`] 同一个解析器：构造器产生的类型名与
+    /// 注解侧的类型名必须成对注入，否则 `T(...)` 与 `x: T` 在判等点分属
+    /// 平路径与身份、合法程序被误拒。
+    pub(super) fn resolve_identity(
+        &self,
+        ty: MonoType,
+    ) -> MonoType {
+        match self.import_face {
+            Some(face) => {
+                crate::frontend::core::types::substitute::resolve_nominal_identities(&ty, &|w| {
+                    face.type_identity(
+                        crate::frontend::core::sema::import_face::WrittenTypeName::from_ast(w),
+                    )
+                })
+            }
+            None => ty,
+        }
+    }
+
+    /// 写出名 → 名义类型（解析不到保持平路径）：查表/判等前的统一形状。
+    pub(super) fn nominal_for(
+        &self,
+        written: &str,
+    ) -> crate::frontend::core::types::identity::Nominal {
+        self.type_identity(written).unwrap_or_else(|| {
+            crate::frontend::core::types::identity::Nominal::flat(written)
+                .expect("type name must be bare and non-empty")
+        })
+    }
+
+    /// 名义类型 → `env.types` 的本地表项（L3-1b S4 的唯一消费入口）。
+    ///
+    /// 平路径（内建/类型参数/单文件类型）本地键就是裸名——与今天同一条事实；
+    /// 带模块身份查派生索引（身份→本地键）。**带模块但没有索引项 = 查不到**，
+    /// 不回落到裸名：同名不同模块的两个类型正是在裸名上重合的。
+    pub(super) fn type_def(
+        &self,
+        nominal: &crate::frontend::core::types::identity::Nominal,
+    ) -> Option<&'a PolyType> {
+        let defs = self.type_defs;
+        if nominal.module().is_empty() {
+            return defs.get(nominal.bare());
+        }
+        let key = self.type_identity_index?.get(nominal)?;
+        defs.get(key.as_str())
+    }
+
+    /// 名义类型 → 泛型类型定义模板（与 [`Self::type_def`] 同一本地键口径）。
+    pub(super) fn generic_def(
+        &self,
+        nominal: &crate::frontend::core::types::identity::Nominal,
+    ) -> Option<&'a crate::frontend::core::sema::environment::GenericTypeDef> {
+        let defs = self.generic_type_defs;
+        if nominal.module().is_empty() {
+            return defs.get(nominal.bare());
+        }
+        let key = self.type_identity_index?.get(nominal)?;
+        defs.get(key.as_str())
+    }
+
+    /// 名义类型 → 和类型变体表（与 [`Self::type_def`] 同一本地键口径）。
+    pub(super) fn sum_variants(
+        &self,
+        nominal: &crate::frontend::core::types::identity::Nominal,
+    ) -> Option<&'a Vec<crate::frontend::core::sema::environment::SumVariantDef>> {
+        let defs = self.sum_types;
+        if nominal.module().is_empty() {
+            return defs.get(nominal.bare());
+        }
+        let key = self.type_identity_index?.get(nominal)?;
+        defs.get(key.as_str())
+    }
+
     /// 方法身份的解析入口：委托导入面的**唯一实现**（不在这里另判一份）
     pub fn method_key(
         &self,
         written_type: &str,
         method: &str,
     ) -> Option<DefPath> {
-        self.import_face?.method_key(written_type, method)
+        self.import_face?.method_key(
+            crate::frontend::core::sema::import_face::WrittenTypeName::from_ast(written_type),
+            method,
+        )
     }
 
     /// Nominal→方法键：委托导入面的唯一实现；仅由 receiver_method_key 使用。
@@ -157,9 +248,9 @@ impl<'a> ExpressionInferrer<'a> {
         // 身份优先：模块非空时直接用 (module, 定义名) 取路径；module 为空（flat/
         // 单文件/幻名）必须回落到字符串路径——那里还承担 `is_conflicted` 拒绝面。
         if !nominal.module().is_empty() {
-            if let Some(key) = self.method_key_for_nominal(nominal, method) {
-                return Some(key);
-            }
+            // 带模块的身份**不得**回落到裸名写名解析：裸名可能命中同名别名/
+            // 本单元同名类型，正是同名串味（D64）。查不到就是没有方法键。
+            return self.method_key_for_nominal(nominal, method);
         }
         self.method_key(nominal.bare(), method)
     }
@@ -807,24 +898,22 @@ impl<'a> ExpressionInferrer<'a> {
             .insert(match_span, resolved.clone());
 
         // 和类型判定（Generic 形态 / scope 镜像 Struct 形态）
-        let sum_name: Option<String> = match &resolved {
-            MonoType::Generic { name, .. } if self.sum_types.contains_key(name.bare()) => {
-                Some(name.clone().bare().to_string())
+        // 名义头保留**身份**（不是裸名）：后续变体表/穷尽性都按身份取；
+        // 裸名只用于显示与 import 用途记账（D64：同名和类型不串味）。
+        let sum_nominal: Option<crate::frontend::core::types::identity::Nominal> = match &resolved {
+            MonoType::Generic { name, .. } if self.sum_variants(name).is_some() => {
+                Some(name.clone())
             }
-            MonoType::Struct(st) if self.sum_types.contains_key(st.name.bare()) => {
-                Some(st.name.clone().bare().to_string())
-            }
+            MonoType::Struct(st) if self.sum_variants(&st.name).is_some() => Some(st.name.clone()),
             // 非泛型和类型的方法体（`self: &Maybe`）：Ref 剥离后是 TypeRef，
             // 名义命中 sum_types 即和类型（经类型镜像复核）
             MonoType::TypeRef(n) => {
-                if self.sum_types.contains_key(n.bare()) {
-                    Some(n.clone().bare().to_string())
+                if self.sum_variants(n).is_some() {
+                    Some(n.clone())
                 } else {
-                    match self.type_defs.get(n.bare()).map(|p| &p.body) {
-                        Some(MonoType::Struct(st))
-                            if self.sum_types.contains_key(st.name.bare()) =>
-                        {
-                            Some(st.name.bare().to_string())
+                    match self.type_def(n).map(|p| &p.body) {
+                        Some(MonoType::Struct(st)) if self.sum_variants(&st.name).is_some() => {
+                            Some(st.name.clone())
                         }
                         _ => None,
                     }
@@ -832,16 +921,18 @@ impl<'a> ExpressionInferrer<'a> {
             }
             _ => None,
         };
+        let sum_name = sum_nominal.as_ref().map(|n| n.bare().to_string());
         // RFC-010b：统一模式检查——非和类型 scrutinee 走同一条臂循环
         //（字面量/元组/结构体/或模式/守卫/标识符绑定全部可用），Union
         // 模式仅在和类型上有定义（check_pattern 内按类型自足解析）
-        let variants = sum_name
+        let variants = sum_nominal
             .as_ref()
-            .map(|n| self.sum_types[n].clone())
+            .and_then(|n| self.sum_variants(n))
+            .cloned()
             .unwrap_or_default();
-        let param_names = sum_name
+        let param_names = sum_nominal
             .as_ref()
-            .and_then(|n| self.generic_type_defs.get(n))
+            .and_then(|n| self.generic_def(n))
             .map(|d| d.type_param_names.clone())
             .unwrap_or_default();
         let _ = (&variants, &param_names);
@@ -1017,13 +1108,18 @@ impl<'a> ExpressionInferrer<'a> {
         // 非和类型：无兜底臂时，字面量臂必须覆盖全部可居留值——仅 Bool
         //（true+false）可枚举；Int/String/Char 等值域开放，必须有兜底臂。
         // Void 空类型无可居留值，vacuously 穷尽。
-        if let Some(sum_name) = &sum_name {
+        if let Some(sum_nominal) = &sum_nominal {
             if !fallback_seen {
-                let missing: Vec<String> = self.sum_types[sum_name]
-                    .iter()
-                    .filter(|v| !seen_variants.contains(&v.name))
-                    .map(|v| v.name.clone())
-                    .collect();
+                let missing: Vec<String> = self
+                    .sum_variants(sum_nominal)
+                    .map(|variants| {
+                        variants
+                            .iter()
+                            .filter(|v| !seen_variants.contains(&v.name))
+                            .map(|v| v.name.clone())
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 if !missing.is_empty() {
                     return Err(
                         ErrorCodeDefinition::pattern_non_exhaustive(&missing.join(", ")).build(),
@@ -1210,19 +1306,17 @@ impl<'a> ExpressionInferrer<'a> {
                 // 解析结构体类型：Struct 直接用；TypeRef 经类型镜像复核
                 let struct_ty: crate::frontend::core::types::mono::StructType = match &resolved {
                     MonoType::Struct(s) if &s.name == name => s.clone(),
-                    MonoType::TypeRef(n) if n == name => {
-                        match self.type_defs.get(n.bare()).map(|p| &p.body) {
-                            Some(MonoType::Struct(s)) => s.clone(),
-                            _ => {
-                                return Err(ErrorCodeDefinition::type_mismatch(
-                                    name,
-                                    &resolved.to_string(),
-                                )
-                                .at(span)
-                                .build());
-                            }
+                    MonoType::TypeRef(n) if n == name => match self.type_def(n).map(|p| &p.body) {
+                        Some(MonoType::Struct(s)) => s.clone(),
+                        _ => {
+                            return Err(ErrorCodeDefinition::type_mismatch(
+                                name,
+                                &resolved.to_string(),
+                            )
+                            .at(span)
+                            .build());
                         }
-                    }
+                    },
                     other => {
                         return Err(ErrorCodeDefinition::type_mismatch(name, &other.to_string())
                             .at(span)
@@ -1262,9 +1356,7 @@ impl<'a> ExpressionInferrer<'a> {
                 variant, pattern, ..
             } => {
                 let (sum_name, variants, param_names, concrete) = match &resolved {
-                    MonoType::Generic { name, args }
-                        if self.sum_types.contains_key(name.bare()) =>
-                    {
+                    MonoType::Generic { name, args } if self.sum_variants(name).is_some() => {
                         let param_names = self
                             .generic_type_defs
                             .get(name.bare())
@@ -1272,20 +1364,20 @@ impl<'a> ExpressionInferrer<'a> {
                             .unwrap_or_default();
                         (
                             name.clone(),
-                            self.sum_types[name.bare()].clone(),
+                            self.sum_variants(name).cloned().unwrap_or_default(),
                             param_names,
                             args.clone(),
                         )
                     }
-                    MonoType::Struct(s) if self.sum_types.contains_key(s.name.bare()) => (
+                    MonoType::Struct(s) if self.sum_variants(&s.name).is_some() => (
                         s.name.clone(),
-                        self.sum_types[s.name.bare()].clone(),
+                        self.sum_variants(&s.name).cloned().unwrap_or_default(),
                         Vec::new(),
                         Vec::new(),
                     ),
-                    MonoType::TypeRef(n) if self.sum_types.contains_key(n.bare()) => (
+                    MonoType::TypeRef(n) if self.sum_variants(n).is_some() => (
                         n.clone(),
-                        self.sum_types[n.bare()].clone(),
+                        self.sum_variants(n).cloned().unwrap_or_default(),
                         Vec::new(),
                         Vec::new(),
                     ),
@@ -1419,17 +1511,20 @@ impl<'a> ExpressionInferrer<'a> {
                     // 约束形参名不是类型身份：名字就是形参占位 `T.add`，mono 特化
                     // 时按类型实参改写（不经导入面——形参名不在类型名空间里）
                     let dispatch_name = format!("{pn}.{method}");
+                    // 约束形参延迟派发：结果位就是形参自身（mono 特化时改写）。
+                    let result_ty = MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&(pn)))
+                            .expect("type name must be bare and non-empty"),
+                    );
                     self.operator_dispatches.push(ops::OperatorDispatch {
                         span,
                         type_name: pn.clone(),
                         method,
                         dispatch_name,
                         negate: false,
+                        result_type: Some(result_ty.clone()),
                     });
-                    return Some(MonoType::TypeRef(
-                        Nominal::flat(AsRef::<str>::as_ref(&(pn)))
-                            .expect("type name must be bare and non-empty"),
-                    ));
+                    return Some(result_ty);
                 }
                 return None;
             }
@@ -1455,6 +1550,7 @@ impl<'a> ExpressionInferrer<'a> {
                 method,
                 dispatch_name,
                 negate: false,
+                result_type: Some(result_ty.clone()),
             });
         }
         Some(result_ty)
@@ -1605,6 +1701,8 @@ impl<'a> ExpressionInferrer<'a> {
                 method,
                 dispatch_name,
                 negate,
+                // `equal` 的返回位是 Bool；`!=` 取反后仍是 Bool。
+                result_type: Some(MonoType::Bool),
             });
             return Ok(MonoType::Bool);
         }
@@ -1653,21 +1751,19 @@ impl<'a> ExpressionInferrer<'a> {
         ty: &MonoType,
     ) -> Option<String> {
         match ty {
-            MonoType::Generic { name, .. } if self.sum_types.contains_key(name.bare()) => {
+            MonoType::Generic { name, .. } if self.sum_variants(name).is_some() => {
                 Some(name.clone().bare().to_string())
             }
-            MonoType::Struct(s) if self.sum_types.contains_key(s.name.bare()) => {
+            MonoType::Struct(s) if self.sum_variants(&s.name).is_some() => {
                 Some(s.name.clone().bare().to_string())
             }
             MonoType::TypeRef(n) => {
-                if self.sum_types.contains_key(n.bare()) {
+                if self.sum_variants(n).is_some() {
                     Some(n.clone().bare().to_string())
                 } else {
                     // 注解形态经类型镜像复核（与 match 的和类型判定同款）
-                    match self.type_defs.get(n.bare()).map(|p| &p.body) {
-                        Some(MonoType::Struct(st))
-                            if self.sum_types.contains_key(st.name.bare()) =>
-                        {
+                    match self.type_def(n).map(|p| &p.body) {
+                        Some(MonoType::Struct(st)) if self.sum_variants(&st.name).is_some() => {
                             Some(st.name.bare().to_string())
                         }
                         _ => None,
@@ -1685,7 +1781,7 @@ impl<'a> ExpressionInferrer<'a> {
     ) -> Option<crate::frontend::core::types::StructType> {
         match ty {
             MonoType::Struct(s) => Some(s.clone()),
-            MonoType::TypeRef(name) => match self.type_defs.get(name.bare()).map(|p| &p.body) {
+            MonoType::TypeRef(name) => match self.type_def(name).map(|p| &p.body) {
                 Some(MonoType::Struct(s)) => Some(s.clone()),
                 _ => None,
             },
@@ -1748,7 +1844,7 @@ impl<'a> ExpressionInferrer<'a> {
                 {
                     return Ok(());
                 }
-                match self.type_defs.get(name.bare()).map(|p| &p.body) {
+                match self.type_def(name).map(|p| &p.body) {
                     Some(resolved) => self.struct_comparable(resolved, depth + 1),
                     _ => Err(name.clone().bare().to_string()),
                 }
@@ -1800,7 +1896,7 @@ impl<'a> ExpressionInferrer<'a> {
         &self,
         name: &str,
     ) -> Option<MonoType> {
-        let def = self.generic_type_defs.get(name)?;
+        let def = self.generic_def(&self.nominal_for(name))?;
         let meta = MonoType::MetaType {
             universe_level: crate::frontend::core::types::mono::UniverseLevel::type0(),
             type_params: Vec::new(),
@@ -1953,7 +2049,7 @@ impl<'a> ExpressionInferrer<'a> {
         &self,
         ty: &MonoType,
     ) -> bool {
-        mono_type_is_witness_bearing(ty, self.type_defs)
+        mono_type_is_witness_bearing(ty, self.type_defs, self.type_identity_index)
     }
 
     /// Any 多态槽位判定：`TypeRef("Any")`（可带 Ref 壳）。求解器对
@@ -2171,7 +2267,7 @@ impl<'a> ExpressionInferrer<'a> {
                     // 因为 assign_var 已经将更新后的类型写入了 scope
                     // 不需要再通过 solver 解析（solver 不知道 scope 的更新）
                     Ok(ctor_value.unwrap_or(poly.body))
-                } else if self.sum_types.contains_key(name) {
+                } else if self.sum_variants(&self.nominal_for(name)).is_some() {
                     // RFC-010: 和类型名在表达式位置 — Type 宇宙的值
                     // （`Result(Int, String)` 的内层 Var；构造分派在 Call 臂）
                     Ok(crate::frontend::core::types::MonoType::MetaType {
@@ -2441,6 +2537,7 @@ impl<'a> ExpressionInferrer<'a> {
                                 method,
                                 dispatch_name,
                                 negate: false,
+                                result_type: Some(value_ty.clone()),
                             });
                         }
                         Ok(value_ty.clone())
@@ -2481,11 +2578,8 @@ impl<'a> ExpressionInferrer<'a> {
                 // 方法调用（`r.is_failure()`，Try 接口方法）除外：先查方法绑定表
                 // （含跨模块导入的 yx std 方法），命中即按方法返回，不落字段拒绝。
                 if let MonoType::Generic { name: sum_name, .. } = &resolved {
-                    if self.sum_types.contains_key(sum_name.bare()) {
-                        if self.sum_types[sum_name.bare()]
-                            .iter()
-                            .any(|v| v.name == *field)
-                        {
+                    if let Some(sum_variants) = self.sum_variants(sum_name).cloned() {
+                        if sum_variants.iter().any(|v| v.name == *field) {
                             return Err(ErrorCodeDefinition::variant_used_as_field(
                                 sum_name.bare(),
                                 field,
@@ -2647,8 +2741,7 @@ impl<'a> ExpressionInferrer<'a> {
                     }
                     MonoType::TypeRef(ref type_name) => {
                         // Try to resolve TypeRef → Struct via type_defs for field lookup
-                        if let Some(def_ty) = self.type_defs.get(type_name.bare()).map(|p| &p.body)
-                        {
+                        if let Some(def_ty) = self.type_def(type_name).map(|p| &p.body) {
                             let def_ty = self.solver.resolve_type(def_ty);
                             if let MonoType::Struct(ref struct_type) = def_ty {
                                 for field_info in &struct_type.fields {
@@ -3210,8 +3303,17 @@ impl<'a> ExpressionInferrer<'a> {
             }
         }
 
-        // 记录实现类型名（ir_gen 按同一 AST span 查表命名四方法调用）
-        self.try_expr_impls.push((span, impl_name));
+        // 记录实现的**类型身份**（ir_gen 按同一 AST span 查表命名四方法调用）：
+        // 接收者类型自身携带名义头（跨模块同名 Try 类型按定义模块限定），
+        // 拿不到名义头时才退回登记名（接口实现表的 impl_type 是定义侧裸名）。
+        let impl_identity = match &resolved {
+            MonoType::Generic { name, .. } => Some(name.clone()),
+            MonoType::Struct(s) => Some(s.name.clone()),
+            MonoType::TypeRef(n) => Some(n.clone()),
+            _ => None,
+        }
+        .unwrap_or_else(|| self.nominal_for(&impl_name));
+        self.try_expr_impls.push((span, impl_identity));
 
         Ok(ok_ty)
     }

@@ -183,7 +183,10 @@ pub struct StatementChecker {
     /// RFC-010: 和类型登记表（类型名 → 变体定义，声明序）
     sum_types: HashMap<String, Vec<crate::frontend::core::sema::environment::SumVariantDef>>,
     /// RFC-011b: 运算符派发点（显式接口实现命中处，ir_gen 按 span 注入方法调用）
-    pub try_expr_impls: Vec<(crate::util::span::Span, String)>,
+    pub try_expr_impls: Vec<(
+        crate::util::span::Span,
+        crate::frontend::core::types::identity::Nominal,
+    )>,
     pub operator_dispatches:
         Vec<crate::frontend::core::sema::operator_interfaces::OperatorDispatch>,
     /// #389：match scrutinee 推断类型（match 节点 span 键控，ir_gen 回查）
@@ -259,14 +262,6 @@ pub struct StatementChecker {
     /// 导出不登记（回退现状：resolves_to 落 use 行）。TypeChecker 排空
     /// 引用事件时查本表重写 DefId，使跨文件跳转命中真实定义。
     import_def_locations: HashMap<crate::util::span::Span, (String, crate::util::span::Span)>,
-    /// 类型导入改绑表（3.24.3 t3 F4）：**本单元**全部 use 语句的类型导入，
-    /// 按**来源模块路径**分域（`path → (定义名 → 本地名)`）。签名里的裸名义名
-    /// 在任一条 use 的导入点都能改绑到本地名——不再受「函数与其返回类型分离
-    /// 两条 use 引入」的声明序限制。分域判据：跨单元同名类型（b.Temp / c.Temp
-    /// 各自别名）互不串扰，签名裸名只按其定义单元的域改绑。由 TypeChecker
-    /// 预收集注入（`set_import_type_rebinds`）；单条 use 的类型导入在本函数
-    /// 调用点覆盖（函数体级 use 不在单元预收集面内）。
-    import_type_rebinds: HashMap<String, HashMap<String, String>>,
 }
 
 /// 一条 use 的逐项本地名解析（3.24.3 t3 F5）：别名优先（名源位置随别名
@@ -289,30 +284,6 @@ pub(in crate::frontend::core::sema) fn use_item_locals(
                 .and_then(|alias| alias.as_ref())
                 .map(|alias| (alias.name.clone(), alias.span))
                 .unwrap_or_else(|| (item.name.clone(), item.span))
-        })
-        .collect()
-}
-
-/// 一条 use 的**类型导入**改绑对（3.24.3 t3 F4）：`(定义名, 本地名)`，只收
-/// `ExportKind::Type` 导出——改绑判据面是签名与类型载荷里的名义名位，函数/
-/// 常量项不在其上。
-///
-/// 消费者：单元级预收集（TypeChecker 的 `collect_import_type_rebinds`）与
-/// 单条 use 的域覆盖（`process_use_stmt`）。别名解析走 [`use_item_locals`]。
-pub(in crate::frontend::core::sema) fn type_rebind_pairs(
-    items: &[crate::ast::SpannedIdent],
-    locals: &[(String, crate::util::span::Span)],
-    module: &ModuleInfo,
-) -> Vec<(String, String)> {
-    items
-        .iter()
-        .enumerate()
-        .filter_map(|(i, item)| {
-            let export = module.exports.get(&item.name)?;
-            if !matches!(export.kind, ExportKind::Type) {
-                return None;
-            }
-            Some((item.name.clone(), locals[i].0.clone()))
         })
         .collect()
 }
@@ -397,7 +368,6 @@ impl StatementChecker {
             vendor_root: None,
             semantic_imports: Vec::new(),
             import_def_locations: HashMap::new(),
-            import_type_rebinds: HashMap::new(),
         }
     }
 
@@ -409,20 +379,11 @@ impl StatementChecker {
         self.import_watch.extend(names);
     }
 
-    /// 类型导入改绑表注入（3.24.3 t3 F4）：TypeChecker 的单元级预收集产物
-    /// （按来源模块路径分域）随 body_checker 构造传入，见字段文档。
     fn mono_from_annotation(
         &self,
         ty: &crate::ast::Type,
     ) -> MonoType {
         self.import_face.mono_from_annotation(ty)
-    }
-
-    pub fn set_import_type_rebinds(
-        &mut self,
-        rebinds: HashMap<String, HashMap<String, String>>,
-    ) {
-        self.import_type_rebinds = rebinds;
     }
 
     /// #321 W1003：取走导入使用跟踪数据（函数体级导入记录 + 已使用名集合）
@@ -550,7 +511,7 @@ impl StatementChecker {
                     return builtin;
                 }
                 // 再查用户类型定义
-                if let Some(struct_ty) = self.type_defs.get(name.bare()).map(|p| &p.body) {
+                if let Some(struct_ty) = self.type_def(name).map(|p| &p.body) {
                     return struct_ty.clone();
                 }
                 ty.clone()
@@ -560,6 +521,44 @@ impl StatementChecker {
     }
 
     /// 设置泛型类型定义模板表
+    /// 写出名 → 名义类型（解析不到保持平路径）。
+    fn nominal_for(
+        &self,
+        written: &str,
+    ) -> Nominal {
+        self.import_face
+            .type_identity(
+                crate::frontend::core::sema::import_face::WrittenTypeName::from_ast(written),
+            )
+            .unwrap_or_else(|| {
+                Nominal::flat(written).expect("type name must be bare and non-empty")
+            })
+    }
+
+    /// 名义类型 → `env.types` 本地表项（身份索引；平路径回落裸名）。
+    fn type_def(
+        &self,
+        nominal: &Nominal,
+    ) -> Option<&PolyType> {
+        if nominal.module().is_empty() {
+            return self.type_defs.get(nominal.bare());
+        }
+        let key = self.type_identity_index.get(nominal)?;
+        self.type_defs.get(key.as_str())
+    }
+
+    /// 名义类型 → 泛型定义模板（与 [`Self::type_def`] 同一本地键口径）。
+    fn generic_def(
+        &self,
+        nominal: &Nominal,
+    ) -> Option<&crate::frontend::core::sema::environment::GenericTypeDef> {
+        if nominal.module().is_empty() {
+            return self.generic_type_defs.get(nominal.bare());
+        }
+        let key = self.type_identity_index.get(nominal)?;
+        self.generic_type_defs.get(key.as_str())
+    }
+
     pub fn set_generic_type_defs(
         &mut self,
         defs: std::collections::HashMap<
@@ -666,7 +665,7 @@ impl StatementChecker {
                 args,
                 name_span,
             } => {
-                let def = self.generic_type_defs.get(name)?;
+                let def = self.generic_def(&self.nominal_for(name)).cloned()?;
                 let arg_types: Vec<MonoType> = args
                     .iter()
                     .map(|a| self.mono_from_annotation(&a.clone()))
@@ -680,7 +679,7 @@ impl StatementChecker {
                 }) {
                     return None;
                 }
-                match TypeEnvironment::instantiate_generic_type(def, &arg_types) {
+                match TypeEnvironment::instantiate_generic_type(&def, &arg_types) {
                     Ok(inst) => {
                         // 3.4.1：不可求值 const 约束事实上达（W1063 汇聚链）
                         self.unevaluable_const_constraints.extend(
@@ -692,7 +691,7 @@ impl StatementChecker {
                         // （`Box(Int)`）展开成记录形态，与注解/值侧同形。
                         Some(super::expressions::instantiate_with_ctor_heads(
                             inst.ty,
-                            def,
+                            &def,
                             &self.generic_type_defs,
                         ))
                     }
@@ -887,14 +886,8 @@ impl StatementChecker {
         definition_span: crate::util::span::Span,
         export: &Export,
         module: &ModuleInfo,
-        type_rebinds: &HashMap<String, String>,
     ) {
         let ty = self.export_type(export);
-        // WBS 3.24.3 / issue #504：签名里引用定义单元类型的裸名义名（返回位
-        // `TypeRef("Temp")`），按本条 use 的类型导入登记改绑到本地名——注解侧
-        // 写的是本地名（`TempB`），不改绑则裸名与本地名在判等点字符串比对
-        // 判异，合法程序被误拒（E1012 + E1002）。
-        let ty = crate::frontend::core::types::substitute::rebind_nominal_refs(&ty, type_rebinds);
         // E1113（6.9.2-B / issue #539）：导入函数与本地面**同权**——q=0 事实
         // 随 Export 跨界携带（定义方 `PolyType::const_binders` 与签名收集期
         // 槽位表的已登记形态直读，判据单源，不从签名形态反推），在此按
@@ -1021,25 +1014,8 @@ impl StatementChecker {
             }
             // use path.{a, b} / use path.{a as x}（#245：仅内联别名）
             (Some(item_names), _) => {
-                // 逐项本地名一次收集（3.24.3 t3 F5）：导入循环与改绑对共用，
-                // 别名解析不再各写一份。
+                // 逐项本地名一次收集（3.24.3 t3 F5）：别名解析只此一处。
                 let locals = use_item_locals(item_names, item_aliases);
-                // WBS 3.24.3 / #504 改绑表：签名里引用定义单元类型的裸名义名
-                //（`make_b: () -> Temp` 的返回位）改绑到本地名，使注解侧与值侧
-                // 同源。3.24.3 t3 F4：表基座提升为**本单元全部类型导入**（按
-                // 来源模块分域，TypeChecker 预收集注入）——函数与其返回类型
-                // 分离两条 use 引入时（`use b.{make_b}` 先、`use b.{Temp as
-                // TempB}` 后）签名裸名同样改绑，不再受声明序限制。本条 use 的
-                // 类型导入在域上覆盖（函数体级 use 不在单元预收集面内；同条
-                // 引用是 #504 主形态）。
-                let mut type_rebinds: HashMap<String, String> = self
-                    .import_type_rebinds
-                    .get(path)
-                    .cloned()
-                    .unwrap_or_default();
-                for (definition, local) in type_rebind_pairs(item_names, &locals, &module) {
-                    type_rebinds.insert(definition, local);
-                }
                 for (i, item) in item_names.iter().enumerate() {
                     // 本地名：内联别名（#245）优先，名源位置随别名 token；
                     // 无别名时随项名 token——绑定与 use 行该项同源
@@ -1068,7 +1044,7 @@ impl StatementChecker {
                     }
                     // #321 W1003：登记导入本地名（内联别名优先）
                     self.note_body_import(local_name, path_span);
-                    self.import_binding(local_name, local_span, &export, &module, &type_rebinds);
+                    self.import_binding(local_name, local_span, &export, &module);
                 }
             }
         }
@@ -2030,6 +2006,7 @@ impl StatementChecker {
                                 if crate::frontend::core::sema::inference::mono_type_is_witness_bearing(
                                     &poly.body,
                                     &self.type_defs,
+                                    Some(&self.type_identity_index),
                                 ) {
                                     return Err(Box::new(
                                         ErrorCodeDefinition::witness_record_immutable(&format!(
@@ -3337,10 +3314,11 @@ impl StatementChecker {
         let written = type_annotation
             .and_then(Self::written_type_name)
             .or_else(|| initializer.and_then(Self::constructor_type_name));
-        if let Some(path) = written
-            .as_deref()
-            .and_then(|written| self.import_face.type_path(written))
-        {
+        if let Some(path) = written.as_deref().and_then(|written| {
+            self.import_face.type_path(
+                crate::frontend::core::sema::import_face::WrittenTypeName::from_ast(written),
+            )
+        }) {
             self.scope.set_type_identity(name, path);
         }
         // 6.8.5-2a 值环境：非 mut 绑定 + 初始化式是字面量 ⇒ 值编译期已知。
@@ -3854,6 +3832,7 @@ impl StatementChecker {
                                                 method,
                                                 dispatch_name,
                                                 negate: false,
+                                                result_type: remaining.first().cloned(),
                                             });
                                         }
                                         if let Some(result_ty) = remaining.first() {
@@ -3888,6 +3867,8 @@ impl StatementChecker {
                                                             method,
                                                             dispatch_name,
                                                             negate: false,
+                                                            // 约束形参延迟派发：结果位就是形参自身
+                                                            result_type: Some(operand.clone()),
                                                         },
                                                     );
                                                 }

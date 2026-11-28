@@ -97,6 +97,7 @@ fn make_pair_type_ir(fields: &[&str]) -> FunctionIR {
                 fields: decl_fields,
                 // 旧路径 `type_from_ast(Struct) = Void`：构造器/类型表项在语料里恒为 Void
                 self_type: MonoType::Void,
+                identity: crate::frontend::core::types::identity::Nominal::anonymous(),
             },
         },
     }
@@ -362,6 +363,7 @@ fn make_generic_type_decl_ir(
                 fields: decl_fields,
                 // 旧路径 `type_from_ast(Struct) = Void`：构造器/类型表项在语料里恒为 Void
                 self_type: MonoType::Void,
+                identity: crate::frontend::core::types::identity::Nominal::anonymous(),
             },
         },
     }

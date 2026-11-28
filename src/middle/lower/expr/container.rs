@@ -60,6 +60,8 @@ impl AstToIrGenerator {
         // RFC-011b：实现 Index 接口的用户容器——原生 LoadIndex 替换为
         // `Call "Type.index"`（接收者居首，与 method_bindings 形态一致）
         if let Some(dispatch) = self.operator_dispatches.get(span).cloned() {
+            // 调用名与结果类型同一结算点（sema 记录，D-8）
+            let result_ty = dispatch.result_type.clone();
             // 调用名即上游给出的名字（D-8）：限定已在方法身份里，这里不再查表
             let dispatch_name = dispatch.dispatch_name;
             instructions.push(Instruction::Call {
@@ -69,6 +71,9 @@ impl AstToIrGenerator {
                 span: *span,
                 def: None,
             });
+            if let Some(ty) = result_ty {
+                self.note_value_type(&result_reg, ty);
+            }
             return Ok(());
         }
 

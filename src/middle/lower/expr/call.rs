@@ -1071,7 +1071,14 @@ impl AstToIrGenerator {
             // RFC-010: 处理命名参数构造 `Point(x=1, y=2)`
             if call.has_named() {
                 if let Expr::Var(name, _) = func {
-                    if let Some(fields) = self.struct_definitions.get(name).cloned() {
+                    // 构造实参按**写名 → 身份**取字段表（当前树无调用点结果类型
+                    // 表；身份由 typecheck 的派生索引反查，单文件回退裸名表）。
+                    let by_identity = self
+                        .identity_for_written(name)
+                        .and_then(|identity| self.struct_fields_by_identity(&identity).cloned());
+                    if let Some(fields) =
+                        by_identity.or_else(|| self.struct_definitions.get(name).cloned())
+                    {
                         // 生成命名参数的 IR
                         let mut named_regs: Vec<(String, Operand)> = Vec::new();
                         for (arg_name, arg_expr) in call.named() {
@@ -1149,7 +1156,14 @@ impl AstToIrGenerator {
                 _ => None,
             };
             if let Some(name) = struct_ctor_name {
-                if let Some(fields) = self.struct_definitions.get(&name).cloned() {
+                // 同命名实参分支：构造器字段表按**写名 → 身份**取；「返回结构体
+                // 的普通函数」不会命中裸名表（写名不在类型索引里）。
+                let by_identity = self
+                    .identity_for_written(&name)
+                    .and_then(|identity| self.struct_fields_by_identity(&identity).cloned());
+                if let Some(fields) =
+                    by_identity.or_else(|| self.struct_definitions.get(&name).cloned())
+                {
                     // 这是一个结构体构造器调用
                     // 数据字段数才是构造参数上限；witness 字段不占槽位
                     let data_fields = Self::data_ctor_fields(&fields);

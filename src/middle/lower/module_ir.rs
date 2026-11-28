@@ -7,7 +7,7 @@
 use super::AstToIrGenerator;
 use super::BindingInfo;
 use crate::ast;
-use crate::frontend::core::types::identity::{DefKind, DefPath};
+use crate::frontend::core::types::identity::{DefKind, DefPath, Nominal};
 use crate::frontend::module::ExportKind;
 use crate::middle::ir::ir::{ConstValue, Instruction, ModuleIR, Operand};
 use crate::util::diagnostic::Diagnostic;
@@ -365,6 +365,19 @@ impl AstToIrGenerator {
     /// 按投影索引复用已登记的身份（Registry 期 `intern_method` 已登记同一条路径）。
     /// 调用名同理已是最终名：`rewrite_call_names` 以**本单元函数表的最终名集合**
     /// 短路，避免前缀规则把 `main.Temp.tag` 的 `main` 当成同名函数的裸名再限定一次。
+    /// 声明域方法派生名 `{Type}.{method}` 的归属段：按**已知类型名集合**做前缀
+    /// 匹配，不把名字按点切开（D64 §2.5：首段不是归属段——类型名/身份串都可能含点）。
+    fn declared_method_owner<'a>(
+        name: &'a str,
+        type_names: &'a std::collections::HashSet<String>,
+    ) -> Option<(&'a str, &'a str)> {
+        type_names.iter().find_map(|owner| {
+            let rest = name.strip_prefix(owner.as_str())?;
+            let method = rest.strip_prefix('.')?;
+            (!method.is_empty()).then_some((owner.as_str(), method))
+        })
+    }
+
     fn qualify_names(
         ir: &mut ModuleIR,
         module_key: &str,
@@ -387,13 +400,11 @@ impl AstToIrGenerator {
             let bare = &func.name;
             let path = if func.is_type_decl() {
                 Some(DefPath::item(module_key, bare))
-            } else if let Some((owner, method)) = bare.split_once('.') {
-                // 带点名字：只有限定点是**本文件类型**时才限定，避免误伤 std 等已限定名。
-                // 判据成立的前提：定义侧 `Type.method` 键的类型名是标识符、不含点，
-                // 故首段即归属段。其余带点名不改名（见 `assign_defs`）。
-                type_names
-                    .contains(owner)
-                    .then(|| DefPath::method(module_key, owner, method))
+            } else if bare.contains('.') {
+                // 带点名只可能是「声明域两段名」或别处已投影的限定名；仅当前缀是
+                // 本文件类型时才限定。归属段按已知类型名集合取（不切点）。
+                Self::declared_method_owner(bare, &type_names)
+                    .map(|(owner, method)| DefPath::method(module_key, owner, method))
             } else {
                 Some(DefPath::item(module_key, bare))
             };
@@ -471,13 +482,28 @@ impl AstToIrGenerator {
             .cloned()
             .or_else(|| aliases.get(name).cloned())
             .or_else(|| {
-                let dot_pos = name.find('.')?;
-                let prefix = &name[..dot_pos];
-                let suffix = &name[dot_pos..]; // 含点
-                rename
-                    .get(prefix)
-                    .or_else(|| aliases.get(prefix))
-                    .map(|q| format!("{}{}", q, suffix))
+                // 已知键的**最长前缀匹配**：不按首点切名字（D64 §2.5——身份串/限定名
+                // 的首段不是类型名；3 段名与带点特化名在这里同样按整键匹配）。
+                let mut best: Option<(&str, &str)> = None;
+                for (key, qualified) in rename.iter().chain(aliases.iter()) {
+                    if key.is_empty() {
+                        continue;
+                    }
+                    let Some(rest) = name.strip_prefix(key.as_str()) else {
+                        continue;
+                    };
+                    let Some(rest) = rest.strip_prefix('.') else {
+                        continue;
+                    };
+                    if rest.is_empty() {
+                        continue;
+                    }
+                    if best.is_none_or(|(best_key, _)| key.len() > best_key.len()) {
+                        best = Some((key.as_str(), qualified.as_str()));
+                    }
+                }
+                let (key, qualified) = best?;
+                Some(format!("{}{}", qualified, &name[key.len()..]))
             })
             .or_else(|| {
                 // 显式类型实参的预特化名（`mk(int64)`）：两层调用 `mk(Int)(5)`
@@ -540,9 +566,12 @@ impl AstToIrGenerator {
     /// 中 `TypeDefinition` 的结构体上下文注册逻辑。
     pub fn seed_cross_file_types(
         &mut self,
-        modules: &[&ast::Module],
+        // (单元键, AST)：键与 typecheck 侧的模块键同一份（driver 的
+        // program.units[i].key），故这里登记的身份与 typecheck 写的身份逐字相同；
+        // 空串 = 单文件/无模块键形态（平路径）。
+        modules: &[(&str, &ast::Module)],
     ) {
-        for module in modules {
+        for (module_key, module) in modules {
             for stmt in &module.items {
                 if let ast::StmtKind::TypeDefinition {
                     name, definition, ..
@@ -554,8 +583,9 @@ impl AstToIrGenerator {
                             fields,
                             ..
                         } => {
-                            self.struct_definitions
-                                .insert(struct_name.clone(), fields.clone());
+                            let identity = Nominal::item(module_key, struct_name)
+                                .expect("类型定义名不含点且非空");
+                            self.register_struct_definition(identity, fields.clone());
                         }
                         ast::Type::Struct { body } => {
                             let fields: Vec<ast::StructField> = body
@@ -579,7 +609,9 @@ impl AstToIrGenerator {
                                 })
                                 .collect();
                             let fields = self.classified_fields(name, &fields);
-                            self.struct_definitions.insert(name.clone(), fields);
+                            let identity =
+                                Nominal::item(module_key, name).expect("类型定义名不含点且非空");
+                            self.register_struct_definition(identity, fields);
                             self.register_type_bindings(name, &bindings);
                         }
                         _ => {}
