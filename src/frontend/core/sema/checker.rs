@@ -857,6 +857,7 @@ impl TypeChecker {
         // 不再在此剥成 `MonoType` 体——那样判等还得另造一张同内容表。
         let type_defs: HashMap<String, PolyType> = self.env.types.clone();
         body_checker.set_type_defs(type_defs);
+        body_checker.set_type_identity_index(self.env.type_identity_index().clone());
         // 双表分工（3.20.8 收单点，3.20.9 起来源换声明级——#522）：
         //
         // 1. `proof_fn_bases`——证明函数基类型表（RFC-027 Phase 2.5）：

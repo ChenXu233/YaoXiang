@@ -214,6 +214,23 @@ impl<'a> ExpressionInferrer<'a> {
         self.type_defs = defs;
     }
 
+    /// 注入 `env.types` 的派生索引（身份→本地键）；与 `set_type_defs` 同源，
+    /// 由 StatementChecker 的 macro 借用传入。本批不查询，S4 的字段/方法解析用。
+    pub fn set_type_identity_index(
+        &mut self,
+        index: &'a HashMap<crate::frontend::core::types::identity::Nominal, String>,
+    ) {
+        self.type_identity_index = Some(index);
+    }
+
+    /// 派生索引只读访问（S3 建面，S4 查询）。
+    #[allow(dead_code)]
+    pub fn type_identity_index(
+        &self
+    ) -> Option<&'a HashMap<crate::frontend::core::types::identity::Nominal, String>> {
+        self.type_identity_index
+    }
+
     /// 设置泛型类型定义表
     pub fn set_generic_type_defs(
         &mut self,

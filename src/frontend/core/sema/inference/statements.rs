@@ -47,6 +47,7 @@ macro_rules! apply_shared_inferrer_context {
         $inferrer.set_interface_impl_registry(&$self.interface_impl_registry);
         $inferrer.set_sum_types(&$self.sum_types);
         $inferrer.set_type_defs(&$self.type_defs);
+        $inferrer.set_type_identity_index(&$self.type_identity_index);
         $inferrer.set_generic_type_defs(&$self.generic_type_defs);
         $inferrer.set_current_fn_param_constraints($self.current_fn_param_constraints.as_ref());
         $inferrer.set_method_overloads(&$self.method_overloads);
@@ -150,6 +151,9 @@ pub struct StatementChecker {
     /// 用途一：TypeRef → Struct 解析；用途二（6.9.3d）：判等判定点的 δ 展开表
     /// ——`decide` 直接把它交给 `DefeqContext.types`，不需要为判等再造一张表。
     type_defs: HashMap<String, PolyType>,
+    /// `env.types` 的派生索引快照（身份→本地键）：随构造从 TypeChecker 注入，
+    /// 与 `type_defs`/`import_face` 同形态；本批只借给 ExpressionInferrer。
+    type_identity_index: HashMap<Nominal, String>,
     /// 实例化请求（收集所有泛型函数实例化需求）
     pub instantiation_requests: Vec<InstantiationRequest>,
     /// WBS 3.4.1：编译期不可求值的 const 泛型约束（span + 约束描述）——
@@ -363,6 +367,7 @@ impl StatementChecker {
             import_face: crate::frontend::core::sema::import_face::ImportFace::default(),
             generic_fn_type_params: HashMap::new(),
             type_defs: HashMap::new(),
+            type_identity_index: HashMap::new(),
             instantiation_requests: Vec::new(),
             unevaluable_const_constraints: Vec::new(),
             call_ownership: super::call_ownership::CallOwnershipTable::new(),
@@ -494,6 +499,20 @@ impl StatementChecker {
         self.import_sources
             .insert(name.to_string(), source.to_string());
         Ok(())
+    }
+
+    /// 设置类型定义表的派生索引（身份→本地键，随构造注入）。
+    pub fn set_type_identity_index(
+        &mut self,
+        index: HashMap<Nominal, String>,
+    ) {
+        self.type_identity_index = index;
+    }
+
+    /// 只读派生索引（S4 查询用；macro 直接借字段）。
+    #[allow(dead_code)]
+    pub fn type_identity_index(&self) -> &HashMap<Nominal, String> {
+        &self.type_identity_index
     }
 
     /// 设置类型定义表

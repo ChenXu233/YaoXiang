@@ -320,6 +320,12 @@ pub struct TypeEnvironment {
     /// 依赖记录 Σ 的记录模型（类型名 → 模型）。B.2 声明期一遍的**唯一写入点**；
     /// 消费面 = 构造义务（refined walk）与 IR 量词传播（经 `TypeCheckResult`）。
     pub record_models: HashMap<String, crate::frontend::core::sema::record_model::RecordModel>,
+    /// `env.types` 的派生索引：类型身份（模块+定义名）→ 本地表键。
+    ///
+    /// **派生缓存、不是第二权威**（与 `SymbolTable` 的 `names`/`by_projection` 同形态）：
+    /// 唯一写者是 [`Self::add_type`]（随同笔登记，首登记为准）；本批（L3-1b S3）
+    /// 只建立写入与穿透，不接任何查询，消费者仍读 `types` 的本地键。
+    type_identity_index: HashMap<Nominal, String>,
 }
 
 impl TypeEnvironment {
@@ -576,6 +582,18 @@ impl TypeEnvironment {
         name: String,
         poly: PolyType,
     ) {
+        // 派生索引的唯一写者：从 poly 顶层 Struct/Enum 的模块化身份登记；
+        // flat（单文件/内建/幻名）不入索引；重复身份首登记为准。
+        let identity = match &poly.body {
+            MonoType::Struct(s) if !s.name.module().is_empty() => Some(s.name.clone()),
+            MonoType::Enum(en) if !en.name.module().is_empty() => Some(en.name.clone()),
+            _ => None,
+        };
+        if let Some(identity) = identity {
+            self.type_identity_index
+                .entry(identity)
+                .or_insert_with(|| name.clone());
+        }
         self.types.insert(name, poly);
     }
 
@@ -585,6 +603,11 @@ impl TypeEnvironment {
         name: &str,
     ) -> Option<&PolyType> {
         self.types.get(name)
+    }
+
+    /// `env.types` 的派生索引（身份→本地键）；本批只用于穿透到子检查器。
+    pub fn type_identity_index(&self) -> &HashMap<Nominal, String> {
+        &self.type_identity_index
     }
 
     /// 语义解析 base：是类型还是值（issue #180 F 组）。
@@ -1119,5 +1142,73 @@ impl TypeEnvironment {
         name: &str,
     ) -> bool {
         self.const_functions.contains_key(name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 造一个带模块化顶层身份的 PolyType（Struct{m.name = item(module, name)}）。
+    fn struct_poly(
+        module: &str,
+        name: &str,
+    ) -> PolyType {
+        PolyType::mono(MonoType::Struct(crate::frontend::core::types::StructType {
+            name: Nominal::item(module, name).expect("identity must be valid"),
+            fields: Vec::new(),
+            methods: HashMap::new(),
+            interfaces: Vec::new(),
+        }))
+    }
+
+    #[test]
+    fn test_type_identity_index_is_only_written_by_add_type() {
+        // Arrange：绕过 add_type，直接向 types 写一条带身份的定义
+        let mut env = TypeEnvironment::default();
+        let poly = struct_poly("m", "Bypass");
+        env.types.insert("Bypass".to_string(), poly);
+        // Act
+        let index = env.type_identity_index();
+        // Assert：派生索引没有被旁路写入（唯一写者是 add_type）
+        assert!(
+            index.is_empty(),
+            "direct types.insert must not populate the derived identity index"
+        );
+    }
+
+    #[test]
+    fn test_type_identity_index_first_registration_wins() {
+        // Arrange：同一身份用两个本地键登记，另加一条 flat（无模块）定义
+        let mut env = TypeEnvironment::default();
+        env.add_type("First".to_string(), struct_poly("m", "T"));
+        env.add_type("Second".to_string(), struct_poly("m", "T"));
+        env.add_type(
+            "Flat".to_string(),
+            PolyType::mono(MonoType::Struct(crate::frontend::core::types::StructType {
+                name: Nominal::flat("Flat").expect("flat identity must be valid"),
+                fields: Vec::new(),
+                methods: HashMap::new(),
+                interfaces: Vec::new(),
+            })),
+        );
+        // Act
+        let identity = Nominal::item("m", "T").expect("identity must be valid");
+        let local = env.type_identity_index().get(&identity);
+        // Assert：重复身份首登记为准；flat 定义不入索引；两个本地键都可查 types
+        assert_eq!(
+            local,
+            Some(&"First".to_string()),
+            "duplicate identity must keep the first registration"
+        );
+        assert_eq!(
+            env.type_identity_index().len(),
+            1,
+            "flat definitions must not enter the identity index"
+        );
+        assert!(
+            env.get_type("Second").is_some() && env.get_type("Flat").is_some(),
+            "both local keys must remain queryable in env.types"
+        );
     }
 }

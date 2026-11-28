@@ -241,6 +241,9 @@ pub struct ExpressionInferrer<'a> {
     /// 用于 TypeRef → Struct 解析（字段访问等）；6.9.3d 起同时是判等判定点的
     /// δ 展开表（`decide` 把它交给 `DefeqContext.types`）。
     type_defs: &'a HashMap<String, PolyType>,
+    /// `env.types` 的派生索引（身份→本地键）：由 StatementChecker 借用注入
+    /// （与 `type_defs` 同生命周期，不是第二份权威；本批 S3 只穿透不查询）。
+    type_identity_index: Option<&'a HashMap<Nominal, String>>,
     /// 泛型类型定义表
     /// 用于 List(1, 2, 3) 等泛型类型构造调用的实例化
     generic_type_defs:
@@ -344,6 +347,8 @@ impl<'a> ExpressionInferrer<'a> {
             method_bindings: &EMPTY_METHOD_BINDINGS,
             import_face: None,
             type_defs: &EMPTY_POLY_TYPES,
+
+            type_identity_index: None,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             current_fn_param_constraints: None,
             method_overloads: None,
@@ -395,6 +400,8 @@ impl<'a> ExpressionInferrer<'a> {
             method_bindings: &EMPTY_METHOD_BINDINGS,
             import_face: None,
             type_defs: &EMPTY_POLY_TYPES,
+
+            type_identity_index: None,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             current_fn_param_constraints: None,
             method_overloads: None,
@@ -447,6 +454,8 @@ impl<'a> ExpressionInferrer<'a> {
             method_bindings: &EMPTY_METHOD_BINDINGS,
             import_face: None,
             type_defs: &EMPTY_POLY_TYPES,
+
+            type_identity_index: None,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             current_fn_param_constraints: None,
             method_overloads: None,
@@ -501,6 +510,8 @@ impl<'a> ExpressionInferrer<'a> {
             method_bindings,
             import_face: None,
             type_defs: &EMPTY_POLY_TYPES,
+
+            type_identity_index: None,
             generic_type_defs: &EMPTY_GENERIC_TYPE_DEFS,
             current_fn_param_constraints: None,
             method_overloads: None,
