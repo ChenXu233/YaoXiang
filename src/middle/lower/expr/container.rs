@@ -2,6 +2,7 @@
 //!
 //! 方法体逐字搬自原 `middle/ir/ir_gen.rs`（WBS 7.0.3），语义未改。
 
+use super::call::CallArgs;
 use crate::ast;
 use crate::ast::Expr;
 use crate::frontend::core::sema::MonoType;
@@ -156,20 +157,24 @@ impl AstToIrGenerator {
         Ok(())
     }
 
-    /// 生成内置容器构造（RFC-011 §「Vec(T) 的构造形式」）。
+    /// 形态②：内置容器构造（RFC-011 §「Vec(T) 的构造形式」）——内置容器的两层
+    /// 构造 `Vec(Int)()` / `Vec(Int)(1, 2, 3)` / `Vec(Int)(len = 64)`。
     ///
-    /// 三条形态：
-    /// - `Vec(Int)()` → 空容器（长度 0，元素事后追加）
-    /// - `Vec(Int)(1, 2, 3)` → 元素构造（长度 = 元素个数）
-    /// - `Vec(Int)(len = 64)` → 槽位分配（64 个零值槽位）
+    /// 内层 `Vec(Int)` 是**类型实参**，运行期擦除（与 struct 的
+    /// `Container(Int)(42, 43)` 同一规则）；真正要生成的是外层构造：
+    ///   - 无构造实参 → 空容器
+    ///   - 位置实参   → 元素构造（长度 = 元素个数）
+    ///   - `len = n`  → 槽位分配（n 个零值）
     ///
-    /// 前两者与容器字面量同形，直接复用 `generate_list_expr_ir`；
-    /// 第三者用 `AllocFixedArray` 分配 n 个 Void 占位（与 Array 字面量落点同款）。
-    pub(super) fn generate_builtin_container_ir(
+    /// 前两者与容器字面量同形，直接复用 `generate_list_expr_ir`（容器构造生成器因此
+    /// 与容器字面量同处本模块）；第三者用 `AllocFixedArray` 分配 n 个 Void 占位
+    /// （与 Array 字面量落点同款）。
+    ///
+    /// 此前这条路径根本不存在：`Vec(Int)()` 在类型检查阶段就报 E1001 unknown
+    /// variable 'Vec'（类型名不在值位置的白名单里）。
+    pub(super) fn emit_builtin_container_ctor(
         &mut self,
-        args: &[Expr],
-        named_args: &[(String, Expr)],
-        span: &Span,
+        call: &CallArgs<'_>,
         result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -177,7 +182,7 @@ impl AstToIrGenerator {
         // `len = n`：分配 n 个零值槽位。
         // 长度是**运行期**值（RFC-011：Vec 是运行时长度的地基），
         // 故用 AllocArray 而非编译期定长的 AllocFixedArray。
-        if let Some((_, len_expr)) = named_args.iter().find(|(n, _)| n == "len") {
+        if let Some((_, len_expr)) = call.named().iter().find(|(n, _)| n == "len") {
             // 空缓冲 + 长度写入。
             //
             // 不走 `AllocArray.size`：字节码 `NewListWithCap` 的容量是**字面量**
@@ -191,7 +196,7 @@ impl AstToIrGenerator {
                 dst: result_reg.clone(),
                 size: Operand::Const(ConstValue::Int(0)),
                 elem_size: Operand::Const(ConstValue::Int(1)),
-                span: *span,
+                span: call.span(),
             });
             instructions.push(Instruction::StoreField {
                 dst: result_reg.clone(),
@@ -199,13 +204,19 @@ impl AstToIrGenerator {
                 src: len_reg.clone(),
                 type_name: None,
                 field_name: Some("length".to_string()),
-                span: *span,
+                span: call.span(),
             });
             return Ok(());
         }
 
         // 元素构造 / 空构造：与 `[a, b, c]` / `[]` 同形
-        self.generate_list_expr_ir(args, span, result_reg, instructions, constants)
+        self.generate_list_expr_ir(
+            call.args(),
+            &call.span(),
+            result_reg,
+            instructions,
+            constants,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
