@@ -229,6 +229,7 @@ test_program_stage_coverage	src/driver/tests/program.rs	assert_eqx1	条款	文�
 test_program_kind_default_aggregation	src/driver/tests/program.rs	matchesx2 assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_program_with_aggregation_override	src/driver/tests/program.rs	assert_eqx1 matchesx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_program_units_passthrough	src/driver/tests/program.rs	assert_eqx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_project_helper_runs_multifile_project	src/driver/tests/project.rs	assertx1 is_okx1 helperx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_ref_pool_excludes_refs_from_files_outside_compilation_set	src/driver/tests/ref_pool.rs	assertx1 expectx1 helperx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_ref_pool_counts_same_named_definitions_per_module	src/driver/tests/ref_pool.rs	expectx1 helperx3	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_ref_pool_is_not_assembled_for_script_role	src/driver/tests/ref_pool.rs	expectx1 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留

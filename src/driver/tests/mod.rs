@@ -18,6 +18,7 @@ mod named_import_calls;
 mod obligations;
 mod overload_injection;
 mod program;
+mod project;
 mod ref_pool;
 mod run_rootless;
 mod short_name_dispatch_pins;
