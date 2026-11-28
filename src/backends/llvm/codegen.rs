@@ -69,6 +69,14 @@ struct RuntimeFunctions<'ctx> {
     shift_overflow: FunctionValue<'ctx>,
     /// `f64(f64, f64)`：floor 取模（符号随除数），与 VM 的 `floor_mod_f64` 同语义。
     floor_mod_f64: FunctionValue<'ctx>,
+    /// `void(i64, i64)`：十进制输出；第二参数非 0 时追加换行（批次 4.6）。
+    print_i64: FunctionValue<'ctx>,
+    /// `void(i64, i64)`：`true`/`false` 输出；第二参数非 0 时追加换行。
+    print_bool: FunctionValue<'ctx>,
+    /// `void(i8*, i64, i64)`：按显式长度输出原始字节；第三参数非 0 时追加换行。
+    print_str: FunctionValue<'ctx>,
+    /// `i64(i8*, i64)`：码点数（UTF-8，`std.string.len` 的口径）。
+    str_len_codepoints: FunctionValue<'ctx>,
 }
 
 pub(super) struct Emitter<'ctx> {
@@ -786,6 +794,11 @@ impl<'ctx> Emitter<'ctx> {
                     if let Some(dst) = dst {
                         self.write(&mut *locals, values, dst, Value::void(), analysis)?;
                     }
+                } else if let Some(builtin) = super::analysis::std_builtin(name) {
+                    let returned = self.emit_std_builtin(name, &call_values, &builtin)?;
+                    if let Some(dst) = dst {
+                        self.write(&mut *locals, values, dst, returned, analysis)?;
+                    }
                 } else {
                     let resolved = def
                         .and_then(|id| self.analysis.definitions.get(&id.0))
@@ -1033,6 +1046,86 @@ impl<'ctx> Emitter<'ctx> {
         args.push(length.into());
         llvm(self.builder.build_call(self.runtime.assert, &args, ""))?;
         Ok(())
+    }
+
+    /// 发射 `std` 白名单里的一条内建（批次 4.6）。
+    ///
+    /// 显示口径与 VM 的 `format_value_with_prefix` 逐字节对齐：`Int` 十进制、
+    /// `Bool` 为 `true`/`false`、`String` 按显式长度输出原始 UTF-8 字节（不以 NUL
+    /// 为界）；换行只由 `println` 追加。
+    fn emit_std_builtin(
+        &mut self,
+        name: &str,
+        args: &[Value<'ctx>],
+        _builtin: &super::analysis::StdBuiltin,
+    ) -> Result<Value<'ctx>> {
+        match name {
+            "std.io.print" | "std.io.println" => {
+                let newline = self
+                    .context
+                    .i64_type()
+                    .const_int(u64::from(name == "std.io.println"), false);
+                let argument = args
+                    .first()
+                    .ok_or_else(|| anyhow!("{name} has no argument to print"))?;
+                let call = match argument.ty {
+                    ScalarType::Int => {
+                        let value = argument
+                            .repr
+                            .ok_or_else(|| anyhow!("print Int argument has no LLVM value"))?
+                            .into_int_value();
+                        self.builder.build_call(
+                            self.runtime.print_i64,
+                            &[value.into(), newline.into()],
+                            "print_i64",
+                        )
+                    }
+                    ScalarType::Bool => {
+                        let value = argument
+                            .repr
+                            .ok_or_else(|| anyhow!("print Bool argument has no LLVM value"))?
+                            .into_int_value();
+                        let widened = llvm(self.builder.build_int_z_extend(
+                            value,
+                            self.context.i64_type(),
+                            "print_bool_value",
+                        ))?;
+                        self.builder.build_call(
+                            self.runtime.print_bool,
+                            &[widened.into(), newline.into()],
+                            "print_bool",
+                        )
+                    }
+                    ScalarType::String => {
+                        let (pointer, length) = self.string_parts(*argument)?;
+                        self.builder.build_call(
+                            self.runtime.print_str,
+                            &[pointer.into(), length.into(), newline.into()],
+                            "print_str",
+                        )
+                    }
+                    other => bail!("{name} has no console form for {other:?}"),
+                };
+                llvm(call)?;
+                Ok(Value::void())
+            }
+            "std.string.len" => {
+                let argument = args
+                    .first()
+                    .ok_or_else(|| anyhow!("std.string.len has no argument"))?;
+                let (pointer, length) = self.string_parts(*argument)?;
+                let call = llvm(self.builder.build_call(
+                    self.runtime.str_len_codepoints,
+                    &[pointer.into(), length.into()],
+                    "str_len",
+                ))?;
+                Ok(Value {
+                    ty: ScalarType::Int,
+                    repr: call.try_as_basic_value().basic(),
+                })
+            }
+            other => bail!("std builtin {other:?} reached emission without a handler"),
+        }
     }
 
     /// 取 String 值的 `(ptr, len)` 两个字段。
@@ -1497,6 +1590,34 @@ fn declare_runtime<'ctx>(
             .fn_type(&[location[0], location[1], location[2], location[3]], false),
         None,
     );
+    // 控制台输出（批次 4.6）：Int/Bool/String 三种显示口径 + 换行开关。
+    let print_i64 = module.add_function(
+        "__yx_rt_print_i64",
+        context
+            .void_type()
+            .fn_type(&[i64_ty.into(), i64_ty.into()], false),
+        None,
+    );
+    let print_bool = module.add_function(
+        "__yx_rt_print_bool",
+        context
+            .void_type()
+            .fn_type(&[i64_ty.into(), i64_ty.into()], false),
+        None,
+    );
+    let print_str = module.add_function(
+        "__yx_rt_print_str",
+        context
+            .void_type()
+            .fn_type(&[ptr_ty.into(), i64_ty.into(), i64_ty.into()], false),
+        None,
+    );
+    // 码点数：`std.string.len` 的口径（不是 UTF-8 字节数）。
+    let str_len_codepoints = module.add_function(
+        "__yx_rt_str_len_codepoints",
+        i64_ty.fn_type(&[ptr_ty.into(), i64_ty.into()], false),
+        None,
+    );
     // 浮点 floor 取模：`f64(f64, f64)`，与 VM 的 `floor_mod_f64` 同一实现语义。
     let f64_ty = context.f64_type();
     let floor_mod_f64 = module.add_function(
@@ -1528,6 +1649,10 @@ fn declare_runtime<'ctx>(
         str_cmp,
         shift_overflow,
         floor_mod_f64,
+        print_i64,
+        print_bool,
+        print_str,
+        str_len_codepoints,
     }
 }
 

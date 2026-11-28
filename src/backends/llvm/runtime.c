@@ -126,6 +126,53 @@ __attribute__((noreturn)) void __yx_rt_shift_overflow(YX_LOCATION_ARGS) {
     yx_fail(6007, message, sizeof(message) - 1, YX_LOCATION);
 }
 
+// ── 控制台输出与码点长度（批次 4.6）──────────────────────────────────
+//
+// 显示口径与 VM 的 `format_value_with_prefix`（`src/std/io.rs`）逐字节一致：
+// Int 十进制、Bool `true`/`false`、String 按显式长度输出原始 UTF-8 字节。
+// 全部走 `fwrite` + 显式长度：字符串不以 NUL 结尾，禁止 `%s`/`strlen`/`puts`。
+// 换行只由调用方（`println`）通过 `newline` 参数追加一个 `\n`。
+
+void __yx_rt_print_i64(int64_t value, int64_t newline) {
+    char buffer[32];
+    const int written = snprintf(buffer, sizeof buffer, "%" PRId64, value);
+    if (written > 0) {
+        fwrite(buffer, 1, (size_t)written, stdout);
+    }
+    if (newline != 0) {
+        fputc('\n', stdout);
+    }
+}
+
+void __yx_rt_print_bool(int64_t value, int64_t newline) {
+    const char *text = value != 0 ? "true" : "false";
+    fwrite(text, 1, value != 0 ? 4u : 5u, stdout);
+    if (newline != 0) {
+        fputc('\n', stdout);
+    }
+}
+
+void __yx_rt_print_str(const char *ptr, uint64_t len, int64_t newline) {
+    if (len != 0) {
+        fwrite(ptr, 1, (size_t)len, stdout);
+    }
+    if (newline != 0) {
+        fputc('\n', stdout);
+    }
+}
+
+// `std.string.len` 的口径是 Unicode 码点数（`src/std/string.rs` 的 `native_len`，
+// #385 D1/D2 定案），不是 UTF-8 字节数：合法 UTF-8 里码点数 = 非续接字节数。
+int64_t __yx_rt_str_len_codepoints(const char *ptr, uint64_t len) {
+    int64_t count = 0;
+    for (uint64_t index = 0; index < len; index++) {
+        if (((unsigned char)ptr[index] & 0xC0u) != 0x80u) {
+            count += 1;
+        }
+    }
+    return count;
+}
+
 // ── 浮点 floor 取模（批次 4.5）────────────────────────────────────
 //
 // 与 VM 的 `crate::util::arith::floor_mod_f64` 逐行同语义：结果符号随除数

@@ -2475,6 +2475,152 @@ mod enabled {
     }
 
     #[test]
+    fn test_native_println_stdout_matches_vm() {
+        // Arrange：println 的 Int/Bool/String（含 UTF-8）显示、print 无换行、多次拼接。
+        // 判据是 stdout 逐字节相等（assert_native_matches_vm 比对 VM 与 O0/O2）。
+        let source = concat!(
+            "use std.io\n",
+            "main: () -> Void = {\n",
+            "    io.println(42)\n",
+            "    io.println(true)\n",
+            "    io.println(\"h\u{00e9}llo \u{4e16}\u{754c}\")\n",
+            "    io.print(\"a\")\n",
+            "    io.print(\"b\")\n",
+            "    io.println(\"\")\n",
+            "    io.print(-7)\n",
+            "    io.println(\"\")\n",
+            "    io.println(false)\n",
+            "}\n",
+            "main()\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "stdout_println");
+
+        // Assert
+        // assert_native_matches_vm 已逐字节比对 VM 与 O0/O2 的 stdout 与退出码。
+    }
+
+    #[test]
+    fn test_native_string_len_matches_vm() {
+        // Arrange：`std.string.len` 是码点数口径（#385 D1/D2），不是 UTF-8 字节数；
+        // 结果要能参与比较与断言的整型运算。
+        let source = concat!(
+            "use std.string\n",
+            "use std.assert\n",
+            "main: () -> Void = {\n",
+            "    assert.assert(string.len(\"\") == 0, \"empty string\")\n",
+            "    assert.assert(string.len(\"abc\") == 3, \"ascii\")\n",
+            "    assert.assert(string.len(\"h\u{00e9}llo\") == 5, \"five code points, six bytes\")\n",
+            "    assert.assert(string.len(\"\u{4e16}\u{754c}\") == 2, \"two code points\")\n",
+            "    assert.assert(string.len(\"abcd\") - string.len(\"ab\") == 2, \"arithmetic\")\n",
+            "    assert.assert(string.len(\"ab\") < string.len(\"abc\"), \"ordering\")\n",
+            "}\n",
+            "main()\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "string_len");
+
+        // Assert
+        // assert_native_matches_vm 已比对 VM 与 O0/O2 的退出码与 stdout。
+    }
+
+    #[test]
+    fn test_native_std_call_outside_allowlist_is_rejected() {
+        // Arrange：白名单外的 std 调用仍带位置拒绝，不静默 Void。
+        let dir = TempDir::new().expect("std allowlist tempdir");
+        let source = dir.path().join("outside.yx");
+        let executable = dir.path().join("outside");
+        std::fs::write(
+            &source,
+            concat!(
+                "use std.string\n",
+                "main: () -> Void = {\n",
+                "    n = string.len(\"abc\")\n",
+                "    chars = string.chars(\"abc\")\n",
+                "}\n",
+                "main()\n",
+            ),
+        )
+        .expect("write std allowlist fixture");
+
+        // Act
+        let error = build_native_with_options(&source, &executable, false, false)
+            .expect_err("std call outside the allowlist must be rejected at build time");
+
+        // Assert
+        let detail = format!("{error:#}");
+        assert!(
+            detail.contains("std.string.chars"),
+            "rejection must name the unsupported std call: {detail}"
+        );
+        assert!(
+            detail.contains(&format!("{}:4:", source.display())),
+            "rejection must carry the call position: {detail}"
+        );
+        assert!(
+            !executable.exists(),
+            "rejected build must not write a native artifact"
+        );
+    }
+
+    #[test]
+    fn test_native_std_print_unsupported_arguments_are_rejected() {
+        // Arrange：Float 实参与多参数（VM 用空格拼接）都在单参数 Int/Bool/String 之外。
+        let fixtures: [(&str, &str, &str); 2] = [
+            (
+                "float_arg",
+                concat!(
+                    "use std.io\n",
+                    "main: () -> Void = {\n",
+                    "    io.println(1.5)\n",
+                    "}\n",
+                    "main()\n",
+                ),
+                "accepts",
+            ),
+            (
+                "two_args",
+                concat!(
+                    "use std.io\n",
+                    "main: () -> Void = {\n",
+                    "    io.println(1, 2)\n",
+                    "}\n",
+                    "main()\n",
+                ),
+                "expects 1 argument(s), got 2",
+            ),
+        ];
+
+        for (stem, program, expected) in fixtures {
+            let dir = TempDir::new().expect("std print argument tempdir");
+            let source = dir.path().join(format!("{stem}.yx"));
+            let executable = dir.path().join(stem);
+            std::fs::write(&source, program).expect("write std print argument fixture");
+
+            // Act
+            let error = build_native_with_options(&source, &executable, false, false)
+                .expect_err("unsupported console argument must be rejected");
+
+            // Assert
+            let detail = format!("{error:#}");
+            assert!(
+                detail.contains("std.io.println") && detail.contains(expected),
+                "rejection must name the console boundary ({expected}): {detail}"
+            );
+            assert!(
+                detail.contains(&format!("{}:3:", source.display())),
+                "rejection must carry the call position: {detail}"
+            );
+            assert!(
+                !executable.exists(),
+                "rejected build must not write a native artifact"
+            );
+        }
+    }
+
+    #[test]
     fn test_native_float_arithmetic_matches_vm() {
         // Arrange：四则、Neg、floor 取模（四个符号组合）、Float 局部/形参/返回与 Phi。
         let source = concat!(

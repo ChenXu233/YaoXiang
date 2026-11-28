@@ -49,6 +49,59 @@ impl ScalarType {
         }
     }
 }
+/// 单个 `std` 内建在 L4 侧的原型：每个参数位置允许的标量集合 + 返回标量类型。
+///
+/// 批次 4.6 起 AOT 只打开「参数形状与返回类型都能由 `ValueInfo.ty` 证明」的
+/// 最小通道；多参数（VM 用单个空格拼接）、`Float` 实参与 rest 参数都不在支持集内。
+pub(super) struct StdBuiltin {
+    pub(super) params: &'static [&'static [ScalarType]],
+    pub(super) returns: ScalarType,
+}
+
+impl StdBuiltin {
+    /// 按位置核对实参类型；返回可直接给诊断的说明（不含前缀）。
+    pub(super) fn check(
+        &self,
+        name: &str,
+        arg_types: &[ScalarType],
+    ) -> Result<()> {
+        if arg_types.len() != self.params.len() {
+            bail!(
+                "{name} expects {} argument(s), got {}; multi-argument console calls are outside the AOT support set",
+                self.params.len(),
+                arg_types.len()
+            );
+        }
+        for (index, (allowed, actual)) in self.params.iter().zip(arg_types).enumerate() {
+            if !allowed.contains(actual) {
+                bail!("{name} argument {index} accepts {allowed:?}, got {actual:?}");
+            }
+        }
+        Ok(())
+    }
+}
+
+/// `std` 通道的白名单。返回 `None` 表示该名字不在支持集内（继续走用户函数解析）。
+///
+/// 参数与返回类型全部按 IR 事实判定：实参类型取 `ValueInfo.ty`（或槽位类型），
+/// 返回类型写回时必须与值表类型一致，L4 不猜类型。
+pub(super) fn std_builtin(name: &str) -> Option<StdBuiltin> {
+    match name {
+        // 单参数控制台输出：Int 十进制、Bool `true`/`false`、String 原始 UTF-8 字节，
+        // 显示口径与 VM 的 `format_value_with_prefix`（`src/std/io.rs`）逐字节一致。
+        "std.io.print" | "std.io.println" => Some(StdBuiltin {
+            params: &[&[ScalarType::Int, ScalarType::Bool, ScalarType::String]],
+            returns: ScalarType::Void,
+        }),
+        // 码点数（`src/std/string.rs` 的 `native_len`：#385 D1/D2 定案为 Unicode
+        // 标量值口径，UTF-8 字节数不是它的语义）。
+        "std.string.len" => Some(StdBuiltin {
+            params: &[&[ScalarType::String]],
+            returns: ScalarType::Int,
+        }),
+        _ => None,
+    }
+}
 
 #[derive(Clone)]
 pub(super) struct OwnedSignature {
@@ -837,6 +890,13 @@ fn analyze_stream(
                         }
                     }
                     ScalarType::Void
+                } else if let Some(builtin) = std_builtin(name) {
+                    // std 通道：参数形状按 IR 事实核对，返回类型写回时由 `write`
+                    // 与值表类型核对（`Operand::Value` 分支），两处都不猜。
+                    builtin
+                        .check(name, &arg_types)
+                        .map_err(|e| unsupported(e.to_string()))?;
+                    builtin.returns
                 } else {
                     let resolved = def.and_then(|id| definitions.get(&id.0)).unwrap_or(name);
                     let signature = signatures.get(resolved).ok_or_else(|| {

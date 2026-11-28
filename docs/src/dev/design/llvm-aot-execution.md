@@ -10,7 +10,7 @@ description:
 x86-64 上，把一份真实的 YaoXiang 源程序编译成 ELF 可执行文件。在没有 LLVM 和 YaoXiang
 VM 的同类系统上运行它，既能算对结果，也能在出错时指出源码位置。生成一份 LLVM IR 文本不算完成。
 
-**状态：批次 3 已开工（值证据、无 `Phi` CFG 子集与多文件项目入口），批次 4.1（运行时 ABI 首版与 `String` 判等/顺序）、4.2（`Int` 位运算与受检移位）与 4.4（模块级全局）与 4.5（`Float` 标量）已入库，发布验收未完成。**
+**状态：批次 3 已开工（值证据、无 `Phi` CFG 子集与多文件项目入口），批次 4.1（运行时 ABI 首版与 `String` 判等/顺序）、4.2（`Int` 位运算与受检移位）与 4.4（模块级全局）、4.5（`Float` 标量）与 4.6（控制台与 `string.len`）已入库，发布验收未完成。**
 [RFC-018](../../rfc/accepted/018-llvm-aot-compiler.md)
 已接受 LLVM 提前编译（AOT）的方向，并在附录 B 登记构建产物契约；[跟踪议题 #134](https://github.com/ChenXu233/YaoXiang/issues/134)
 是这项工作的入口。首批实现不占用 [RFC-039 施工表](../architecture/09-execution-wbs.md)
@@ -39,8 +39,8 @@ VM 的同类系统上运行它，既能算对结果，也能在出错时指出�
       分支与循环已发射（break/continue、嵌套 if/else、嵌套 while、循环内 `Local`、跨块 `Value`
       均与 VM 同结果）；多文件项目入口与文件身份已落地（B-i：库 API 项目入口，CLI 单入口文件）；`Phi`
       与多前驱 `Local`
-      汇合的拒绝边界已由批次 3.5 收口为发射（见“支持集与拒绝边界”）。等价账本的八条最小集已有可执行门禁（机器可读账本 + 检查器 +
-      CI 作业，见“等价账本（最小集，八条）”）。判据在 `tests/integration/native_aot.rs` 与
+      汇合的拒绝边界已由批次 3.5 收口为发射（见“支持集与拒绝边界”）。等价账本的九条最小集已有可执行门禁（机器可读账本 + 检查器 +
+      CI 作业，见“等价账本（最小集，九条）”）。判据在 `tests/integration/native_aot.rs` 与
       `src/backends/llvm/tests/analysis.rs`。
 - [x] **批次 3.5 `Phi` 与 `Local` 汇合映射**（`17882acb`、`5e26ea2b`）——需要 `Phi`
       的汇合值从能力拒绝改为发射：`Phi` 在块首预建、incoming 按前驱 block label 登记；`Local`
@@ -48,7 +48,7 @@ VM 的同类系统上运行它，既能算对结果，也能在出错时指出�
       把显式未知 incoming 收紧为按可观察性分派——死合流放行（`undef`
       不可观察），live 合并值带位置拒绝（见“支持集与拒绝
       边界”）；账本 phi-boundary /
-      local-merge-boundary 改 supported（见“支持集与拒绝边界”与“等价账本（最小集，八条）”）；判据在
+      local-merge-boundary 改 supported（见“支持集与拒绝边界”与“等价账本（最小集，九条）”）；判据在
       `tests/integration/native_aot.rs` 与 `src/backends/llvm/tests/analysis.rs`。
 - [ ] **批次 4 链接原生运行时，再接 FFI 与并作**——4.1 已收口：运行时 ABI 首版与
       `String` 判等/顺序（见“运行时 ABI 约定（首版）”）；判据
@@ -63,7 +63,10 @@ VM 的同类系统上运行它，既能算对结果，也能在出错时指出�
       4.5 已收口：`Float` 标量（四则/`Neg`/floor 取模/六比较/局部/形参/返回/`Phi`，混型带位置
       拒绝，判据 `test_native_float_arithmetic_matches_vm`、
       `test_native_float_nan_and_infinity_match_vm`、
-      `test_native_float_mixed_int_operands_are_rejected`）。容器、闭包、资源、FFI 与并作未开始。
+      `test_native_float_mixed_int_operands_are_rejected`）；4.6 已收口：
+      `std.io.print`/`println`（单参数 `Int`/`Bool`/`String`）与 `std.string.len`（码点数），
+      stdout 与 VM 逐字节一致，判据 `test_native_println_stdout_matches_vm`、
+      `test_native_string_len_matches_vm`。容器、闭包、资源、FFI 与并作未开始。
 
   **批次 4 前置（阻塞，2026-11-28 登记）**：
 
@@ -198,7 +201,7 @@ python scripts/dev/testsuite.py plan
 
 阶段 1 与批次 4（4.1、4.2）的可编译形态按可执行判据登记在同一张账本里；支持集之外必须显式拒绝并带源码位置，禁止静默回退。判据分两处：集成判据在
 `tests/integration/native_aot.rs`，后端单元判据在
-`src/backends/llvm/tests/analysis.rs`。本节逐条列边界；等价账本的最小交付边界见节末的八条表。
+`src/backends/llvm/tests/analysis.rs`。本节逐条列边界；等价账本的最小交付边界见节末的九条表。
 
 **支持集**：
 
@@ -238,6 +241,15 @@ python scripts/dev/testsuite.py plan
   谓词，`Ne` 必须用**无序** `UNE`（`NaN != NaN` 为真，ordered `ONE` 会判成假）；`Float` 的
   局部、形参、返回与 `Phi` 汇合都在支持集内。判据 `test_native_float_arithmetic_matches_vm`、
   `test_native_float_nan_and_infinity_match_vm`；混型 Int×Float 见拒绝边界。
+- 控制台与字符串长度（批次 4.6）：`std.io.print` / `std.io.println` 接受**单参数**
+  `Int`/`Bool`/`String`，`std.string.len` 接受 `String` 并返回 `Int`；三者都是白名单，
+  参数与返回类型全部按 IR 事实（值表 `ValueInfo.ty`）核对。显示口径与 VM 的
+  `format_value_with_prefix`（`src/std/io.rs`）逐字节一致：`Int` 十进制、`Bool` 为
+  `true`/`false`、`String` 输出原始 UTF-8 字节（按显式长度，不以 NUL 为界），`println`
+  只多追加一个 `\n`，多参数拼接与 `Float` 实参见拒绝边界；`std.string.len` 是**码点数**
+  口径（`src/std/string.rs` 的 `native_len`，#385 D1/D2 定案），不是 UTF-8 字节数。判据
+  `test_native_println_stdout_matches_vm`（stdout 逐字节比对 VM 与 O0/O2）、
+  `test_native_string_len_matches_vm`。
 - 直线指令；无 `Phi` 的分支和循环（`Jmp`、`JmpIf`、`JmpIfNot` 按 `BasicBlock` 发射），判据为
   `test_native_no_phi_branch_executes_both_edges`、`test_native_no_phi_loop_matches_vm`。
 - `Phi` 汇合：生产端 SSA 的 `Phi`
@@ -300,10 +312,13 @@ python scripts/dev/testsuite.py plan
   入口先红；这是 lower 侧类型覆盖缺口，补齐归 lower，不在 AOT 推断或静默 Void。判据为
   `test_native_explicit_unknown_value_is_rejected`（集成与后端单元各一条）、`test_native_multi_definition_value_is_rejected`、`test_native_unsupported_value_type_is_rejected`；失败构建不覆盖上次产物，判据为
   `test_native_rejected_synthetic_ir_preserves_previous_output`。
-- 函数体内的 `std` 调用：调用结果在 IR 中的值类型为显式未知
-  `TypeRef("?")`，AOT 报带值 id 与原始类型的 unsupported；缺口归 lower 的类型覆盖补齐。**例外只有
-  `std.assert` 一项**：该内建的返回类型由分析器直接拥有（`Void`），因此函数体内的断言可用；其余
-  `std` 调用仍按显式未知拒绝，例外不外扩。
+- `std` 调用（批次 4.6 收窄）：只有白名单三件（`std.io.print`、`std.io.println`、
+  `std.string.len`）能编译；其余 `std` 调用（如 `std.string.chars`、`std.io.read_line`）仍带
+  源码位置显式拒绝并点名目标，判据 `test_native_std_call_outside_allowlist_is_rejected`。
+  白名单内部也有边界：`print`/`println` 只接受**单参数** `Int`/`Bool`/`String`（VM 的多参数
+  用单个空格拼接，尚未进支持集），`Float` 实参与多参数都带位置拒绝，判据
+  `test_native_std_print_unsupported_arguments_are_rejected`。`std.assert.assert` 保持既有
+  硬判（`Bool` 或 `(Bool, String)`，返回 `Void`）。
 - `Script` 定义了 `main` 却没有任何调用：构建期显式拒绝（带 `source:line:column`
   的 AOT 能力边界诊断，不产生产物），文案说明「`Script` 定义 `main`
   但未调用、AOT 不隐式调用」并给出改用 Bin 项目或移除未调用 `main` 的路径；集成判据
@@ -377,7 +392,7 @@ python scripts/dev/testsuite.py plan
 - **L4 补证据只有这一个例外**：`std.assert`
   的结果值类型由 L4 分析器拥有；其余显式未知仍按拒绝处理，缺口归 lower 的类型覆盖补齐。
 
-**等价账本（最小集，八条）**：
+**等价账本（最小集，九条）**：
 
 | #   | 条目                         | 状态           | 判据                                                                                                         | 守的决策                                                                                                 |
 | --- | ---------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
@@ -389,19 +404,20 @@ python scripts/dev/testsuite.py plan
 | 6   | 合并 `Local`                 | 已收口         | `test_native_local_multi_arm_merge_matches_vm`                                                               | 多前臂写—汇合读由入口块 alloca 承载，与 VM 帧槽语义同结果，不外泄 LLVM 原文                              |
 | 7   | 显式未知类型                 | 已收口（拒绝） | `test_native_explicit_unknown_value_is_rejected`                                                             | 未知类型不静默猜测、不静默 Void                                                                          |
 | 8   | `String` 判等与顺序          | 已收口         | `test_native_string_equality_matches_vm`、`test_native_string_ordering_matches_vm`                           | 内容相等不是指针相等；六个算子按 UTF-8 字节字典序，空串、前缀、多字节为边界；合并值经 `Phi` 仍按内容比较 |
+| 9   | 控制台 stdout                | 已收口         | `test_native_println_stdout_matches_vm`                                                                      | 输出与 VM 逐字节一致：`Int`/`Bool`/`String` 三种显示、`print` 不换行、`println` 一个 `\n`、UTF-8 不被 NUL 截断 |
 
-这八条是等价账本的最小交付边界：**已支持项不得移出集合换绿**——支持集只增不减，绿灯不得靠把已支持项移出集合获得。
+这九条是等价账本的最小交付边界：**已支持项不得移出集合换绿**——支持集只增不减，绿灯不得靠把已支持项移出集合获得。
 
 可执行账本是机器可读的 `tests/aot-ledger.json`，由 `scripts/ci/check-aot-ledger.py`
 对账并接入 CI 的 LLVM 作业：账本的 target 是集成测试目标
-`native_aot`，八条的 id 与状态以脚本内嵌期望机械核对，账本只存 id、状态与判据名。**决策文本以本表为唯一来源。**
+`native_aot`，九条的 id 与状态以脚本内嵌期望机械核对，账本只存 id、状态与判据名。**决策文本以本表为唯一来源。**
 后端单元判据（顺序写与循环重复写合法、单支臂合并只有合成 IR 级证据等）不在账本 target 内，仍见「支持集」小节。
 
 **裁决（2026-11-26）**：
 
 - **B-i（入口形态）**：库 API 增加项目/多文件入口，CLI 保持单入口文件。项目 native 构建按编排层的发现、合并与初始化次序执行（见「支持集」）。
 - **D（等价账本口径）**：less is
-  more——账本只保留覆盖关键决策与拒绝边界的必要条目，不以夹具数量防御；账本按上表的八条最小集给出。
+  more——账本只保留覆盖关键决策与拒绝边界的必要条目，不以夹具数量防御；账本按上表的九条最小集给出。
 
 ### 0. 值契约闭合（P7 的 SSA 生产端）
 
@@ -516,13 +532,17 @@ python scripts/dev/testsuite.py plan
 - 未来的 owned 字符串在 `ptr` 之前放堆头（引用计数、种类、长度），值形状仍是 `{ ptr, len }`——新增分配不改变任何函数签名。
 - 用户可见的长度有两套口径，不得混用：`StringLength` 指令对 `String` 是字节数（对容器是元素数）；`std.string.len` 与内建 `len` 对 `String` 是码点数。选择由调用方按语义决定，ABI 层不统一。
 
-### 比较与浮点入口（批次 4.1 / 4.5 已实现）
+### 比较、浮点与控制台入口（批次 4.1 / 4.5 / 4.6 已实现）
 
 | 入口                    | 签名                      | 语义                                              |
 | ----------------------- | ------------------------- | ------------------------------------------------- |
 | `__yx_rt_str_eq`        | `i64(i8*, i64, i8*, i64)` | 长度相同且逐字节相等返回 1，否则 0                |
 | `__yx_rt_str_cmp`       | `i64(i8*, i64, i8*, i64)` | 按 UTF-8 字节字典序返回 -1 / 0 / 1                |
 | `__yx_rt_floor_mod_f64` | `f64(f64, f64)`           | floor 取模：符号随除数（`fmod` + 符号修正）       |
+| `__yx_rt_print_i64`     | `void(i64, i64)`          | 十进制输出；第二参数非 0 时追加 `\n`              |
+| `__yx_rt_print_bool`    | `void(i64, i64)`          | `true`/`false` 输出；第二参数非 0 时追加 `\n`      |
+| `__yx_rt_print_str`     | `void(i8*, i64, i64)`     | 按显式长度输出原始 UTF-8 字节；第三参数非 0 时追加 `\n` |
+| `__yx_rt_str_len_codepoints` | `i64(i8*, i64)`      | 码点数（`std.string.len` 的口径）                  |
 
 - `String` 的六个比较算子都落到这两个入口：`Eq`/`Ne` 用 `__yx_rt_str_eq` 的结果与 0 比较，
   `Lt`/`Le`/`Gt`/`Ge` 用 `__yx_rt_str_cmp` 的结果与 0 比较。

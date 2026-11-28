@@ -59,6 +59,13 @@
         "native_aot::enabled::test_native_string_equality_matches_vm",
         "native_aot::enabled::test_native_string_ordering_matches_vm"
       ]
+    },
+    {
+      "id": "stdout",
+      "state": "supported",
+      "tests": [
+        "native_aot::enabled::test_native_println_stdout_matches_vm"
+      ]
     }
   ]
 }
