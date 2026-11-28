@@ -541,6 +541,24 @@ impl AstToIrGenerator {
         self.struct_definitions_by_identity.get(identity)
     }
 
+    /// **写名（本地键）→ 类型身份**：构造调用在「无调用点结果类型表」的树上
+    /// 用它取字段表。
+    ///
+    /// 来源与和类型身份视图同一份派生索引（type_identity_index，唯一写者
+    /// add_type）：本地键在本单元唯一（别名导入已把同名写名分开），故反查
+    /// 无歧义；单文件/平坦名不在索引里 → None，调用方回退裸名表（既有行为）。
+    pub(super) fn identity_for_written(
+        &self,
+        written: &str,
+    ) -> Option<Nominal> {
+        self.type_result
+            .as_ref()?
+            .type_identity_index
+            .iter()
+            .find(|(_, local)| local.as_str() == written)
+            .map(|(identity, _)| identity.clone())
+    }
+
     /// 按身份取和类型变体表；平路径身份（单文件/本地键同名）才回退本地键。
     /// 带模块的身份**不得**回退裸名——那正是同名串味（D64）。
     pub(super) fn sum_variants_for(
@@ -555,20 +573,6 @@ impl AstToIrGenerator {
         } else {
             None
         }
-    }
-
-    /// 调用点的结果类型身份（typecheck 按同一 `PlanId` 落的表）——构造调用
-    /// 的「这是哪个定义的实例」只从这里取，不按写名猜。
-    pub(super) fn call_result_identity(
-        &self,
-        plan_id: PlanId,
-    ) -> Option<Nominal> {
-        self.type_result
-            .as_ref()?
-            .call_result_types
-            .get(&plan_id)
-            .and_then(Self::mono_nominal)
-            .cloned()
     }
 }
 

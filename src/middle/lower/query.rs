@@ -613,21 +613,14 @@ impl AstToIrGenerator {
                 let type_name = self.local_var_types.get(name)?;
                 Nominal::flat(Self::strip_ref_prefix(type_name))
             }
-            ast::Expr::Call { func, plan_id, .. } => {
-                if let Some(mono) = self
-                    .type_result
-                    .as_ref()
-                    .and_then(|tr| tr.call_result_types.get(plan_id))
-                {
-                    if let Some(identity) = Self::mono_nominal(mono) {
-                        return Some(identity.clone());
-                    }
-                }
-                match func.as_ref() {
-                    ast::Expr::Var(name, _) => Nominal::flat(name),
-                    _ => None,
-                }
-            }
+            // 构造调用：当前树没有「调用点结果类型」表，按**写名**反查身份
+            // （本单元本地键唯一；单文件平坦名回退平路径）。
+            ast::Expr::Call { func, .. } => match func.as_ref() {
+                ast::Expr::Var(name, _) => self
+                    .identity_for_written(name)
+                    .or_else(|| Nominal::flat(name)),
+                _ => None,
+            },
             _ => None,
         }
     }

@@ -1071,13 +1071,10 @@ impl AstToIrGenerator {
             // RFC-010: 处理命名参数构造 `Point(x=1, y=2)`
             if call.has_named() {
                 if let Expr::Var(name, _) = func {
-                    // 构造实参按**该调用点的结果类型身份**取字段表：同名类型
-                    // （a.T / b.T）各用自己定义的字段序与默认值。只在写名确实是
-                    // 结构体构造器（裸名表有它）且身份定义名与写名一致时用身份
-                    // 视图——否则会把「返回结构体的普通函数」误当构造器补默认值。
+                    // 构造实参按**写名 → 身份**取字段表（当前树无调用点结果类型
+                    // 表；身份由 typecheck 的派生索引反查，单文件回退裸名表）。
                     let by_identity = self
-                        .call_result_identity(call_plan_id)
-                        .filter(|identity| identity.bare() == name.as_str())
+                        .identity_for_written(name)
                         .and_then(|identity| self.struct_fields_by_identity(&identity).cloned());
                     if let Some(fields) =
                         by_identity.or_else(|| self.struct_definitions.get(name).cloned())
@@ -1159,11 +1156,10 @@ impl AstToIrGenerator {
                 _ => None,
             };
             if let Some(name) = struct_ctor_name {
-                // 同命名实参分支：只有裸名表认得这个写名（真是构造器）时才用
-                // 身份视图；「返回结构体的普通函数」不得被补默认值。
+                // 同命名实参分支：构造器字段表按**写名 → 身份**取；「返回结构体
+                // 的普通函数」不会命中裸名表（写名不在类型索引里）。
                 let by_identity = self
-                    .call_result_identity(call_plan_id)
-                    .filter(|identity| identity.bare() == name.as_str())
+                    .identity_for_written(&name)
                     .and_then(|identity| self.struct_fields_by_identity(&identity).cloned());
                 if let Some(fields) =
                     by_identity.or_else(|| self.struct_definitions.get(&name).cloned())
