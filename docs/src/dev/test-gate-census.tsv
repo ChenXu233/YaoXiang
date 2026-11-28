@@ -1868,10 +1868,10 @@ test_replace_call_sites_replaces_generic_call_in_main	src/middle/passes/mono/tes
 test_monomorphize_end_to_end_specializes_and_replaces_calls	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx1 assertx4 is_nonex1 unwrapx1 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_monomorphize_keeps_original_generic_when_call_site_lacks_request_key	src/middle/passes/mono/tests/monomorphizer.rs	assertx4 expectx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_dce_keeps_generic_referenced_only_by_make_closure	src/middle/passes/mono/tests/monomorphizer.rs	assertx1 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_tail_call_site_is_rewritten_to_specialized_name	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx1 assertx2 is_nonex1 expectx1 match_panicx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_tail_call_site_drops_erased_const_arg_once	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx2 assertx1 expectx4	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_static_call_site_is_rewritten_to_specialized_name	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx1 assertx2 is_nonex1 expectx1 match_panicx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_call_site_drops_erased_const_arg_once	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx2 assertx1 expectx4	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_rewritten_call_target_covers_only_static_call_forms	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx1 is_somex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
-test_module_init_tail_call_is_rewritten	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx1 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_module_init_call_is_rewritten	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx1 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_specialize_generic_struct_substitutes_type_params	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx6 matchesx1 assertx2 is_nonex1 expectx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_type_specialization_arg_count_mismatch_returns_none	src/middle/passes/mono/tests/monomorphizer.rs	assertx1 is_nonex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_collect_generic_type_refs_nested_specialization	src/middle/passes/mono/tests/monomorphizer.rs	assert_eqx3 matchesx1 assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核

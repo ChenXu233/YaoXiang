@@ -28,6 +28,10 @@ const MAGIC: u32 = 0x59584243;
 ///   （`LibraryRef` / `ExternRef`）响亮拒绝而不是静默折算（依据见 WBS 09 的 7e.4 行
 ///   与本节 v5 条目；同源叙述在 [04-ssa.md](../../../docs/src/dev/architecture/04-ssa.md)
 ///   的「硬编码丢弃的跟踪」）。
+///   同一未发布窗口回收 `TRY_BEGIN`(0xA0) / `TRY_END`(0xA1)（P10 S6）：两者**从无
+///   生产者**（codegen 不产出、语言层无 try 语义）⇒ 旧 `.42` 不可能含这两个字节；
+///   读取侧对未知 opcode 已是 panic（#271）而不是静默兜底 ⇒ 回收**不需要再升版**，
+///   `VERSION` 保持 5。该回收不改变任何格式观测量（字节布局、段数、记录形状都没动）。
 pub const VERSION: u32 = 5;
 
 const FLAG_DEBUG_INFO: u32 = 0x02;

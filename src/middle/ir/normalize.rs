@@ -420,14 +420,6 @@ fn fmt_instruction(
             o(func, f, m),
             fmt_ops(args, f, m)
         ),
-        Instruction::TailCall {
-            func, args, def, ..
-        } => format!(
-            "TailCall {} {} (def={})",
-            o(func, f, m),
-            fmt_ops(args, f, m),
-            fmt_def(def, m)
-        ),
         Instruction::Ret { value, .. } => match value {
             Some(v) => format!("Ret {}", o(v, f, m)),
             None => "Ret".to_string(),

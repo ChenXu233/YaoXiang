@@ -199,8 +199,6 @@ impl Interpreter {
             | BytecodeInstr::Drop { .. }
             | BytecodeInstr::Release { .. }
             | BytecodeInstr::StackAlloc { .. }
-            | BytecodeInstr::TryBegin { .. }
-            | BytecodeInstr::TryEnd
             | BytecodeInstr::ArcDrop { .. }
             | BytecodeInstr::CloseUpvalue { .. }
             | BytecodeInstr::Return

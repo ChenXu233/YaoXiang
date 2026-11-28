@@ -176,9 +176,6 @@ fn assert_references_closed(
                 Instruction::Call {
                     func: Operand::Const(ConstValue::Int(_)),
                     ..
-                } | Instruction::TailCall {
-                    func: Operand::Const(ConstValue::Int(_)),
-                    ..
                 }
             ),
             "{owner} 出现了索引形态调用目标（函数表下标会失配）"

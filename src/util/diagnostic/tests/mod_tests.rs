@@ -41,7 +41,6 @@ fn error_module_with_debug_span() -> (SourceMap, BytecodeModule) {
         upvalue_count: 0,
         instructions: vec![BytecodeInstr::Nop],
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::from([(0usize, debug_span)]),
     });
 

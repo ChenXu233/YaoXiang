@@ -264,7 +264,7 @@ impl AstToIrGenerator {
         }
     }
 
-    /// 解析单条指令里的静态调用目标 DefId：`Call`/`TailCall` 的字符串操作数、
+    /// 解析单条指令里的静态调用目标 DefId：`Call` 的字符串操作数、
     /// `MakeClosure` 的目标名，其余指令不动。
     ///
     /// 函数体与模块初始化序列**共用本实现**（禁令三：一处生产、一处消费）——
@@ -274,10 +274,12 @@ impl AstToIrGenerator {
         resolve: &impl Fn(&str) -> Option<crate::frontend::core::types::identity::DefId>,
     ) {
         match instr {
-            Instruction::Call { func, def, .. } | Instruction::TailCall { func, def, .. } => {
-                if let Operand::Const(ConstValue::String(name)) = func {
-                    *def = resolve(name);
-                }
+            Instruction::Call {
+                func: Operand::Const(ConstValue::String(name)),
+                def,
+                ..
+            } => {
+                *def = resolve(name);
             }
             Instruction::MakeClosure { func, def, .. } => {
                 *def = resolve(func);
@@ -520,7 +522,7 @@ impl AstToIrGenerator {
             })
     }
 
-    /// 重写单条指令里的函数名引用（Call/TailCall 的字符串 func、MakeClosure 的 func）。
+    /// 重写单条指令里的函数名引用（Call 的字符串 func、MakeClosure 的 func）。
     ///
     /// 解析规则见 [`Self::resolve_call_target`]（单点实现）。
     fn rewrite_call_names(
@@ -542,11 +544,12 @@ impl AstToIrGenerator {
             Self::resolve_call_target(name, rename, aliases)
         };
         match instr {
-            Instruction::Call { func, .. } | Instruction::TailCall { func, .. } => {
-                if let Operand::Const(ConstValue::String(name)) = func {
-                    if let Some(q) = resolve(name) {
-                        *name = q;
-                    }
+            Instruction::Call {
+                func: Operand::Const(ConstValue::String(name)),
+                ..
+            } => {
+                if let Some(q) = resolve(name) {
+                    *name = q;
                 }
             }
             Instruction::MakeClosure { func, .. } => {

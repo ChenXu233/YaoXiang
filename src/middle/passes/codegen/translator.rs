@@ -491,7 +491,7 @@ impl Translator {
     /// （04-ssa.md §「`Phi` 的字节码形态」方案 A：IR-only 伪指令，不新增 opcode）。
     ///
     /// 组序：**落空前驱**领首——它是布局上紧邻本块、且块尾不是
-    /// `Jmp` / `Ret` / `TailCall` 的前驱；落空路径直接流进本块入口，必须命中第一组。
+    /// `Jmp` / `Ret` 的前驱；落空路径直接流进本块入口，必须命中第一组。
     /// 其余前驱按 label 升序，靠「入边跳转重定向到自己的组起点」选择。
     ///
     /// 形态自保（这些形态的判据归 `verify_ssa`，本函数只保证**不产出错代码**）：
@@ -577,11 +577,7 @@ impl Translator {
 
             // 落空前驱：布局上紧邻本块、且块尾不是无条件跳转 / 返回。
             let fallthrough_predecessor = match blocks[block_index - 1].instructions.last() {
-                Some(
-                    Instruction::Jmp { .. }
-                    | Instruction::Ret { .. }
-                    | Instruction::TailCall { .. },
-                ) => None,
+                Some(Instruction::Jmp { .. } | Instruction::Ret { .. }) => None,
                 _ => Some(blocks[block_index - 1].label),
             };
             let mut order: Vec<usize> = Vec::with_capacity(pred_labels.len());
@@ -905,16 +901,6 @@ impl Translator {
             CallDyn {
                 dst, func, args, ..
             } => self.translate_call_dyn(dst, func, args),
-            // RFC-039 D34：`TAIL_CALL` 的 opcode 值随 .42 升版 v5 回收，
-            // 编码分支一并删除。IR `TailCall` 全仓无构造点，走到这里说明新增了
-            // 生产者——响亮失败，不静默降级成另一种调用（那会把「没接通」
-            // 伪装成「接通了但语义不同」）。
-            TailCall { .. } => Err(ErrorCodeDefinition::internal_error(
-                "Instruction::TailCall 没有对应 opcode（RFC-039 D34 已回收 TAIL_CALL）：\
-                 该 IR 变体全仓无生产者；若要接通语义，先补 opcode 与解释器实现",
-            )
-            .build()),
-
             Alloc { dst, .. } => self.translate_alloc(dst),
             Free { .. } => Ok(BytecodeInstruction::new(opcode::NOP, vec![])),
             AllocArray { dst, .. } => self.translate_alloc_array(dst),

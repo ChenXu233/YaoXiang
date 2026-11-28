@@ -44,7 +44,6 @@ fn unwrapped_variant_tag_module() -> BytecodeModule {
                 },
             ],
             labels: HashMap::new(),
-            exception_handlers: Vec::new(),
             debug_map: HashMap::new(),
         }],
         type_table: vec![],

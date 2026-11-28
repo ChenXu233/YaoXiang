@@ -104,8 +104,15 @@ pub const STRING_FROM_INT: u8 = 0x94;
 pub const STRING_FROM_FLOAT: u8 = 0x95;
 
 // Exception Handling (0xA0-0xAF)
-pub const TRY_BEGIN: u8 = 0xA0;
-pub const TRY_END: u8 = 0xA1;
+// 0xA0 与 0xA1 已回收（P10 S6；RFC-039 D52 复核）：`TRY_BEGIN` / `TRY_END` 两个
+// 字节码指令**从无生产者**——codegen 不产出、IR 侧没有 try 语义（语言层无
+// throw/try/catch，RFC-036 否决进程内 catch 边界）。因此：
+//   ① 无生产者 ⇒ 任何旧 `.42` 产物都不可能含这两个字节（不是丢失数据，是死路径）；
+//   ② 读取侧对未知 opcode 已是 panic（#271 的响亮失败，见 `mod.rs` 的 From 解码臂），
+//      旧产物即便人工拼出这两个字节也会立即报错而不是被静默当成别的指令；
+//   ⇒ 回收不需要升版：`file::VERSION` 仍为 5。
+// 前向保留只有 `THROW`（RFC-030 记为「字节码层已有、语言层未暴露」的
+// assert-as-raise 预留），单列待裁决，不在本次回收范围。
 pub const THROW: u8 = 0xA2;
 
 // Debug Operations (0xB0-0xBF)
@@ -198,8 +205,6 @@ pub fn opcode_name(code: u8) -> &'static str {
         STRING_GET_CHAR => "StringGetChar",
         STRING_FROM_INT => "StringFromInt",
         STRING_FROM_FLOAT => "StringFromFloat",
-        TRY_BEGIN => "TryBegin",
-        TRY_END => "TryEnd",
         THROW => "Throw",
         BOUNDS_CHECK => "BoundsCheck",
         TYPE_CHECK => "TypeCheck",

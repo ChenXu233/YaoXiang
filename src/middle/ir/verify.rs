@@ -17,7 +17,7 @@
 //!   与跳转目标的指令下标不是同一坐标）。故本模块有两套 CFG：
 //!   指令级（支配性 / 类型一致 / jump 目标存在）与块级（只管 `Phi` 一致性，
 //!   见 `block_predecessors`）。指令级 CFG：Jmp → {target}；JmpIf/JmpIfNot →
-//!   {target, i+1}；Ret/TailCall → ∅；其余 → {i+1}。jump 目标有效性 =
+//!   {target, i+1}；Ret → ∅；其余 → {i+1}。jump 目标有效性 =
 //!   target < 指令总数。
 //! - 不可达指令（entry 出发不可达）不参与支配性与类型一致判定——死代码检测
 //!   不在 07 的 7 项不变量清单内；jump 目标有效性是纯结构性质，仍全量检查。
@@ -474,7 +474,7 @@ fn check_slot_bounds(
 // CFG（指令级）与支配性
 // =====================
 
-/// 出边/入边表。终结指令：Jmp（单边）、JmpIf/JmpIfNot（双边）、Ret/TailCall（无）。
+/// 出边/入边表。终结指令：Jmp（单边）、JmpIf/JmpIfNot（双边）、Ret（无）。
 fn build_cfg(instrs: &[&Instruction]) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
     let n = instrs.len();
     let mut succ = vec![Vec::new(); n];
@@ -490,7 +490,7 @@ fn build_cfg(instrs: &[&Instruction]) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
                 }
                 e
             }
-            Instruction::Ret { .. } | Instruction::TailCall { .. } => Vec::new(),
+            Instruction::Ret { .. } => Vec::new(),
             _ => next.into_iter().collect(),
         };
         for &t in &edges {

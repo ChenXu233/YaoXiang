@@ -584,7 +584,7 @@ impl Monomorphizer {
         }
     }
 
-    /// 按名改写**静态调用目标**（`Call` / `TailCall` / `MakeClosure`）并清掉
+    /// 按名改写**静态调用目标**（`Call` / `MakeClosure`）并清掉
     /// DefId：名字与 DefId 是同一目标的两种标识，翻译器优先 DefId
     ///（`translator.rs` 的 `translate_call` case 0 与 `translate_make_closure`
     /// 的 DefId 主路径）。
@@ -598,7 +598,7 @@ impl Monomorphizer {
         to: &str,
     ) {
         match instr {
-            Instruction::Call { func, def, .. } | Instruction::TailCall { func, def, .. } => {
+            Instruction::Call { func, def, .. } => {
                 *func = Operand::Const(ConstValue::String(to.to_string()));
                 *def = None;
             }
@@ -781,7 +781,7 @@ impl Monomorphizer {
                 return;
             };
             let args = match instr {
-                Instruction::Call { args, .. } | Instruction::TailCall { args, .. } => args,
+                Instruction::Call { args, .. } => args,
                 _ => return,
             };
             remove_positions(args, &plan.param_positions());
@@ -1816,29 +1816,27 @@ impl Monomorphizer {
         map
     }
 
-    /// 改写面形态的按名目标（`Call` / `TailCall`）：与扫描面
+    /// 改写面形态的按名目标（`Call`）：与扫描面
     /// [`Self::by_name_call_target`] **同一名字口径**，只窄掉 `MakeClosure`。
     ///
     /// 为什么以扫描面为基而不是再写一遍 match：「IR 用字符串名分发的静态调用形态」
     /// 的唯一事实在 [`Self::by_name_call_target`]；改写面 = 其中会被
-    /// [`Self::set_static_target_name`] 改名的那些（`Call` / `TailCall` 同一操作数
-    /// 布局），`MakeClosure` 另由柯里层克隆路径负责（[`Self::emit_curry_layer_clones`]，
-    /// 6.9.2-C2b P1）。两处各写一遍形态集合 = 平行事实——#541 的病史正是扫描面覆盖
-    /// `TailCall`、改写面只放行 `Call`：站点不改名而原件按「已覆盖」被删 ⇒ 悬空
-    /// （运行期 E6006）。本条只服务改写面；可达性删除已由 post-mono DCE 接管。
+    /// [`Self::set_static_target_name`] 改名的那些（`Call`），`MakeClosure` 另由
+    /// 柯里层克隆路径负责（[`Self::emit_curry_layer_clones`]，6.9.2-C2b P1）。
+    /// 两处各写一遍形态集合 = 平行事实——#541 的病史正是扫描面与改写面形态集合
+    /// 不同步：站点不改名而原件按「已覆盖」被删 ⇒ 悬空（运行期 E6006）。
+    /// 本条只服务改写面；可达性删除已由 post-mono DCE 接管。
     fn rewritten_call_target(instr: &Instruction) -> Option<(String, crate::util::span::Span)> {
         match instr {
-            Instruction::Call { .. } | Instruction::TailCall { .. } => {
-                Self::by_name_call_target(instr)
-            }
+            Instruction::Call { .. } => Self::by_name_call_target(instr),
             _ => None,
         }
     }
 
-    /// 指令的**按名调用目标**与调用点 span：IR 里以字符串名分发的三种形态
-    ///（`Call` / `TailCall` / `MakeClosure`）。
+    /// 指令的**按名调用目标**与调用点 span：IR 里以字符串名分发的形态
+    ///（`Call` / `MakeClosure`）。
     ///
-    /// 不要据此假定「取到名字即会被改写」：调用点改写面只覆盖 `Call` / `TailCall`
+    /// 不要据此假定「取到名字即会被改写」：调用点改写面只覆盖 `Call`
     /// ——某形态是否被它覆盖由 [`Self::rewritten_call_target`] 单点判定。
     /// `MakeClosure` 不在改写面内：其柯里包装层目标另由
     /// [`Self::emit_curry_layer_clones`] 按实例改写；函数值 / 匿名闭包目标由
@@ -1846,11 +1844,6 @@ impl Monomorphizer {
     fn by_name_call_target(instr: &Instruction) -> Option<(String, crate::util::span::Span)> {
         match instr {
             Instruction::Call {
-                func: Operand::Const(ConstValue::String(name)),
-                span,
-                ..
-            }
-            | Instruction::TailCall {
                 func: Operand::Const(ConstValue::String(name)),
                 span,
                 ..
@@ -1896,8 +1889,7 @@ impl Monomorphizer {
     ) {
         // 先把「要改成什么」算出来（借用到 instr 的名字与 span），再动指令——
         // 改名会同时清 DefId，见 set_static_target_name。形态判据单点 =
-        // rewritten_call_target（Call / TailCall）：与 drop_erased_call_args
-        // 同一集合。
+        // rewritten_call_target（Call）：与 drop_erased_call_args 同一集合。
         let target = Self::rewritten_call_target(instr).and_then(|(name, span)| {
             if let Some(container) = container {
                 let named = (Some(container.to_string()), name.clone(), span);

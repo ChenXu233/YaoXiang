@@ -581,7 +581,7 @@ fn script_main_never_called(
         return false;
     }
     let top_level_call = module.init.iter().any(|inst| match inst {
-        Instruction::Call { func, .. } | Instruction::TailCall { func, .. } => {
+        Instruction::Call { func, .. } => {
             matches!(
                 func,
                 Operand::Const(ConstValue::String(name))

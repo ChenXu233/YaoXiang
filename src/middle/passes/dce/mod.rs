@@ -26,9 +26,9 @@
 //! | 3 | native/FFI 导出面 | **显式非根**：原生函数没有 IR 体（FfiBinding 入表后 lower 返回 Ok(None)），NativeFn 常量不是表键 | middle/lower/stmt.rs（extern-ref 臂）；frontend/module/registry.rs::is_native_fn_export；codegen/translator.rs::translate_module（ffi_func_meta） | 把原生名当根 = 找不存在的表项（静默通道）；把「表里没有」当悬空 = 误报。纯 yx 的 std 导出有 IR 体，由第 4/5 类的名字边覆盖 |
 //! | 4 | 跨模块 Export / TypeDefPayload 引用 | IR 层的导入面 = 限定名字符串引用；Export/TypeDefPayload 只在 frontend，ModuleIR 无此表 | frontend/module/mod.rs（Export/TypeDefPayload）；middle/lower/module_ir.rs::import_aliases_from / qualify_names / rewrite_call_names；driver/helpers.rs::aggregate_instantiation_requests | 漏名字边 ⇒ 删被导入函数 ⇒ 调用点回落 CALL_NATIVE（E6006）。#539 未闭 ⇒ 不得用「没有实例化请求」当不可达证据（本 pass 不读请求表）。TypeDefPayload 的 IR 投影是 TypeDeclBody；类型表项不删 |
 //! | 5 | 函数值 / MakeClosure 目标 | MakeClosure{func} 是函数表键 ⇒ 无条件根；另见反向闭合（不变量 3） | lower/expr/access.rs::emit_module_export_value；lower/expr/closure.rs；lower/curry.rs；mono/mod.rs::emit_curry_layer_clones；codegen/translator.rs::translate_make_closure（缺目标=内部错误） | 目标被删 ⇒ 翻译期硬错「闭包函数未在函数名映射表中注册」；#542 的共享层正是「失去唯一 MakeClosure 引用者」的死 IR，方向必须是先按边判死再删 |
-//! | 6 | 名字只以字符串常量出现 | 逐形态判定是否函数表键：Call/TailCall 的 Const(String) func、MakeClosure 的 func 是键；NativeFn / LibraryRef / ExternRef / FfiBinding.func_name / 类型名字符串不是键 | middle/ir/ir.rs（Instruction 变体）；lower/expr/access.rs；lower/stmt.rs；frontend/module/registry.rs | 漏 Call/TailCall 字符串 ⇒ E6006；漏 Const(Int) 索引目标检测 ⇒ 删除后索引整体错位（静默错调） |
+//! | 6 | 名字只以字符串常量出现 | 逐形态判定是否函数表键：Call 的 Const(String) func、MakeClosure 的 func 是键；NativeFn / LibraryRef / ExternRef / FfiBinding.func_name / 类型名字符串不是键 | middle/ir/ir.rs（Instruction 变体）；lower/expr/access.rs；lower/stmt.rs；frontend/module/registry.rs | 漏 Call 字符串 ⇒ E6006；漏 Const(Int) 索引目标检测 ⇒ 删除后索引整体错位（静默错调） |
 //! | 7 | 方法面 / vtable | 每个存活 TypeDecl 的 t. 前缀函数恒为根（与 codegen 建 vtable 的同一判据）；**不得**从 CallVirt.method_name 反推表键 | codegen/mod.rs::generate（vtable 段）；codegen/translator.rs::translate_call_virt；backends/interpreter/executor/ops/call.rs（缺方法=运行期硬错）；lower/expr/call.rs（CallVirt 生成点） | CallVirt 按裸方法名查运行期 vtable；删方法 ⇒ vtable 缺项 ⇒ 运行期硬错。见下方「禁猜名」 |
-//! | 8 | DefId 边 | Call/TailCall/MakeClosure 的 def 字段解析到删除前函数表 ⇒ 根 | middle/lower/module_ir.rs::assign_defs / resolve_static_targets；codegen/translator.rs::translate_call（def_idx 优先于名字） | 站点名字陈旧但 def 存活时 codegen 仍调 def 目标；只按名字判活会删真正被调函数（随后回落 CALL_NATIVE） |
+//! | 8 | DefId 边 | Call/MakeClosure 的 def 字段解析到删除前函数表 ⇒ 根 | middle/lower/module_ir.rs::assign_defs / resolve_static_targets；codegen/translator.rs::translate_call（def_idx 优先于名字） | 站点名字陈旧但 def 存活时 codegen 仍调 def 目标；只按名字判活会删真正被调函数（随后回落 CALL_NATIVE） |
 //! | 9 | 非根（显式不动） | TypeDecl / init 项 / globals / FFI 表 / const pool / 类型表一律不删 | middle/ir/ir.rs（FunctionBody::TypeDecl / TypeDeclBody / ModuleIR 字段）；codegen/mod.rs（类型表/vtable） | 类型名在运行期按字符串/索引消费；init 是程序体；删它们要另一类分析（类型流/死存储/索引重编），不在本 pass 职责内 |
 //!
 //! # 删除判据与粒度
@@ -136,7 +136,7 @@ struct PreIndex<'a> {
     init_closure_targets: HashSet<&'a str>,
 }
 
-/// 静态名字目标：Call/TailCall 的字符串 func（IR 用字符串名分发）与 MakeClosure 的 func。
+/// 静态名字目标：Call 的字符串 func（IR 用字符串名分发）与 MakeClosure 的 func。
 ///
 /// 这是「IR 里以名字引用函数的全部形态」在 pass 内的**唯一**取值点；不要在此之外
 /// 再写一份 match（禁令三）。NativeFn 常量不是表键，刻意不在此列（见第 3 类根）。
@@ -145,22 +145,16 @@ fn static_name_target(instr: &Instruction) -> Option<&str> {
         Instruction::Call {
             func: Operand::Const(ConstValue::String(name)),
             ..
-        }
-        | Instruction::TailCall {
-            func: Operand::Const(ConstValue::String(name)),
-            ..
         } => Some(name),
         Instruction::MakeClosure { func, .. } => Some(func),
         _ => None,
     }
 }
 
-/// 静态调用目标的 DefId（Call/TailCall/MakeClosure 的 def 字段）。
+/// 静态调用目标的 DefId（Call/MakeClosure 的 def 字段）。
 fn static_def_target(instr: &Instruction) -> Option<DefId> {
     match instr {
-        Instruction::Call { def, .. }
-        | Instruction::TailCall { def, .. }
-        | Instruction::MakeClosure { def, .. } => *def,
+        Instruction::Call { def, .. } | Instruction::MakeClosure { def, .. } => *def,
         _ => None,
     }
 }
@@ -172,10 +166,6 @@ fn static_def_target(instr: &Instruction) -> Option<DefId> {
 fn index_call_target(instr: &Instruction) -> Option<i128> {
     match instr {
         Instruction::Call {
-            func: Operand::Const(ConstValue::Int(idx)),
-            ..
-        }
-        | Instruction::TailCall {
             func: Operand::Const(ConstValue::Int(idx)),
             ..
         } => Some(*idx),

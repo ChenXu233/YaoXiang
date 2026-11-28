@@ -257,13 +257,6 @@ pub enum Instruction {
     },
     // 注意：根据 RFC-008，await 不是关键字
     // CallAsync 和 Await 指令已移除，由运行时自动处理
-    TailCall {
-        func: Operand,
-        args: Vec<Operand>,
-        /// 静态调用目标的绑定身份（同 `Call::def`）
-        def: Option<DefId>,
-        span: Span,
-    },
     Ret {
         value: Option<Operand>,
         span: Span,
@@ -598,7 +591,6 @@ impl Instruction {
             Instruction::Call { span, .. } => *span,
             Instruction::CallVirt { span, .. } => *span,
             Instruction::CallDyn { span, .. } => *span,
-            Instruction::TailCall { span, .. } => *span,
             Instruction::Ret { span, .. } => *span,
             Instruction::Alloc { span, .. } => *span,
             Instruction::Free { span, .. } => *span,
@@ -734,12 +726,6 @@ impl Instruction {
                     f(d);
                 }
                 f(obj);
-                for a in args {
-                    f(a);
-                }
-            }
-            Instruction::TailCall { func, args, .. } => {
-                f(func);
                 for a in args {
                     f(a);
                 }
@@ -943,7 +929,6 @@ impl Instruction {
             | Instruction::Jmp { .. }
             | Instruction::JmpIf { .. }
             | Instruction::JmpIfNot { .. }
-            | Instruction::TailCall { .. }
             | Instruction::Ret { .. }
             | Instruction::Free { .. }
             | Instruction::StoreField { .. }
@@ -1012,11 +997,6 @@ impl Instruction {
             }
             Instruction::CallVirt { obj, args, .. } => {
                 let mut v = vec![obj];
-                v.extend(args);
-                v
-            }
-            Instruction::TailCall { func, args, .. } => {
-                let mut v = vec![func];
                 v.extend(args);
                 v
             }
@@ -1090,13 +1070,13 @@ pub struct BasicBlock {
 /// 1. 函数入口（下标 0）；
 /// 2. 每条 `Jmp` / `JmpIf` / `JmpIfNot` 的目标下标（越界目标跳过——那是
 ///    `verify` 的「jump 目标存在」判据该报的违规，不是本函数的职责）；
-/// 3. 每条跳转 / `Ret` / `TailCall` 之后的下一条指令。
+/// 3. 每条跳转 / `Ret` 之后的下一条指令。
 ///
 /// 块级出边只看块尾终结指令与指令布局（块之间按 `blocks` 顺序相邻，故「下一条
 /// 指令所属块」= 布局上的下一块）：
 /// - `Jmp` → 目标指令所属块；
 /// - `JmpIf` / `JmpIfNot` → 目标指令所属块 + 布局上的下一块（落空边）；
-/// - `Ret` / `TailCall` → 无出边；
+/// - `Ret` → 无出边；
 /// - 其余块尾（布局落空）→ 布局上的下一块；末块的落空不产生边。
 ///
 /// 边连的是块 `label`，所以「块内跳转」在切分后不存在（跳转目标必是 leader ⇒
@@ -1125,7 +1105,7 @@ pub fn partition_blocks(instructions: Vec<Instruction>) -> Vec<BasicBlock> {
             Instruction::JmpIf { target, .. } | Instruction::JmpIfNot { target, .. } => {
                 (Some(*target), true)
             }
-            Instruction::Ret { .. } | Instruction::TailCall { .. } => (None, true),
+            Instruction::Ret { .. } => (None, true),
             _ => (None, false),
         };
         if let Some(target) = target {
@@ -1172,7 +1152,7 @@ pub fn partition_blocks(instructions: Vec<Instruction>) -> Vec<BasicBlock> {
                 }
                 successors.extend(fallthrough);
             }
-            Some(Instruction::Ret { .. } | Instruction::TailCall { .. }) => {}
+            Some(Instruction::Ret { .. }) => {}
             _ => successors.extend(fallthrough),
         }
         successors.sort_unstable();

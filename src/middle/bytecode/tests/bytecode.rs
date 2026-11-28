@@ -461,10 +461,10 @@ const EXPECTED_UNENCODED: &[&str] = &[
     "RELEASE",
     // 越界检查：有解码 + 执行，ir_gen 不产出
     "BOUNDS_CHECK",
-    // 异常族（throw/try）：有解码 + 执行，ir_gen 不产出
+    // 异常族：只剩 THROW 有解码 + 执行，ir_gen 不产出（RFC-030 的
+    // assert-as-raise 前向预留，P10 S6 单列待裁决）。同族另外两个 opcode 值
+    // 已随 P10 S6 从词表回收（无生产者，回收理由见 opcode.rs 的回收注释）。
     "THROW",
-    "TRY_BEGIN",
-    "TRY_END",
     // 弱引用：有解码 + 执行
     "WEAK_NEW",
     "WEAK_UPGRADE",

@@ -49,12 +49,11 @@ fn init_calls(module: &ModuleIR) -> Vec<(String, Option<DefId>)> {
         .init
         .iter()
         .filter_map(|i| match i {
-            Instruction::Call { func, def, .. } | Instruction::TailCall { func, def, .. } => {
-                match func {
-                    Operand::Const(ConstValue::String(n)) => Some((n.clone(), *def)),
-                    _ => None,
-                }
-            }
+            Instruction::Call {
+                func: Operand::Const(ConstValue::String(n)),
+                def,
+                ..
+            } => Some((n.clone(), *def)),
             _ => None,
         })
         .collect()

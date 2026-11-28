@@ -56,7 +56,6 @@ fn make_compare_function(op: CompareOp) -> BytecodeFunction {
             BytecodeInstr::ReturnValue { value: Reg(2) },
         ],
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     }
 }

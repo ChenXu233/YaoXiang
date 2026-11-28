@@ -519,10 +519,8 @@ pub enum BytecodeInstr {
     // =====================
     // Exception Handling
     // =====================
-    TryBegin {
-        catch_target: Label,
-    },
-    TryEnd,
+    /// RFC-030 记为「字节码层已有、语言层未暴露」的 assert-as-raise 预留：
+    /// 解码与解释器臂齐备，前端不产出（P10 S6 复核单列待裁决，不随 try 族删除）。
     Throw {
         error: Reg,
     },
@@ -644,8 +642,6 @@ impl BytecodeInstr {
             BytecodeInstr::StringGetChar { .. } => opcode::STRING_GET_CHAR,
             BytecodeInstr::StringFromInt { .. } => opcode::STRING_FROM_INT,
             BytecodeInstr::StringFromFloat { .. } => opcode::STRING_FROM_FLOAT,
-            BytecodeInstr::TryBegin { .. } => opcode::TRY_BEGIN,
-            BytecodeInstr::TryEnd => opcode::TRY_END,
             BytecodeInstr::Throw { .. } => opcode::THROW,
             BytecodeInstr::BoundsCheck { .. } => opcode::BOUNDS_CHECK,
             BytecodeInstr::TypeCheck { .. } => opcode::TYPE_CHECK,
@@ -800,8 +796,6 @@ impl BytecodeInstr {
             BytecodeInstr::StringGetChar { .. } => 4,
             BytecodeInstr::StringFromInt { .. } => 4,
             BytecodeInstr::StringFromFloat { .. } => 4,
-            BytecodeInstr::TryBegin { .. } => 4,
-            BytecodeInstr::TryEnd => 0,
             BytecodeInstr::Throw { .. } => 2,
             BytecodeInstr::BoundsCheck { .. } => 4,
             BytecodeInstr::TypeCheck { .. } => 4,
@@ -831,28 +825,8 @@ pub struct BytecodeFunction {
     pub instructions: Vec<BytecodeInstr>,
     /// Label to instruction index mapping
     pub labels: HashMap<Label, usize>,
-    /// 异常处理器表。`.42` 不落该字段。
-    ///
-    /// 复核结论（7e / D52）：本字段无生产者、无消费者——语言层没有 throw/try/catch
-    /// （RFC-030 把 `Throw` 记为字节码层预留，RFC-036 否决进程内 catch 边界），
-    /// codegen 从不写入，解释器从不读取；载入侧因此留空表。
-    /// 字段与 `TRY_BEGIN` / `TRY_END` 的删除归 P10 S6（`THROW` 单列待裁决）。
-    pub exception_handlers: Vec<ExceptionHandler>,
     /// Debug info: mapping from IP to Span
     pub debug_map: HashMap<usize, crate::util::span::DebugSpan>,
-}
-
-/// Exception handler information
-#[derive(Debug, Clone)]
-pub struct ExceptionHandler {
-    /// Try block start label
-    pub try_start: Label,
-    /// Try block end label
-    pub try_end: Label,
-    /// Catch block start label
-    pub catch_start: Label,
-    /// Exception type to catch (0 for all)
-    pub exception_type: u16,
 }
 
 /// Bytecode module
@@ -2158,20 +2132,6 @@ impl From<crate::middle::bytecode::file::BytecodeFile> for BytecodeModule {
                             decoded_instructions.push(BytecodeInstr::Nop);
                         }
                     }
-                    opcode::TRY_BEGIN => {
-                        // TryBegin: catch_target(4)（依据编码器）
-                        if instr.operands.len() >= 4 {
-                            decoded_instructions.push(BytecodeInstr::TryBegin {
-                                catch_target: Label(op_u32(&instr.operands, 0).unwrap_or(0)),
-                            });
-                        } else {
-                            decoded_instructions.push(BytecodeInstr::Nop);
-                        }
-                    }
-                    opcode::TRY_END => {
-                        // TryEnd: 无操作数
-                        decoded_instructions.push(BytecodeInstr::TryEnd);
-                    }
                     opcode::THROW => {
                         // Throw: error(1)（依据编码器）
                         if !instr.operands.is_empty() {
@@ -2343,8 +2303,6 @@ impl From<crate::middle::bytecode::file::BytecodeFile> for BytecodeModule {
                 upvalue_count: func.upvalue_count,
                 instructions: decoded_instructions,
                 labels, // Populated from opcode::LABEL
-                // .42 不落异常处理器：字段无生产者、无消费者（D52 复核），删除归 P10 S6
-                exception_handlers: Vec::new(),
                 debug_map,
             };
             functions.push(byte_func);

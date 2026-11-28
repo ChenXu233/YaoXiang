@@ -21,7 +21,6 @@ fn make_function(instrs: Vec<BytecodeInstr>) -> BytecodeFunction {
         upvalue_count: 0,
         instructions: instrs,
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     }
 }
@@ -116,7 +115,6 @@ fn spawn_two_tasks_module() -> crate::middle::bytecode::BytecodeModule {
             BytecodeInstr::ReturnValue { value: Reg(0) },
         ],
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     };
 
@@ -136,7 +134,6 @@ fn spawn_two_tasks_module() -> crate::middle::bytecode::BytecodeModule {
             BytecodeInstr::ReturnValue { value: Reg(0) },
         ],
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     };
 
@@ -180,7 +177,6 @@ fn spawn_two_tasks_module() -> crate::middle::bytecode::BytecodeModule {
             BytecodeInstr::ReturnValue { value: Reg(2) },
         ],
         labels: HashMap::new(),
-        exception_handlers: vec![],
         debug_map: HashMap::new(),
     };
 
