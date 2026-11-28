@@ -155,8 +155,13 @@ fn test_native_unsupported_value_type_is_rejected() {
     // Arrange
     let function = base_function(
         MonoType::Int(64),
+        // 容器类型仍在支持集外（`Float` 自批次 4.5 起已是标量支持集成员，不能再当
+        // 「不支持类型」的样例）。
         vec![ValueInfo {
-            ty: MonoType::Float(64),
+            ty: MonoType::Generic {
+                name: Nominal::flat("List").expect("List is a valid bare type name"),
+                args: vec![MonoType::Int(64)],
+            },
             debug_name: None,
             defining_block: 0,
         }],
@@ -175,7 +180,7 @@ fn test_native_unsupported_value_type_is_rejected() {
     // Assert
     let detail = error.to_string();
     assert!(
-        detail.contains("ValueId(0)") && detail.contains("Float(64)"),
+        detail.contains("ValueId(0)") && detail.contains("List"),
         "diagnostic must include value id and unsupported type: {detail}"
     );
 }

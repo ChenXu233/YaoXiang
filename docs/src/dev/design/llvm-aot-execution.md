@@ -321,9 +321,10 @@ python scripts/dev/testsuite.py plan
   `test_native_float_mixed_int_operands_are_rejected`，同一用例核对 VM 侧确实能跑）。
 - 不支持的全局类型（批次 4.4，4.5 收窄）：容器、闭包、资源仍带位置拒绝、不产生产物，不静默
   按 `Void` 回落。`Float` **全局**仍被拒绝（4.5 只把 `Float` 加进标量支持集，模块级 f64 的
-  物化未验收）：分析层在写入该全局的指令处带位置拒绝，声明的但从未读写的 `Float` 全局在
-  全局播种处按名字拒绝（判据 `test_native_unsupported_global_type_is_rejected`，该用例断言
-  初始化式的 `file:line`）；容器全局落在容器构造指令上（判据
+  物化未验收）：实际可达的拒绝只有一条——分析层在**写入该全局的指令处**带位置拒绝（判据
+  `test_native_unsupported_global_type_is_rejected`，该用例断言初始化式的 `file:line`）。
+  全局播种处另有一条按全局名的防御性拒绝，但语言要求顶层全局必须带初始值，今天造不出
+  「只声明、从不读写」的形态，因此它不是可达路径；容器全局落在容器构造指令上（判据
   `test_native_container_global_is_rejected`），该指令的 span 由 lower 留空，诊断位置显示
   `0:0`——这是 lower 侧的 span 缺口，不由本层补造。
 - 槽位缺指针（批次 4.3 收口：补齐证据 + 非 `Void` 硬失败）：`Void` 是唯一没有 LLVM 形态的

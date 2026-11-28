@@ -503,7 +503,7 @@ impl<'ctx> Emitter<'ctx> {
     /// 当前块切成 ok/fail/rest 三段，出口块随之改变（见 `emit_checked_shift`）。
     fn emit_instruction(
         &mut self,
-        mut locals: &mut HashMap<usize, Slot<'ctx>>,
+        locals: &mut HashMap<usize, Slot<'ctx>>,
         values: &mut HashMap<u32, Value<'ctx>>,
         signature: &OwnedSignature,
         instruction: &Instruction,
@@ -547,8 +547,8 @@ impl<'ctx> Emitter<'ctx> {
                 rhs,
                 span,
             } => {
-                let left = self.read(&locals, values, lhs, analysis)?;
-                let right = self.read(&locals, values, rhs, analysis)?;
+                let left = self.read(locals, values, lhs, analysis)?;
+                let right = self.read(locals, values, rhs, analysis)?;
                 let value = if left.ty == ScalarType::Float && right.ty == ScalarType::Float {
                     let lhs = left
                         .repr
@@ -618,7 +618,7 @@ impl<'ctx> Emitter<'ctx> {
                 self.write(&mut *locals, values, dst, value, analysis)?;
             }
             Instruction::Neg { dst, src, span } => {
-                let operand = self.read(&locals, values, src, analysis)?;
+                let operand = self.read(locals, values, src, analysis)?;
                 let result = if operand.ty == ScalarType::Float {
                     let value = operand
                         .repr
@@ -649,7 +649,7 @@ impl<'ctx> Emitter<'ctx> {
             }
             Instruction::Not { dst, src, .. } => {
                 let value = self
-                    .read(&locals, values, src, analysis)?
+                    .read(locals, values, src, analysis)?
                     .repr
                     .unwrap()
                     .into_int_value();
@@ -665,8 +665,8 @@ impl<'ctx> Emitter<'ctx> {
             | Instruction::Le { dst, lhs, rhs, .. }
             | Instruction::Gt { dst, lhs, rhs, .. }
             | Instruction::Ge { dst, lhs, rhs, .. } => {
-                let left = self.read(&locals, values, lhs, analysis)?;
-                let right = self.read(&locals, values, rhs, analysis)?;
+                let left = self.read(locals, values, lhs, analysis)?;
+                let right = self.read(locals, values, rhs, analysis)?;
                 let compared = if left.ty == ScalarType::String && right.ty == ScalarType::String {
                     // 字符串比较走运行时：显式长度、UTF-8 字节字典序。内容相等不等于
                     // 指针相等——两个内容相同的独立字面量是两个全局，必须比较相等。
@@ -757,7 +757,7 @@ impl<'ctx> Emitter<'ctx> {
                     )?
                 };
                 self.write(
-                    &mut locals,
+                    locals,
                     values,
                     dst,
                     Value {
@@ -815,7 +815,7 @@ impl<'ctx> Emitter<'ctx> {
                     llvm(self.builder.build_return(None))?;
                 } else {
                     let returned = self.read(
-                        &locals,
+                        locals,
                         values,
                         value.as_ref().expect("analysis checked scalar return"),
                         analysis,
@@ -831,12 +831,12 @@ impl<'ctx> Emitter<'ctx> {
             | Instruction::Xor { dst, lhs, rhs, .. } => {
                 // 位运算按二进制补码逐位处理，不做值范围检查（与 VM 同一语义）。
                 let left = self
-                    .read(&locals, values, lhs, analysis)?
+                    .read(locals, values, lhs, analysis)?
                     .repr
                     .ok_or_else(|| anyhow!("bitwise operand has no LLVM value"))?
                     .into_int_value();
                 let right = self
-                    .read(&locals, values, rhs, analysis)?
+                    .read(locals, values, rhs, analysis)?
                     .repr
                     .ok_or_else(|| anyhow!("bitwise operand has no LLVM value"))?
                     .into_int_value();
@@ -885,12 +885,12 @@ impl<'ctx> Emitter<'ctx> {
                 ..
             } => {
                 let left = self
-                    .read(&locals, values, lhs, analysis)?
+                    .read(locals, values, lhs, analysis)?
                     .repr
                     .ok_or_else(|| anyhow!("shift lhs has no LLVM value"))?
                     .into_int_value();
                 let right = self
-                    .read(&locals, values, rhs, analysis)?
+                    .read(locals, values, rhs, analysis)?
                     .repr
                     .ok_or_else(|| anyhow!("shift rhs has no LLVM value"))?
                     .into_int_value();
