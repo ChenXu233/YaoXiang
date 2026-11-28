@@ -1332,7 +1332,8 @@ impl AstToIrGenerator {
                             )?;
                             arg_regs_for_method.push(arg_reg.clone());
 
-                            // 调用 to_string 方法
+                            // 调用 to_string 方法（合成调用：Stringable 的
+                            // `to_string` 声明返回位恒为 String）
                             let to_string_reg = self.next_temp_reg();
                             instructions.push(Instruction::Call {
                                 dst: Some(to_string_reg.clone()),
@@ -1341,6 +1342,13 @@ impl AstToIrGenerator {
                                 span: call.span(),
                                 def: None,
                             });
+                            self.note_value_type(
+                                &to_string_reg,
+                                MonoType::Generic {
+                                    name: Nominal::flat("String").expect("String 是裸类型名"),
+                                    args: Vec::new(),
+                                },
+                            );
 
                             // 然后调用 std.io.print 输出字符串
                             // 使用 resolved name

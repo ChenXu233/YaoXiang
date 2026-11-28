@@ -19,7 +19,7 @@ module
     value v11: Void @block0
     value v12: Int(64) @block0
     value v13: Int(64) @block0
-    value v14: TypeRef("?") @block0
+    value v14: Generic { name: "String", args: [] } @block0
     Load %0 <- int(0)
     Load v0 <- int(1)
     Load v1 <- int(10)

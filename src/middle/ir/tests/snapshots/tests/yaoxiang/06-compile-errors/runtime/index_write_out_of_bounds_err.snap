@@ -20,7 +20,7 @@ module
     value v13: TypeRef("?") @block0
     value v14: Generic { name: "Vec", args: [Int(64)] } @block0
     value v15: Int(64) @block0
-    value v16: TypeRef("?") @block0
+    value v16: Generic { name: "String", args: [] } @block0
     AllocArray %0 size=int(3), elem=int(1)
     Load v0 <- int(1)
     Load v1 <- int(0)
