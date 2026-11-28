@@ -155,7 +155,7 @@ P10 其余清理与状态修正 06 §S2/S3/S4/S5/S6
 - [x] **3.6 函数类型值调用路径**（6 个三级任务；✅ `480a00b7`、`c27aa3fa`；issue [#479](https://github.com/ChenXu233/YaoXiang/issues/479)、[#494](https://github.com/ChenXu233/YaoXiang/issues/494)；归属阶段：P3；是否阻塞主线：否）
 - [x] **3.7 多文件 init 段调用名限定**（4 个三级任务）
 - [x] **3.9 运行期栈守卫不可达（E6004）**（1 个三级任务）
-- [ ] **3.8 native 对用户函数名的遮蔽**（1 个三级任务；缺钉测试；**归属阶段：P3；是否阻塞主线：否**——验收要求先定语义（用户定义优先 vs 显式诊断），属裁决点）
+- [x] **3.8 定名解析的遮蔽与歧义**（2 个三级任务；3.8.1 定名解析优先级——语义已裁决（用户定义优先，2026-11-20）并完成，登记并入 3.24.4 ✅ 2268543d（issue [#477](https://github.com/ChenXu233/YaoXiang/issues/477)）；3.8.2 std 单元间同名导出的裸名歧义 ✅ c3d9a8d22（issue [#577](https://github.com/ChenXu233/YaoXiang/issues/577)；提交链 757427dea → 724106981 → c3d9a8d22，见下表行）；**归属阶段：P3；是否阻塞主线：否**）
 - [x] **3.10 编译期无闸原生递归路径（抬高 `mono.max_depth` 后崩溃）**（1 个三级任务）
 - [x] **3.11 错误码保真与深栈回显**（2 个三级任务；issue [#500](https://github.com/ChenXu233/YaoXiang/issues/500)）
 - [ ] **3.12 运行时模式间的执行器配置传播**（1 个三级任务，待裁决；D 类：宿主自定义 `max_stack_depth` 在任务内被静默忽略；归属阶段：P3；是否阻塞主线：否）
@@ -204,7 +204,8 @@ P10 其余清理与状态修正 06 §S2/S3/S4/S5/S6
 | | 3.7.2 聚合侧用单元键把同单元请求名限定化（`aggregate_instantiation_requests` 已持 `units[i].key`），使请求名与 IR 调用指令同源 | `driver/helpers.rs` | 3.7.1 | 请求名与 IR 字符串逐字一致（调用点改写三元键不落空）；跨单元泛型矩阵与单文件等价 |
 | | 3.7.3 删除 mono 的「全程序唯一后缀」启发式与未命中静默 `continue`，改确定性解析 + 响亮诊断 | `middle/passes/mono/mod.rs` | 3.7.2 | 无静默不特化：未命中/歧义必产诊断（码 + 文本） |
 | | 3.7.4 init 段 `DefId` 与函数体同口径 | middle/core/ir_gen.rs | 3.7.1 | — |
-| 3.8 native 对用户函数名的遮蔽（登记）：单文件里用户泛型名 `read` 被 native `read` 遮蔽，实测报 `read expects 2 arguments (file: File, n: Int)`；当前**无钉测试** | 3.8.1 定名解析优先级（issue [#477](https://github.com/ChenXu233/YaoXiang/issues/477)） | frontend/module | — | — |
+| 3.8 定名解析的遮蔽与歧义（登记）：单文件里用户泛型名 `read` 被 native `read` 遮蔽（实测报 `read expects 2 arguments (file: File, n: Int)`，无钉测试）；以及裸名命中多个 std 单元同名导出时随构建种子随机派发 | 3.8.1 定名解析优先级（issue [#477](https://github.com/ChenXu233/YaoXiang/issues/477)）；3.8.2 裸名歧义编译期拒绝 E1116（issue [#577](https://github.com/ChenXu233/YaoXiang/issues/577)） | frontend/module | — | — |
+| | 3.8.2 std 单元间同名导出的裸名歧义——编译期拒绝（新码 E1116，用户裁决乙案；交集合 15 名按 export.name × 模块路径分组，与 lower 侧 short_to_qualified_map 的实际键同源，registry.std_code_exports() 单一迭代源；歧义短名三表短名键跳过，Var 臂单点两臂共用诊断构造，懒构造点同源注入。已完成 757427dea + 724106981（对抗复审修复笔：分组键对齐 lower 实际键——裸名 to_string 假阳性修复 + 懒构造注入 + 直驱测试补齐）+ c3d9a8d22（聚焦复审处置：裸名 to_string 回归钉 + native_names 孤儿入口删除）；issue [#577](https://github.com/ChenXu233/YaoXiang/issues/577)） | src/frontend/module/registry.rs、src/frontend/core/sema/mod.rs、src/frontend/core/sema/checker.rs、src/frontend/core/sema/environment.rs、src/frontend/core/sema/inference/statements.rs、src/frontend/core/sema/inference/expressions/expr.rs、src/frontend/core/sema/inference/expressions/mod.rs、src/util/diagnostic/codes/e1xxx.rs | 3.24.4 | — |
 | 3.9 运行期栈守卫不可达（E6004）（登记）：解释器 `push_frame` 的 `max_stack_depth` 默认 1024，但 Rust 层递归先爆栈——抬高闸门后编译期拦截被换成进程崩溃；且 E6004 的 `limit` 参数恒传 0，真触发时用户看到「递归深度超出限制 0」。**与泛型无关**：凡深递归程序同崩 | 3.9.1 守卫可达性：超限必然走 E6004 而非崩进程；`limit` 带真实上限 | backends/interpreter/executor/executor.rs、backends/mod.rs、util/diagnostic/mod.rs | — | — |
 | 3.10 编译期无闸原生递归路径（登记，issue #447）：`mono.max_depth`（默认 100）抬高后，病态泛型递归（`f(x)=f([x])`）不再被闸门拦下，而是让编译器进程爆栈；**深度闸本身是队列驱动**（循环内无原生递归）→ 崩溃在下游**无闸的原生递归路径**上 | 3.10.1 定位崩溃点，并让「闸门放开后」的路径不再依赖原生栈：超限必然产出既定诊断（E3005）而非崩进程；默认配置行为不变 | middle/passes/mono/mod.rs、frontend/config.rs、frontend/core/types/eval/const_eval.rs | 3.9（同族不同层） | — |
 | 3.11 错误码保真与深栈回显（发现并登记，源自 3.9.1 实现/验证过程）：① Standard 运行时模式下任务内部错误经 `ExecutorError::runtime` 字符串化 → **一律落 E6007**（机制对错误一视同仁）② E6004 首次可达后回显超深回溯 | 3.11.1 任务结果通道承载结构化错误（`TaskResult = Result<SyncValue, SyncValue>` 错误侧结构化、`TaskOutcome::Err` 同步）：任务内各码在 Standard 模式保真，不再一律 E6007；3.11.2 深栈回溯截断策略（保留首尾 + 计数省略） | backends/interpreter/executor/executor.rs、backends/runtime/engine.rs | 3.9（同源发现） | — |
