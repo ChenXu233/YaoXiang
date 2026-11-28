@@ -529,7 +529,10 @@ P10 其余清理与状态修正 06 §S2/S3/S4/S5/S6
 
 > **7c 遗留（非本笔，未修）**：① 跨单元单定义方法以命名实参调用会上报 E6007——新旧 revision 完全一致（非本笔引入、本次未放大；2026-11-25 复验）。② 精化谓词求解预算固定 100ms（`src/frontend/core/sema/proof/budget.rs:41`、`:50`，经 `src/frontend/core/sema/layers/predicate.rs:203`、`:239` 传给 Z3）：求解超过该预算时落 Unknown/Unproven 分支，语料 `tests/yaoxiang/06-compile-errors/refinement/call_arg_no_evidence_err.yx` 由 E4018 退化为 E2031；标准批次环境实测 5/5 为 E4018，高负载作为触发条件未获复现。③ 4.5.2 的 `overload_resolutions` 常驻差集判据（含 `examined`/`consumed` 证据面下限，`src/middle/ir/tests/overload_resolutions.rs`）已不存在——**2026-11-25 已更正口径**：模块头改为事实陈述（原文为「差集必须为空」，现写明该语料级用例已于 2026-11-07 批量退役中删除、仓内无自动执行点、同款证据面由 `release_plan_spans` 承担），恢复判据需过测试准入三扇门。
 
-- [ ] **7d 最后做**（2 个三级任务）
+- [x] **7d 最后做**（2 个三级任务）✅ 3c6eb41、bf50aa4
+
+> **7d 遗留（非本笔，未修）**：结构体构造的命名实参覆写位置实参时没有重复槽守卫（`src/middle/lower/expr/call.rs:1100-1107`，命名空间路径有对照守卫）——命名实参静默顶掉位置实参。该分支只可达于「类型检查已报错、IR 仍生成」的状态（类型检查侧 `bind_record_ctor_args` 的共享判据规则③已以 E1111 拒绝），不是合法程序的静默错答案，但与本笔消灭的另两处同族；依据与判据见 [04](04-ssa.md) §缺陷类 2 的补充核实。
+
 - [x] **7e `.42` 数据丢失修复与类型号表可逆化**（4 个三级任务：7e.1 / 7e.2 取消 / 7e.3 / 7e.4）✅ 92b3229、68fee38、d39494c、00196ff
 
 | 二级 | 三级 | 前置 | 验收 |
@@ -552,8 +555,8 @@ P10 其余清理与状态修正 06 §S2/S3/S4/S5/S6
 | 7c 隐式契约显式化 | 7c.1 `synth.rs` 边界（边界检查脚本经用户 2026-11-24 取消）+ 显式 `SynthEnv` / `BindingLocation` + spawn-for 双运行时 env / args / upvalue 修复；D59 **B 类**（嵌套闭包捕获错配、错误后捕获状态残留、spawn-for 匿名前缀槽位错配与双运行时 item/capture 错值；仅实际红态用例作修复证据，其余为回归覆盖） | 7b.4 | C4（不含门禁脚本）；**已完成（2026-11-25 收口：535933ce、4185dcdf、21ddf23f、8e5b89c1、f8987795）** |
 | | 7c.2 既有消费台账核验（`ReleasePlan` / `OverloadResolutions` 共用 `ConsumptionLedger<PlanId>`，无第二套计数器） | 7c.1 | **核验 + 复审通过，无代码改动**；消费计数零触发 |
 | | 7c.3 `method_def_ordinals` 只读化（定义名改由 typecheck 按声明身份产出，lowering 只读；D21 归 04） | 7c.1 | C4；**已完成（2026-11-25 收口：138f9e0f；定义身份映射落地 + 独立验证/复审通过）** |
-| 7d 最后做 | 7d.1 `generate_call_expr_ir` 拆为 `CallArgs` + 6 个 `emit_*` | 7c.x | C1 快照 zero-diff |
-| | 7d.2 「补 0」兜底改返回诊断 | 7d.1 | C4 |
+| 7d 最后做 | 7d.1 `generate_call_expr_ir` 拆为 `CallArgs` + 6 个 `emit_*` | 7c.x | C1 快照 zero-diff；**已完成（3c6eb41）** |
+| | 7d.2 「补 0」兜底改返回诊断 | 7d.1 | C4；**已完成（bf50aa4）** |
 | 7e `.42` 数据丢失修复 | 7e.1 `upvalue_count: 0` 修正（`bytecode.rs:2312`）+ `VERSION` 4→5（D17）+ 已分配未使用 opcode 回收（D32/D34 随升版） | 7d.x | C4 + `.42` 往返测试；独占 commit；**已完成（92b3229）** |
 | | 7e.2 ~~`exception_handlers` 落盘~~ **取消（前提不成立）**：该字段无生产者、无消费者，语言层无 throw/try/catch（RFC-030/036，见 D52）；异常遗留（字段 + `TRY_BEGIN`/`TRY_END`，`THROW` 单列）归 P10 S6 | — | — |
 | | 7e.3 `globals` 落盘（`bytecode.rs:2341`） | 7e.1 | C4 + `.42` 直跑全局变量用例差分；**已完成（68fee38）** |
