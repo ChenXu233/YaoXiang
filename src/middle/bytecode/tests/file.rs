@@ -590,6 +590,75 @@ fn test_folded_type_codes_are_distinct_and_lossy() {
     }
 }
 
+/// 条款门（.42 类型号可逆段只认内建标量身份）：`String`/`Bytes` 只接受**扁平内建身份 +
+/// 无类型参数**；名义作用域内的同名类型（`Nominal::item("m", "String")`）与带参数的实例化
+/// （`Generic { name: String, args: [Int(64)] }`）都不是内建 `String`，不得拿到 11/12。
+///
+/// 病史门：`Generic { name, .. }` 的通配曾让「模块作用域同名类型」和「带参数实例化」一起命中
+/// 内建号；读回变成 `String`/`Bytes`，是「一次落盘就把别的类型变成内建类型」的静默错配。
+#[test]
+fn test_builtin_string_and_bytes_codes_require_flat_identity_without_args() {
+    // Arrange：两个正例（内建扁平身份）与四个负例（不该拿 11/12 的形态）
+    let builtin_string = MonoType::make_string();
+    let builtin_bytes = MonoType::Generic {
+        name: Nominal::flat("Bytes").expect("内建名必须可解析"),
+        args: Vec::new(),
+    };
+    let module_scoped_string = MonoType::Generic {
+        name: Nominal::item("m", "String").expect("名义作用域类型名必须可解析"),
+        args: Vec::new(),
+    };
+    let parameterised_string = MonoType::Generic {
+        name: Nominal::flat("String").expect("内建名必须可解析"),
+        args: vec![MonoType::Int(64)],
+    };
+    let module_scoped_bytes = MonoType::Generic {
+        name: Nominal::item("m", "Bytes").expect("名义作用域类型名必须可解析"),
+        args: Vec::new(),
+    };
+    let parameterised_bytes = MonoType::Generic {
+        name: Nominal::flat("Bytes").expect("内建名必须可解析"),
+        args: vec![MonoType::Int(64)],
+    };
+
+    // Act：取类型号
+    let builtin_string_id = mono_type_id(&builtin_string).expect("内建 String 必须可编");
+    let builtin_bytes_id = mono_type_id(&builtin_bytes).expect("内建 Bytes 必须可编");
+
+    // Assert 1：内建扁平身份拿 11/12，且读回恒等
+    assert_eq!(builtin_string_id, 11, "内建 String 的类型号必须是 11");
+    assert_eq!(builtin_bytes_id, 12, "内建 Bytes 的类型号必须是 12");
+    assert_eq!(
+        type_id_to_monotype(builtin_string_id),
+        builtin_string,
+        "内建 String 经 11 读回必须恒等"
+    );
+    assert_eq!(
+        type_id_to_monotype(builtin_bytes_id),
+        builtin_bytes,
+        "内建 Bytes 经 12 读回必须恒等"
+    );
+
+    // Assert 2：非内建形态一律落折叠号 47，并读回既定 lossy 形态
+    for (name, ty) in [
+        ("模块作用域的 String", module_scoped_string),
+        ("带参数的 String", parameterised_string),
+        ("模块作用域的 Bytes", module_scoped_bytes),
+        ("带参数的 Bytes", parameterised_bytes),
+    ] {
+        let id = mono_type_id(&ty).unwrap_or_else(|e| panic!("{name} 应折叠而不是拒绝：{e}"));
+        assert_eq!(
+            id, 47,
+            "{name} 只能拿折叠号 47（拿 11/12 会把别的类型读回成内建 String/Bytes）"
+        );
+        assert_eq!(
+            type_id_to_monotype(id),
+            MonoType::TypeRef(Nominal::flat("_").expect("lossy 占位名必须可解析")),
+            "{name}（号 {id}）读回必须是既定 lossy 形态 TypeRef(\"_\")"
+        );
+    }
+}
+
 #[test]
 fn test_debug_section_round_trip() {
     // Arrange
@@ -649,4 +718,74 @@ fn test_debug_section_round_trip_global_names() {
 
     assert_eq!(decoded.global_names.get(&0).map(String::as_str), Some("a"));
     assert_eq!(decoded.global_names.get(&1).map(String::as_str), Some("i"));
+}
+
+/// 条款门：`.42` 可逆段只覆盖**内建** `String` / `Bytes`（平路径、零实参）。
+///
+/// 病史门：D64 之后 `Nominal` 携带模块身份；若用裸名比较，`m.String` 或带实参的
+/// `String<T>` 会被静默编成 11/12，读回成内建无参 `String`——模块身份与实参双丢。
+#[test]
+fn test_string_and_bytes_codes_reject_non_builtin_identity() {
+    // Arrange：内建、带模块、带实参三种同名 Generic
+    let builtin = MonoType::Generic {
+        name: Nominal::flat("String").expect("内建类型名必须是裸名且非空"),
+        args: Vec::new(),
+    };
+    let namespaced = MonoType::Generic {
+        name: Nominal::item("m", "String").expect("模块内名义名必须合法"),
+        args: Vec::new(),
+    };
+    let parameterized = MonoType::Generic {
+        name: Nominal::flat("String").expect("内建类型名必须是裸名且非空"),
+        args: vec![MonoType::Int(64)],
+    };
+
+    // Act
+    let builtin_code = mono_type_id(&builtin).expect("内建 String 必须可编");
+    let namespaced_code = mono_type_id(&namespaced).expect("带模块的 String 按折叠类编码");
+    let parameterized_code = mono_type_id(&parameterized).expect("带实参的 String 按折叠类编码");
+
+    // Assert：只有内建拿 11；其余落折叠号 47 且读回 lossy 形态，不静默变成内建 String
+    assert_eq!(builtin_code, 11, "内建 String 必须是历史号 11");
+    assert_eq!(
+        namespaced_code, 47,
+        "带模块的 String 不得占用内建号 11，必须按折叠类落 47"
+    );
+    assert_eq!(
+        parameterized_code, 47,
+        "带实参的 String 不得占用内建号 11，必须按折叠类落 47"
+    );
+    assert!(
+        matches!(type_id_to_monotype(namespaced_code), MonoType::TypeRef(_)),
+        "折叠号读回必须是 lossy 形态 TypeRef，而不是被重建为内建 String"
+    );
+
+    // Bytes 行与 String 对称：内建拿 12，带模块/带实参一律落折叠号
+    let builtin_bytes = MonoType::Generic {
+        name: Nominal::flat("Bytes").expect("内建类型名必须是裸名且非空"),
+        args: Vec::new(),
+    };
+    let namespaced_bytes = MonoType::Generic {
+        name: Nominal::item("m", "Bytes").expect("模块内名义名必须合法"),
+        args: Vec::new(),
+    };
+    let parameterized_bytes = MonoType::Generic {
+        name: Nominal::flat("Bytes").expect("内建类型名必须是裸名且非空"),
+        args: vec![MonoType::Int(64)],
+    };
+    assert_eq!(
+        mono_type_id(&builtin_bytes).expect("内建 Bytes 必须可编"),
+        12,
+        "内建 Bytes 必须是历史号 12"
+    );
+    assert_eq!(
+        mono_type_id(&namespaced_bytes).expect("带模块的 Bytes 按折叠类编码"),
+        47,
+        "带模块的 Bytes 不得占用内建号 12，必须按折叠类落 47"
+    );
+    assert_eq!(
+        mono_type_id(&parameterized_bytes).expect("带实参的 Bytes 按折叠类编码"),
+        47,
+        "带实参的 Bytes 不得占用内建号 12，必须按折叠类落 47"
+    );
 }

@@ -953,13 +953,21 @@ pub(crate) const SCALAR_TYPE_CODES: &[ScalarTypeCode] = &[
     ScalarTypeCode {
         code: 11,
         name: "String",
-        matches: |t| matches!(t, MonoType::Generic { name, .. } if name == "String"),
+        // 只认内建（平路径、无实参）的 String：module/args 任一非空都属另一个类型，
+        // 编成 11 会把它读回成内建 String——静默丢身份（D64 后 name 携带模块）。
+        matches: |t| {
+            matches!(t, MonoType::Generic { name, args }
+            if args.is_empty() && name.module().is_empty() && name.bare() == "String")
+        },
         build: MonoType::make_string,
     },
     ScalarTypeCode {
         code: 12,
         name: "Bytes",
-        matches: |t| matches!(t, MonoType::Generic { name, .. } if name == "Bytes"),
+        matches: |t| {
+            matches!(t, MonoType::Generic { name, args }
+            if args.is_empty() && name.module().is_empty() && name.bare() == "Bytes")
+        },
         build: || MonoType::Generic {
             name: Nominal::flat("Bytes").expect("内建类型名必须是裸名且非空"),
             args: Vec::new(),
