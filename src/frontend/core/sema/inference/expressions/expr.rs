@@ -102,6 +102,16 @@ impl<'a> ExpressionInferrer<'a> {
     }
 
     /// 设置导入面（D-5）：方法身份的解析只经它
+    fn mono_from_annotation(
+        &self,
+        ty: &crate::ast::Type,
+    ) -> MonoType {
+        match self.import_face {
+            Some(face) => face.mono_from_annotation(ty),
+            None => MonoType::from(ty.clone()),
+        }
+    }
+
     pub fn set_import_face(
         &mut self,
         face: &'a ImportFace,
@@ -1991,7 +2001,7 @@ impl<'a> ExpressionInferrer<'a> {
                     ty.clone()
                 }
                 _ => match &param.ty {
-                    Some(t) => MonoType::from(t.clone()),
+                    Some(t) => self.mono_from_annotation(&t.clone()),
                     None => self.solver.new_var(),
                 },
             };
@@ -2057,7 +2067,7 @@ impl<'a> ExpressionInferrer<'a> {
                         ty.clone()
                     }
                     _ => match &p.ty {
-                        Some(t) => MonoType::from(t.clone()),
+                        Some(t) => self.mono_from_annotation(&t.clone()),
                         None => self.solver.new_var(),
                     },
                 },

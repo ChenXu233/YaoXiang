@@ -194,6 +194,17 @@ impl ImportFace {
         Some(DefPath::item(&origin.module, &origin.target))
     }
 
+    /// **唯一有上下文的 AST 类型 → MonoType 入口**（L3-1b1a）。
+    ///
+    /// 本批与 `MonoType::from` 同义（身份解析留到下一批）；有上下文的调用点
+    /// 必须走这里，env-free 的点保持 `MonoType::from`，不得再写第二套转换。
+    pub fn mono_from_annotation(
+        &self,
+        ty: &crate::ast::Type,
+    ) -> crate::frontend::core::types::MonoType {
+        crate::frontend::core::types::MonoType::from(ty.clone())
+    }
+
     /// 命名空间前缀（`use lib` 的 `lib` / `use lib as l` 的 `l`）→ 模块键
     pub fn namespace_module(
         &self,
