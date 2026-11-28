@@ -44,7 +44,7 @@ the authoritative reference for the language, intended for compiler and tool imp
 > `CHANGELOG.md` and `Cargo.toml` at the repository root, to prevent the two numbers from drifting
 > apart. The **module-level API signatures** in this directory are derived from
 > `StdModule::exports()` and guarded by a gate (see
-> [Standard Library Reference](../stdlib/index.md#文档维护)).
+> [Standard Library Reference](../stdlib/index.md#documentation-maintenance)).
 
 ### Related Resources
 

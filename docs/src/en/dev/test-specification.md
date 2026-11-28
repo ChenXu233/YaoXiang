@@ -15,15 +15,15 @@ during code review.
 
 ## Table of Contents
 
-- [General Rules](#总则)
-- [yx Corpus and Library Test Levels](#yx-语料与库测试层级)
-- [Unit Test Standards](#单元测试规范)
-- [Integration Test Standards](#集成测试规范)
-- [Benchmark Test Standards](#基准测试规范)
-- [Documentation Test Standards](#文档测试规范)
-- [Property Test Standards](#属性测试规范)
-- [Coverage Requirements](#覆盖率要求)
-- [Appendix](#附录)
+- [General Rules](#general-rules)
+- [yx Corpus and Library Test Levels](#yx-corpus-and-library-test-levels)
+- [Unit Test Standards](#unit-test-standards)
+- [Integration Test Standards](#integration-test-standards)
+- [Benchmark Test Standards](#benchmark-test-standards)
+- [Documentation Test Standards](#documentation-test-standards)
+- [Property Test Standards](#property-test-standards)
+- [Coverage Requirements](#coverage-requirements-1)
+- [Appendix](#appendix)
 
 ---
 

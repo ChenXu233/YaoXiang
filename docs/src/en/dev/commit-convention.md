@@ -7,18 +7,18 @@ the commit history clear, readable, and easy to understand.
 
 ## Table of Contents
 
-- [Commit Format](#提交格式)
-- [Commit Types](#提交类型)
-- [Commit Granularity](#提交粒度)
-- [Complete Emoji Reference](#完整-emoji-参考)
-- [Scopes](#作用域)
-- [Version Management](#版本管理)
-- [Message Specification](#消息规范)
-- [Language Requirements](#语言规范)
+- [Commit Format](#commit-format)
+- [Commit Types](#commit-types)
+- [Commit Granularity](#commit-granularity)
+- [Complete Emoji Reference](#complete-emoji-reference)
+- [Scopes](#scopes)
+- [Version Management](#version-management)
+- [Message Specification](#message-specification)
+- [Language Requirements](#language-requirements)
 - [🔖 Release Commit](#-发版提交)
-- [Examples](#示例)
+- [Examples](#examples)
 - [Using the Commit Template](#使用-commit-template)
-- [FAQ](#常见问题)
+- [FAQ](#faq)
 
 ---
 
@@ -596,7 +596,7 @@ The `.gitmessage.txt` file in the project root has the following format:
 
 - [Conventional Commits](https://www.conventionalcommits.org/)
 - [gitmoji](https://gitmoji.carloscuesta.me/)
-- [Complete Emoji List](#完整-emoji-参考)
+- [Complete Emoji List](#complete-emoji-reference)
 - [release.md](release.md) - Release template
 
 ---

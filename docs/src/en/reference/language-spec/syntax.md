@@ -145,7 +145,7 @@ Array       ::= '[' Expr (',' Expr)* ']'   // When the target type annotation is
 ```
 
 > **A dictionary literal requires at least one key-value pair**: `{}` is **not** an empty
-> dictionary—it is an empty block (the value `Void`; see [§2.9](#_2-9-块表达式)). Use the
+> dictionary—it is an empty block (the value `Void`; see [§2.9](#_2-9-block-expressions)). Use the
 > constructor `dict.new()` for an empty dictionary:
 >
 > ```yaoxiang
@@ -497,9 +497,9 @@ In expression positions, `{` has exactly three interpretations, determined once 
 
 > **Why `{}` is not an empty dictionary**: the “emptiness” of an empty dictionary cannot be
 > self-describing (it could be either `Dict(K, V)` or an empty block), while the dictionary grammar
-> [§1.6.4](#_1-6-4-集合) requires at least one key-value pair. When there is no content on which to
-> base a decision, the zero form of the block structure is used: this is consistent with `unsafe {}`
-> / `spawn {}` and introduces no special case. Use `dict.new()` for an empty dictionary.
+> [§1.6.4](#_1-6-4-collections) requires at least one key-value pair. When there is no content on
+> which to base a decision, the zero form of the block structure is used: this is consistent with
+> `unsafe {}` / `spawn {}` and introduces no special case. Use `dict.new()` for an empty dictionary.
 >
 > **Why functions require an annotation**: `f = { stmt }` is a **value** (with the tail expression's
 > type), not a function. To define a function, state the Fn annotation: `f: () -> Int = { 5 }`. This
@@ -1099,7 +1099,7 @@ exists**:
 
 Without a manifest, the file is a “script,” and **top-level statements execute in source order**
 (top-level **binding initialization** as a whole takes place first; see
-“[Top-Level Binding Initialization](#顶层绑定的初始化)” below):
+“[Top-Level Binding Initialization](#top-level-binding-initialization)” below):
 
 ```yaoxiang
 use std.io

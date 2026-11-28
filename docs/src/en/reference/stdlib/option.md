@@ -53,12 +53,12 @@ Variant construction in expression position **must be type-qualified**: `Option(
 
 The `Try` methods defined in the type body (`src/std/option.yx:23-45`):
 
-| Method                | Signature                    | On `some`                   | On `none`                   |
-| --------------------- | ---------------------------- | --------------------------- | --------------------------- |
-| `is_failure()`        | `(self: &Option(T)) -> Bool` | `false`                     | `true`                      |
-| `success()`           | `(self: &Option(T)) -> T`    | Returns payload             | `E6005` (dead end)          |
-| `residual()`          | `(self: &Option(T)) -> Void` | `E6005` (dead end)          | Returns `void`              |
-| `from_error(v: Void)` | `(v: Void) -> Option(T)`     | See [Known Gaps](#已知缺口) | See [Known Gaps](#已知缺口) |
+| Method                | Signature                    | On `some`                     | On `none`                     |
+| --------------------- | ---------------------------- | ----------------------------- | ----------------------------- |
+| `is_failure()`        | `(self: &Option(T)) -> Bool` | `false`                       | `true`                        |
+| `success()`           | `(self: &Option(T)) -> T`    | Returns payload               | `E6005` (dead end)            |
+| `residual()`          | `(self: &Option(T)) -> Void` | `E6005` (dead end)            | Returns `void`                |
+| `from_error(v: Void)` | `(v: Void) -> Option(T)`     | See [Known Gaps](#known-gaps) | See [Known Gaps](#known-gaps) |
 
 The dead-end branches shown above are explicitly written as `assert(false)` in the type body
 (`src/std/option.yx:33,40`). `Never <: T` makes these branches valid at the type level while

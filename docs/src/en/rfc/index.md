@@ -11,13 +11,13 @@ title: 'RFC Index'
 
 ## Table of Contents
 
-- [Templates](#模板)
-- [Draft RFCs](#草案rfc)
-- [RFCs Under Review](#审核中rfc)
-- [Accepted RFCs](#已接受rfc)
-- [Deprecated RFCs](#已废弃rfc)
-- [Rejected RFCs](#已拒绝rfc)
-- [Document Revision Rules](#文档修订规则)
+- [Templates](#templates)
+- [Draft RFCs](#draft-rfcs)
+- [RFCs Under Review](#rfcs-under-review)
+- [Accepted RFCs](#accepted-rfcs)
+- [Deprecated RFCs](#deprecated-rfcs)
+- [Rejected RFCs](#rejected-rfcs)
+- [Document Revision Rules](#document-revision-rules)
 
 ---
 

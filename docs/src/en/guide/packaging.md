@@ -37,7 +37,7 @@ Error: Failed to install dependencies
 ```
 
 **Always use `--git` for external dependencies.** To publish, use `yx publish --github`; see
-[Publishing](#发布). :::
+[Publishing](#publishing). :::
 
 ::: warning Local Path Dependencies Are Currently Unavailable `yx add --path` can write the
 dependency to `yaoxiang.toml` and `yaoxiang.lock`, but it does not place the package in the vendor
