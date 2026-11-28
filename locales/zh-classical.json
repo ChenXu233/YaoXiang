@@ -1275,5 +1275,13 @@
     "title": "項目配置不可讀",
     "template": "項目配置 {path} 不可讀：{detail}",
     "help": "正 yaoxiang.toml，使為合法 TOML、備 [package] 必填之欄，且諸節欄位之型皆合約定。配置雖存而不可解者（聲明面或 [tool.*] 擴節任一），聲明面與跨檔引用池、明示配置皆不可信，編譯遂止，不默然退化為預設之配置。無配置檔之項目，仍行單檔之義。"
+  },
+  "E1116": {
+    "title": "裸名与标准库诸导出同名",
+    "message": "'{name}' 同时为数个标准库单元（{units}）所导出，裸名无从确定调用目标",
+    "template": "'{name}' 同时为数个标准库单元（{units}）所导出，裸名无从确定调用目标",
+    "help": "同一短名为数个标准库单元所导出，并无默认目标（此前同一份源码多次编译，调用目标皆随机择定）。欲显式消歧，任择其一：书项导入 `use std.string.{concat}`，后仍用裸名；或以限定名 `string.concat(...)` 调用；至可选单元，以本错误所列之表为准。",
+    "example": "main: () -> Int = () => {\n    s = concat(\"foo\", \"bar\")\n    print(s)\n    0\n}\nmain()",
+    "error_output": "error[E1116]: 裸名与标准库诸导出同名\n --> example.yx:2:9\n  |\n2 |     s = concat(\"foo\", \"bar\")\n  |         ^^^^^^ 'concat' 同时为数个标准库单元（std.string, std.list）所导出，裸名无从确定调用目标"
   }
 }
