@@ -831,7 +831,12 @@ pub struct BytecodeFunction {
     pub instructions: Vec<BytecodeInstr>,
     /// Label to instruction index mapping
     pub labels: HashMap<Label, usize>,
-    /// Exception handlers (try-catch blocks)
+    /// 异常处理器表。`.42` 不落该字段。
+    ///
+    /// 复核结论（7e / D52）：本字段无生产者、无消费者——语言层没有 throw/try/catch
+    /// （RFC-030 把 `Throw` 记为字节码层预留，RFC-036 否决进程内 catch 边界），
+    /// codegen 从不写入，解释器从不读取；载入侧因此留空表。
+    /// 字段与 `TRY_BEGIN` / `TRY_END` 的删除归 P10 S6（`THROW` 单列待裁决）。
     pub exception_handlers: Vec<ExceptionHandler>,
     /// Debug info: mapping from IP to Span
     pub debug_map: HashMap<usize, crate::util::span::DebugSpan>,
@@ -2337,8 +2342,9 @@ impl From<crate::middle::bytecode::file::BytecodeFile> for BytecodeModule {
                 // v5 起随函数记录落盘（D17）；此前载入侧硬编 0 是数据丢失缺陷
                 upvalue_count: func.upvalue_count,
                 instructions: decoded_instructions,
-                labels,                         // Populated from opcode::LABEL
-                exception_handlers: Vec::new(), // Not implemented yet
+                labels, // Populated from opcode::LABEL
+                // .42 不落异常处理器：字段无生产者、无消费者（D52 复核），删除归 P10 S6
+                exception_handlers: Vec::new(),
                 debug_map,
             };
             functions.push(byte_func);

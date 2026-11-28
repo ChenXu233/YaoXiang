@@ -22,9 +22,19 @@ const MAGIC: u32 = 0x59584243;
 ///   `TAIL_CALL`(0x09) 从词表回收（RFC-039 D17/D32/D34），值交回分配池。
 ///   同一未发布窗口追加**模块级全局表**（`globals`：名字 + 类型号，槽位序号即表序），
 ///   使 `.42` 载入后 `BytecodeModule.globals` 不再恒为空（RFC-039 D52 的 2341 项）。
+///   同一未发布窗口再改**类型号表**：`Int` 五档与 `Float` 两档各占独立号
+///   （此前 `Int(64)` 与 `Float(32)` 同为 `9`、`Float(64)` 读回 `TypeRef("_")`），
+///   编号与解码共用一张表、可逆往返；写侧对未知位宽与编译期 FFI 类型
+///   （`LibraryRef` / `ExternRef`）响亮拒绝而不是静默折算（依据见 WBS 09 的 7e.4 行
+///   与本节 v5 条目；同源叙述在 [04-ssa.md](../../../docs/src/dev/architecture/04-ssa.md)
+///   的「硬编码丢弃的跟踪」）。
 pub const VERSION: u32 = 5;
 
 const FLAG_DEBUG_INFO: u32 = 0x02;
+
+/// 无调试段时 `.42` 写出的段数：类型表 / 常量池 / 代码段 / vtable 表 / 全局表。
+/// 段数只在 `write_to` 由本常量 + 可选调试段推导一次。
+const BASE_SECTION_COUNT: u16 = 5;
 
 const DEBUG_SECTION_MAGIC: u32 = 0x59584442; // 'Y' 'X' 'D' 'B'
 /// 调试段格式版本。
@@ -67,6 +77,9 @@ pub struct FileHeader {
     pub version: u32,
     pub flags: u32,
     pub entry_point: u32,
+    /// 段数。口径：写出时按**实际写出的段数**填写——类型表 / 常量池 / 代码段 /
+    /// vtable 表 / 全局表 = 5，带调试段 = 6，计算点只在 `write_to`；
+    /// 读侧只搬运、不校验。构造侧填 0 表示未填写。
     pub section_count: u16,
     pub file_size: u32,
     pub checksum: u32,
@@ -79,7 +92,8 @@ impl Default for FileHeader {
             version: VERSION,
             flags: 0,
             entry_point: 0,
-            section_count: 4,
+            // 未填写：写出时由 write_to 按实际段数计算（见 section_count 的注释）
+            section_count: 0,
             file_size: 0,
             checksum: 0,
         }
@@ -296,8 +310,11 @@ pub struct FunctionCode {
     pub local_count: usize,
     /// 上值槽数（闭包环境槽数，RFC-039 D17）。
     ///
-    /// 语义：本函数体内经 `LoadUpvalue` / `StoreUpvalue` 触达的上值槽数
-    /// （最大槽下标 + 1）。调用侧按它给闭包帧准备上值槽。
+    /// 取值：本函数体内经 `LoadUpvalue` / `StoreUpvalue` 触达的上值槽数
+    /// （最大槽下标 + 1），由 codegen 从指令流统计。
+    /// 消费面：本字段只保产物事实（编解码与 `.42` 往返）；解释器闭包帧不读它——
+    /// 上值经 `CallDyn` / `Spawn` 的 env 注入（`Frame::set_upvalue`），帧布局与此无关。
+    /// 若日后要按它给闭包帧预分配上值槽，属行为变更：先立任务，先红后绿。
     /// v5 起随函数记录落盘；v4 及以前的产物没有该字段（且载入侧曾硬编 0，
     /// 属数据丢失缺陷），故读取侧按版本整体拒绝旧文件而不是补 0。
     pub upvalue_count: usize,
@@ -358,8 +375,11 @@ impl BytecodeFile {
         let has_debug_section = self.debug_section.is_some();
         if has_debug_section {
             header.flags |= FLAG_DEBUG_INFO;
-            header.section_count = 5;
         }
+        // 段数的唯一计算点：本函数实际写出的段 = 类型表 / 常量池 / 代码段 /
+        // vtable 表 / 全局表（BASE_SECTION_COUNT），外加可选调试段。
+        // 构造侧不手填——名称与值不符会误导 dump 读者。
+        header.section_count = BASE_SECTION_COUNT + u16::from(has_debug_section);
 
         // 文件头：魔数大端序，其他小端序
         writer.write_all(&header.magic.to_be_bytes())?; // YXBC 方便调试

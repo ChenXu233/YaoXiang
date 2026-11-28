@@ -277,7 +277,8 @@ impl CodegenContext {
             version: BYTECODE_VERSION,
             flags: self.compute_flags(),
             entry_point,
-            section_count: 4,
+            // 未填写：由 `BytecodeFile::write_to` 按实际写出的段数计算
+            section_count: 0,
             file_size: 0,
             checksum: 0,
         }
