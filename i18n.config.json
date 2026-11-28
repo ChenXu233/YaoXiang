@@ -12,13 +12,15 @@
   },
   "languages": {
     "en": {
-      "name": "English"
+      "name": "English",
+      "capitalizeTitles": true
     },
     "ja": {
       "name": "日本語"
     },
     "ru": {
-      "name": "Русский"
+      "name": "Русский",
+      "capitalizeTitles": true
     },
     "zh-x-miao": {
       "name": "喵语",

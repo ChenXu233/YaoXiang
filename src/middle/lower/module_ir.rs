@@ -7,7 +7,7 @@
 use super::AstToIrGenerator;
 use super::BindingInfo;
 use crate::ast;
-use crate::frontend::module::symbol::SymbolTable;
+use crate::frontend::core::types::identity::{DefKind, DefPath};
 use crate::frontend::module::ExportKind;
 use crate::middle::ir::ir::{ConstValue, Instruction, ModuleIR, Operand};
 use crate::util::diagnostic::Diagnostic;
@@ -170,9 +170,13 @@ impl AstToIrGenerator {
         // 只看 `module_key`。
         if let Some(key) = &self.module_key {
             let aliases = self.build_import_aliases(module);
-            Self::qualify_names(&mut ir, key, &aliases);
+            // 改名与身份登记同源：`qualify_names` 给出「最终名 → 路径」，
+            // `assign_defs` 只按该表登记——投影是路径的像，两处不各算一次。
+            let def_paths = Self::qualify_names(&mut ir, key, &aliases);
+            self.assign_defs(&mut ir, Some(&def_paths));
+        } else {
+            self.assign_defs(&mut ir, None);
         }
-        self.assign_defs(&mut ir);
         // RFC-039 D20 / WBS 4.5.1：消费侧完整跑完一轮（生成成功返回）——
         // 结算据此区分「消费者跑完但漏了条目」（响亮）与「消费者没跑完 / 失败」
         //（不判：失败已按首因报出）。失败路径提前 `return Err`，不会标到这里。
@@ -185,39 +189,53 @@ impl AstToIrGenerator {
     /// Stage 3 尾部 pass：为所有函数分配 DefId 并解析静态引用。
     ///
     /// 名字此时已是最终形态（多文件已限定、单文件保持裸名）：
-    /// - intern 规则：多文件直接用限定名；单文件用 `qualify("main", bare)`——与
-    ///   `module_key_or_main` 一致，保证 `FunctionIR.def` 与调用侧解析结果同源。
-    /// - 方法在单文件首次 intern 时类别退化为 `Function`（多文件已在 register 期以
-    ///   `Method` intern，幂等保留）；下游只查 def 不查 kind，无行为差异。
+    /// - 登记规则：多文件按 `qualify_names` 给出的「最终名 → 路径」表登记——路径与
+    ///   投影同源；单文件没有该表（`module_key` 关闭），名字即本单元扁平名，按
+    ///   `main` 模块兜底（与 `module_key_or_main` 一致），投影与既有口径逐字相同。
+    /// - 表里没有的函数 = `qualify_names` **有意不改名**的名字：先按投影索引复用既有
+    ///   DefId（std 等别处已登记的名字，与旧 `intern` 的幂等语义同值）；投影从未登记
+    ///   过则说明它是本单元生成期合成的扁平名（curry 内层 `__T.m_l0`），按**无模块
+    ///   路径**登记——投影即名字本身，与历史整串登记逐字相同。
+    /// - 方法在单文件首次登记时类别退化为 `Function`（多文件已在 register 期以
+    ///   `Method` 登记，幂等保留）；下游只查 def 不查 kind，无行为差异。
     /// - 泛型函数经 mono 特化后重命名，def 随之失效——mono 路径保持按名分发（现状），
     ///   codegen 对 def 未命中回退按名，两条路径都正确。
     fn assign_defs(
         &self,
         ir: &mut ModuleIR,
+        def_paths: Option<&HashMap<String, DefPath>>,
     ) {
         // intern 规则跟随**限定名开关**（不是 Script/Bin 语义）：未限定名的
         // 程序用 `main.` 前缀兜底，与 `module_key_or_main` 一致。
         let unqualified_names = self.module_key.is_none();
         let mut symbols = self.registry.symbols_mut();
         for func in &mut ir.functions {
-            let intern_name = if unqualified_names {
-                SymbolTable::qualify("main", &func.name)
-            } else {
-                func.name.clone()
-            };
             let kind = if func.is_type_decl() {
-                crate::frontend::module::symbol::DefKind::Type
+                DefKind::Type
             } else {
-                crate::frontend::module::symbol::DefKind::Function
+                DefKind::Function
             };
-            func.def = Some(symbols.intern_full(&intern_name, kind));
+            if let Some(path) = def_paths.and_then(|paths| paths.get(&func.name)) {
+                func.def = Some(symbols.intern(path.clone(), kind));
+                continue;
+            }
+            if unqualified_names {
+                // 单文件：名字即本单元扁平名，归属 `main`（见函数文档）
+                func.def = Some(symbols.intern(DefPath::item("main", &func.name), kind));
+                continue;
+            }
+            // 未改名的名字（见函数文档）：已登记 → 复用；否则按无模块扁平名登记
+            func.def = Some(match symbols.def_by_projection(&func.name) {
+                Some(id) => id,
+                None => symbols.intern(DefPath::item("", &func.name), kind),
+            });
         }
-        // 解析静态引用：先直查（限定名 / std 原生），未限定名的程序裸名回退
-        // qualify("main", ·)。所有函数已 intern 完毕，前向引用在此必然可解。
+        // 解析静态引用：先查投影索引（限定名 / std 原生 / 扁平名），未限定名的程序
+        // 裸名回退 `main.{name}`。所有函数已登记完毕，前向引用在此必然可解。
         let resolve = |name: &str| {
-            symbols.def(name).or_else(|| {
+            symbols.def_by_projection(name).or_else(|| {
                 if unqualified_names {
-                    symbols.def(&SymbolTable::qualify("main", name))
+                    symbols.def_path(&DefPath::item("main", name))
                 } else {
                     None
                 }
@@ -253,7 +271,7 @@ impl AstToIrGenerator {
     /// 两处若各写一套映射，正是 t12 要消除的口径分叉。
     fn resolve_static_targets(
         instr: &mut Instruction,
-        resolve: &impl Fn(&str) -> Option<crate::frontend::module::symbol::DefId>,
+        resolve: &impl Fn(&str) -> Option<crate::frontend::core::types::identity::DefId>,
     ) {
         match instr {
             Instruction::Call { func, def, .. } | Instruction::TailCall { func, def, .. } => {
@@ -328,19 +346,30 @@ impl AstToIrGenerator {
         aliases
     }
 
-    /// RFC-029 限定名：把本文件 IR 里的顶层函数名重写为 `{module_key}.{name}`，
+    /// RFC-029 限定名：把本文件 IR 里的顶层函数名投影为 `{module_key}.{name}`，
     /// 并把**函数体与模块顶层初始化序列**里对这些函数与导入函数的调用/闭包
     /// 引用一并重写（init 段见 t3 F1——漏掉它就出现「定义已限定、调用仍裸名」
     /// 的不自洽 IR，运行期 E6006）。
     ///
     /// module=record 语义：`a.helper` 与 `b.helper` 是两个 record 的不同字段，本就不冲突；
-    /// 解释器函数表是扁平 name→func，故用限定名作键使其共存。限定名统一经
-    /// [`SymbolTable::qualify`] 生成——全仓库限定名语法的唯一所有者。
+    /// 解释器函数表是扁平 name→func，故用限定名作键使其共存。限定名一律是
+    /// [`DefPath::project`] 的产物——全仓库限定名拼接的唯一实现。
+    ///
+    /// 返回「**最终名 → 路径**」：`assign_defs` 据此登记身份，投影与登记同源。
+    /// 未改名的函数（带点且限定点不是本文件类型）不进表——它们要么是别处已投影
+    /// 的名字（std 等），要么是本单元生成的扁平名（curry 内层），判据见 `assign_defs`。
+    ///
+    /// **方法派生函数不在改写面内**（WBS 4.9.10 D-8）：它们经 `method_def_ir_names`
+    /// 由 typecheck 的方法身份直出，进本函数时名字**已是** `{模块键}.{Type}.{method}`
+    /// ——首段是模块键而不是本文件类型名，故上面这条判据让它原样通过，`assign_defs`
+    /// 按投影索引复用已登记的身份（Registry 期 `intern_method` 已登记同一条路径）。
+    /// 调用名同理已是最终名：`rewrite_call_names` 以**本单元函数表的最终名集合**
+    /// 短路，避免前缀规则把 `main.Temp.tag` 的 `main` 当成同名函数的裸名再限定一次。
     fn qualify_names(
         ir: &mut ModuleIR,
         module_key: &str,
         aliases: &HashMap<String, String>,
-    ) {
+    ) -> HashMap<String, DefPath> {
         // 先收集本文件的类型名（TypeDecl），供方法派生函数前缀匹配。
         let mut type_names: std::collections::HashSet<String> = std::collections::HashSet::new();
         for func in &ir.functions {
@@ -350,20 +379,28 @@ impl AstToIrGenerator {
         }
 
         // 本文件要限定的函数：TypeDecl、方法派生（前缀是本地类型）、普通函数。
+        // `rename` 是改写用的「原名 → 限定名」，`paths` 是登记用的「最终名 → 路径」——
+        // 两者同出一个 `DefPath`，故定义名与调用名不可能各算一次。
         let mut rename: HashMap<String, String> = HashMap::new();
+        let mut paths: HashMap<String, DefPath> = HashMap::new();
         for func in &ir.functions {
             let bare = &func.name;
-            if func.is_type_decl() {
-                rename.insert(bare.clone(), SymbolTable::qualify(module_key, bare));
-            } else if let Some(dot_pos) = bare.find('.') {
-                // 带点名字：只有限定点是本地类型时才限定，避免误伤 std 等已限定名。
-                let prefix = &bare[..dot_pos];
-                if type_names.contains(prefix) {
-                    rename.insert(bare.clone(), SymbolTable::qualify(module_key, bare));
-                }
+            let path = if func.is_type_decl() {
+                Some(DefPath::item(module_key, bare))
+            } else if let Some((owner, method)) = bare.split_once('.') {
+                // 带点名字：只有限定点是**本文件类型**时才限定，避免误伤 std 等已限定名。
+                // 判据成立的前提：定义侧 `Type.method` 键的类型名是标识符、不含点，
+                // 故首段即归属段。其余带点名不改名（见 `assign_defs`）。
+                type_names
+                    .contains(owner)
+                    .then(|| DefPath::method(module_key, owner, method))
             } else {
-                rename.insert(bare.clone(), SymbolTable::qualify(module_key, bare));
-            }
+                Some(DefPath::item(module_key, bare))
+            };
+            let Some(path) = path else { continue };
+            let qualified = path.project();
+            rename.insert(bare.clone(), qualified.clone());
+            paths.insert(qualified, path);
         }
 
         // 重写函数定义名。
@@ -373,10 +410,15 @@ impl AstToIrGenerator {
             }
         }
 
+        // 本单元函数表的**最终名**集合（定义改名之后取）：调用名命中它即已是
+        // 最终形态，`rewrite_call_names` 据此短路（见那里的注释）。
+        let final_names: std::collections::HashSet<String> =
+            ir.functions.iter().map(|func| func.name.clone()).collect();
+
         // 重写全局槽位名（T5）：与 `allocate_global_slots` 的限定规则同源，
         // 使槽位名与跨文件布局键（`lib.value`）一致，同名全局得以共存。
         for slot in &mut ir.globals {
-            slot.name = SymbolTable::qualify(module_key, &slot.name);
+            slot.name = DefPath::item(module_key, &slot.name).project();
         }
 
         // 重写调用/闭包引用：本文件函数（rename）+ 导入函数（aliases）。
@@ -386,7 +428,7 @@ impl AstToIrGenerator {
             }
             for block in func.blocks_mut() {
                 for instr in &mut block.instructions {
-                    Self::rewrite_call_names(instr, &rename, aliases);
+                    Self::rewrite_call_names(instr, &rename, aliases, &final_names);
                 }
             }
         }
@@ -396,8 +438,10 @@ impl AstToIrGenerator {
         // 顶层函数的调用名保持裸名，而函数定义已被限定——运行期按裸名查扁平
         // 函数表落空（E6006）。这与泛型无关，是既有的多文件正确性漏洞。
         for instr in &mut ir.init {
-            Self::rewrite_call_names(instr, &rename, aliases);
+            Self::rewrite_call_names(instr, &rename, aliases, &final_names);
         }
+
+        paths
     }
 
     /// **调用名解析的单点实现**：把一个调用名解析成 IR 函数表里的最终名字。
@@ -457,9 +501,20 @@ impl AstToIrGenerator {
         instr: &mut Instruction,
         rename: &HashMap<String, String>,
         aliases: &HashMap<String, String>,
+        final_names: &std::collections::HashSet<String>,
     ) {
-        let resolve =
-            |name: &str| -> Option<String> { Self::resolve_call_target(name, rename, aliases) };
+        // 调用名已是本单元函数表里的**最终名** ⇒ 不需要任何改写。
+        //
+        // 这一档不是优化而是正确性：方法函数名由 typecheck 的权威映射直出、
+        // 已带模块键（WBS 4.9.10 D-8：`main.Temp.tag`），而前缀规则会把首段
+        // `main` 当成本单元同名函数的裸名再限定一次（`main.main.Temp.tag`，
+        // 运行期 E6006）。定义名与调用名逐字相同 ⇒ 改写必是恒等。
+        let resolve = |name: &str| -> Option<String> {
+            if final_names.contains(name) {
+                return None;
+            }
+            Self::resolve_call_target(name, rename, aliases)
+        };
         match instr {
             Instruction::Call { func, .. } | Instruction::TailCall { func, .. } => {
                 if let Operand::Const(ConstValue::String(name)) = func {

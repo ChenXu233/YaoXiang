@@ -8,6 +8,7 @@
 //! - 解码保真：Ref / Struct 型不被塌缩（type_table 原样搬运，6.2.2）
 
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::middle::bytecode::file::BytecodeInstruction;
 use crate::middle::bytecode::opcode;
 use crate::middle::bytecode::{BytecodeInstr, BytecodeModule, Label, Reg};
@@ -57,7 +58,8 @@ fn build_and_decode_typed(
 /// Helper: Point 结构体类型（字段 x/y: i64）——解码保真测试夹具。
 fn point_struct_type() -> MonoType {
     MonoType::Struct(crate::frontend::core::sema::StructType {
-        name: "Point".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Point")))
+            .expect("type name must be bare and non-empty"),
         fields: vec![
             crate::frontend::core::types::mono::StructFieldInfo {
                 name: "x".to_string(),

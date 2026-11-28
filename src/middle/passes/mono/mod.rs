@@ -14,6 +14,7 @@ pub mod instance;
 
 use crate::ast::Quantity;
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::DefPath;
 use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
 };
@@ -1001,7 +1002,7 @@ impl Monomorphizer {
         }
         // 按容器模块补限定（函数体内调用：`lib.f` 容器下的裸名 `f`）
         if let Some((module, _)) = containing_fn.and_then(|c| c.split_once('.')) {
-            let qualified = format!("{module}.{name}");
+            let qualified = DefPath::item(module, name).project();
             if self.generic_def_contains(&qualified) {
                 return qualified;
             }
@@ -1467,7 +1468,7 @@ impl Monomorphizer {
         // 泛型所属单元键（首段切分，与 `resolve_generic_name` 的容器模块
         // 规则同源：`lib.sum` → `lib`，方法派生 `lib.Point.get_x` → `lib`）
         if let Some((module, _)) = generic_name.split_once('.') {
-            let qualified = format!("{module}.{bare}");
+            let qualified = DefPath::item(module, bare).project();
             if table.contains(&qualified) {
                 return Some(qualified);
             }
@@ -1743,11 +1744,12 @@ impl Monomorphizer {
         while let Some(ty) = stack.pop() {
             match ty {
                 MonoType::Generic { name, args } => {
-                    if self.generic_types.contains_key(name) {
-                        let key = SpecializationKey::new(name.clone(), args.clone());
+                    if self.generic_types.contains_key(name.bare()) {
+                        let key =
+                            SpecializationKey::new(name.clone().bare().to_string(), args.clone());
                         if !self.processed.contains(&key) {
                             let mut req = InstantiationRequest::new(
-                                GenericFunctionId::new(name.clone(), Vec::new()),
+                                GenericFunctionId::new(name.bare().to_string(), Vec::new()),
                                 args.iter()
                                     .cloned()
                                     .map(crate::frontend::core::types::mono::GenericArg::Type)

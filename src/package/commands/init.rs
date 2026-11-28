@@ -125,15 +125,32 @@ pub fn exec(
     exec_in(&std::env::current_dir()?, options, name)
 }
 
-/// Initialize a new YaoXiang project in the current directory.
+/// Initialize a new YaoXiang project in the **current directory**（CLI 入口）。
 ///
-/// The project name is taken from the current directory name.
-/// If yaoxiang.toml already exists, returns PackageError::ProjectExists.
-/// Existing template files (src/main.yx, .gitignore, etc.) are skipped
-/// rather than overwritten.
+/// 项目名取当前目录名；`yaoxiang.toml` 已存在 ⇒ `PackageError::ProjectExists`；
+/// 已存在的模板文件（`src/main.yx`、`.gitignore` 等）跳过而不覆盖。
+///
+/// 行为等价于 [`exec_here_in`]`(&std::env::current_dir()?, options)`——把「在哪个目录」
+/// 变成参数之后，测试不再需要改进程级 cwd（`std::env::set_current_dir` 是全进程共享的，
+/// 并行测试下会把同进程其它线程的 `current_dir()` 指到临时目录）。
 pub fn exec_here(options: &InitOptions) -> PackageResult<()> {
-    let cwd = std::env::current_dir()?;
-    let project_name = cwd.file_name().and_then(|n| n.to_str()).ok_or_else(|| {
+    exec_here_in(&std::env::current_dir()?, options)
+}
+
+/// Initialize a new YaoXiang project **in `dir`**（项目根目录已存在）。
+///
+/// `dir` 即项目根：项目名取它的目录名；产物写进它（`yaoxiang.toml` / `yaoxiang.lock` /
+/// `src/{main,lib}.yx` / `tests/` / `.gitignore` / `.yaoxiang/vendor/std/`）。
+/// 不进工作空间登记以外的地方——工作空间发现同样以 `dir` 为根。
+///
+/// 可见性 `pub(crate)`：CLI 只经 [`exec_here`] 调用它，测试直接给临时目录，
+/// 不新增对外 API。
+pub(crate) fn exec_here_in(
+    dir: &Path,
+    options: &InitOptions,
+) -> PackageResult<()> {
+    // 报错文面与 CLI 逐字一致（零行为：`exec_here` 只是把 cwd 递进来）
+    let project_name = dir.file_name().and_then(|n| n.to_str()).ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::NotFound,
             "Cannot determine current directory name",
@@ -141,20 +158,20 @@ pub fn exec_here(options: &InitOptions) -> PackageResult<()> {
     })?;
 
     // Check if project already exists
-    if cwd.join("yaoxiang.toml").exists() {
-        return Err(PackageError::ProjectExists(cwd.clone()));
+    if dir.join("yaoxiang.toml").exists() {
+        return Err(PackageError::ProjectExists(dir.to_path_buf()));
     }
 
     // Create subdirectories (project root already exists)
-    fs::create_dir_all(cwd.join("src"))?;
-    fs::create_dir_all(cwd.join("tests"))?;
+    fs::create_dir_all(dir.join("src"))?;
+    fs::create_dir_all(dir.join("tests"))?;
 
     // Generate yaoxiang.toml (skip if exists — already checked above)
     let manifest = PackageManifest::new(project_name);
-    manifest.save(&cwd)?;
+    manifest.save(dir)?;
 
     // Generate yaoxiang.lock (skip if exists)
-    let lock_path = cwd.join("yaoxiang.lock");
+    let lock_path = dir.join("yaoxiang.lock");
     if lock_path.exists() {
         let lang = current_lang();
         println!(
@@ -167,12 +184,12 @@ pub fn exec_here(options: &InitOptions) -> PackageResult<()> {
         );
     } else {
         let lock = LockFile::new();
-        lock.save(&cwd)?;
+        lock.save(dir)?;
     }
 
     // Generate source file (skip if exists)
     if options.lib {
-        let lib_path = cwd.join("src").join("lib.yx");
+        let lib_path = dir.join("src").join("lib.yx");
         if lib_path.exists() {
             let lang = current_lang();
             println!(
@@ -188,7 +205,7 @@ pub fn exec_here(options: &InitOptions) -> PackageResult<()> {
             fs::write(&lib_path, lib_content)?;
         }
     } else {
-        let main_path = cwd.join("src").join("main.yx");
+        let main_path = dir.join("src").join("main.yx");
         if main_path.exists() {
             let lang = current_lang();
             println!(
@@ -206,7 +223,7 @@ pub fn exec_here(options: &InitOptions) -> PackageResult<()> {
     }
 
     // Generate .gitignore (skip if exists)
-    let gitignore_path = cwd.join(".gitignore");
+    let gitignore_path = dir.join(".gitignore");
     if gitignore_path.exists() {
         let lang = current_lang();
         println!(
@@ -224,7 +241,7 @@ pub fn exec_here(options: &InitOptions) -> PackageResult<()> {
 
     // Generate standard library interface files for LSP
     // RFC-037：统一写入 .yaoxiang/vendor/std/（find_std_interface_file 查找链第一级）
-    let std_dir = cwd.join(".yaoxiang").join("vendor").join("std");
+    let std_dir = dir.join(".yaoxiang").join("vendor").join("std");
     if let Err(e) = crate::std::gen_interfaces::write_interfaces_to_dir(&std_dir) {
         eprintln!("Warning: failed to generate std interface files: {}", e);
     }
@@ -249,10 +266,10 @@ pub fn exec_here(options: &InitOptions) -> PackageResult<()> {
     println!("  tests/");
     println!("  .yaoxiang/vendor/std/");
 
-    // RFC-014c：工作空间内 init（exec_here）同样自动登记（key = [package].name）
-    if let Some(ws_root) = crate::package::workspace::find_workspace_root(&cwd) {
-        if ws_root != cwd {
-            let key = crate::package::workspace::register_member(&ws_root, &cwd, None)?;
+    // RFC-014c：工作空间内 init（exec_here_in）同样自动登记（key = [package].name）
+    if let Some(ws_root) = crate::package::workspace::find_workspace_root(dir) {
+        if ws_root.as_path() != dir {
+            let key = crate::package::workspace::register_member(&ws_root, dir, None)?;
             println!(
                 "{}",
                 t(

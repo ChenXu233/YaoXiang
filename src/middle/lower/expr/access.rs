@@ -3,6 +3,7 @@
 //! 方法体逐字搬自原 `middle/ir/ir_gen.rs`（WBS 7.0.3），语义未改。
 
 use crate::ast::Expr;
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::module::registry::QualifiedNameConcern;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::middle::lower::AstToIrGenerator;
@@ -212,7 +213,7 @@ impl AstToIrGenerator {
             if let Some(full_path) = {
                 let reg = &self.registry;
                 if reg.is_std_submodule(module_name) {
-                    let path = format!("std.{}", field);
+                    let path = DefPath::item("std", field).project();
                     if reg.qualified_name_is(&path, QualifiedNameConcern::NativeName) {
                         Some(path)
                     } else {

@@ -11,6 +11,7 @@
 //! §3.5: MetaType 统一 — UniverseLevel + type_params（RFC-027 §3.2）
 //! §3.8: 泛型实例化
 
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::{MonoType, StructType, TypeConstraintSolver, UniverseLevel};
 use crate::util::diagnostic::push_current_span;
 use crate::util::span::Span;
@@ -24,7 +25,8 @@ fn struct_ty(
     fields: Vec<(&str, MonoType)>,
 ) -> MonoType {
     MonoType::Struct(StructType {
-        name: name.to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+            .expect("type name must be bare and non-empty"),
         fields: fields
             .into_iter()
             .map(
@@ -65,7 +67,8 @@ fn assert_contains_var_positive(
 ) {
     // Struct field
     let s = MonoType::Struct(StructType {
-        name: "W".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("W")))
+            .expect("type name must be bare and non-empty"),
         fields: vec![crate::frontend::core::types::mono::StructFieldInfo {
             name: "v".to_string(),
             ty: MonoType::TypeVar(v),
@@ -93,14 +96,16 @@ fn assert_contains_var_positive(
     // Note: contains_var may not handle Weak - checking what's implemented
     assert!(solver.contains_var(
         &MonoType::Generic {
-            name: "Arc".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Arc")))
+                .expect("type name must be bare and non-empty"),
             args: vec![MonoType::TypeVar(v)]
         },
         v
     ));
     assert!(solver.contains_var(
         &MonoType::Generic {
-            name: "Range".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Range")))
+                .expect("type name must be bare and non-empty"),
             args: vec![MonoType::TypeVar(v)]
         },
         v
@@ -116,7 +121,8 @@ fn assert_contains_var_negative(
     assert!(!solver.contains_var(&MonoType::Int(32), v));
     assert!(!solver.contains_var(
         &MonoType::Enum(crate::frontend::core::types::EnumType {
-            name: "E".to_string(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("E")))
+                .expect("type name must be bare and non-empty"),
             variants: vec![],
         }),
         v
@@ -148,46 +154,54 @@ fn assert_var_containers_resolved(
     );
     // Set with var element
     let set = MonoType::Generic {
-        name: "Set".into(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Set")))
+            .expect("type name must be bare and non-empty"),
         args: vec![MonoType::TypeVar(v)],
     };
     assert_eq!(
         solver.resolve_type(&set),
         MonoType::Generic {
-            name: "Set".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Set")))
+                .expect("type name must be bare and non-empty"),
             args: vec![MonoType::make_string()]
         }
     );
     // Range with var elem_type
     let range = MonoType::Generic {
-        name: "Range".into(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Range")))
+            .expect("type name must be bare and non-empty"),
         args: vec![MonoType::TypeVar(v)],
     };
     assert_eq!(
         solver.resolve_type(&range),
         MonoType::Generic {
-            name: "Range".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Range")))
+                .expect("type name must be bare and non-empty"),
             args: vec![MonoType::make_string()]
         }
     );
     // Arc/Weak with var inner
     assert_eq!(
         solver.resolve_type(&MonoType::Generic {
-            name: "Arc".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Arc")))
+                .expect("type name must be bare and non-empty"),
             args: vec![MonoType::TypeVar(v)]
         }),
         MonoType::Generic {
-            name: "Arc".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Arc")))
+                .expect("type name must be bare and non-empty"),
             args: vec![MonoType::make_string()]
         }
     );
     assert_eq!(
         solver.resolve_type(&MonoType::Generic {
-            name: "Weak".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Weak")))
+                .expect("type name must be bare and non-empty"),
             args: vec![MonoType::TypeVar(v)]
         }),
         MonoType::Generic {
-            name: "Weak".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Weak")))
+                .expect("type name must be bare and non-empty"),
             args: vec![MonoType::make_string()]
         }
     );
@@ -244,46 +258,77 @@ fn assert_composite_types_preserved(
 /// Assert: 内建类型名（Int/Int32/Int8/Float/Float32/Bool/String/Bytes/Void/Char）的解析结果。
 fn assert_builtin_resolutions(solver: &TypeConstraintSolver) {
     assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Int".to_string())),
+        solver.resolve_type(&MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Int")))
+                .expect("type name must be bare and non-empty")
+        )),
         MonoType::Int(64)
     );
     assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Int32".to_string())),
+        solver.resolve_type(&MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Int32")))
+                .expect("type name must be bare and non-empty")
+        )),
         MonoType::Int(32)
     );
     assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Int8".to_string())),
+        solver.resolve_type(&MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Int8")))
+                .expect("type name must be bare and non-empty")
+        )),
         MonoType::Int(8)
     );
     assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Float".to_string())),
+        solver.resolve_type(&MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Float")))
+                .expect("type name must be bare and non-empty")
+        )),
         MonoType::Float(64)
     );
     assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Float32".to_string())),
+        solver.resolve_type(&MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Float32")))
+                .expect("type name must be bare and non-empty")
+        )),
         MonoType::Float(32)
     );
     assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Bool".to_string())),
+        solver.resolve_type(&MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Bool")))
+                .expect("type name must be bare and non-empty")
+        )),
         MonoType::Bool
     );
     assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("String".to_string())),
+        solver.resolve_type(&MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("String")))
+                .expect("type name must be bare and non-empty")
+        )),
         MonoType::make_string()
     );
     assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Bytes".to_string())),
+        solver.resolve_type(&MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Bytes")))
+                .expect("type name must be bare and non-empty")
+        )),
         MonoType::Generic {
-            name: "Bytes".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Bytes")))
+                .expect("type name must be bare and non-empty"),
             args: vec![]
         }
     );
     assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Void".to_string())),
+        solver.resolve_type(&MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Void")))
+                .expect("type name must be bare and non-empty")
+        )),
         MonoType::Void
     );
     assert_eq!(
-        solver.resolve_type(&MonoType::TypeRef("Char".to_string())),
+        solver.resolve_type(&MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Char")))
+                .expect("type name must be bare and non-empty")
+        )),
         MonoType::Char
     );
 }
@@ -305,7 +350,8 @@ fn test_unify_primitives() {
         .is_ok());
     assert!(solver.unify(&MonoType::Char, &MonoType::Char).is_ok());
     let bytes = MonoType::Generic {
-        name: "Bytes".into(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Bytes")))
+            .expect("type name must be bare and non-empty"),
         args: vec![],
     };
     assert!(solver.unify(&bytes, &bytes).is_ok());
@@ -501,7 +547,10 @@ fn test_resolve_builtin_types() {
     assert_builtin_resolutions(&solver);
 
     // Unknown type ref stays as-is
-    let unknown = MonoType::TypeRef("Custom".to_string());
+    let unknown = MonoType::TypeRef(
+        Nominal::flat(AsRef::<str>::as_ref(&("Custom")))
+            .expect("type name must be bare and non-empty"),
+    );
     assert_eq!(solver.resolve_type(&unknown), unknown);
 }
 
@@ -581,7 +630,8 @@ fn test_expand_mut_struct_with_bound_var() {
     let v = solver.new_var().type_var().unwrap();
     let _ = solver.bind(v, &MonoType::Float(64));
     let s = MonoType::Struct(StructType {
-        name: "P".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("P")))
+            .expect("type name must be bare and non-empty"),
         fields: vec![crate::frontend::core::types::mono::StructFieldInfo {
             name: "x".to_string(),
             ty: MonoType::TypeVar(v),
@@ -727,7 +777,10 @@ fn test_has_type_var_ignores_typeref() {
     // Arrange
     let mut solver = s();
     let var = solver.new_var();
-    let aliased = MonoType::make_list(MonoType::TypeRef("Five".to_string()));
+    let aliased = MonoType::make_list(MonoType::TypeRef(
+        Nominal::flat(AsRef::<str>::as_ref(&("Five")))
+            .expect("type name must be bare and non-empty"),
+    ));
     let open = MonoType::make_list(var);
 
     // Act

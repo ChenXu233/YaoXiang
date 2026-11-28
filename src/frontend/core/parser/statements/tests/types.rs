@@ -660,6 +660,223 @@ fn test_type_fn_params_carry_name_and_type_on_same_node() {
     );
 }
 
+// RFC-039 D53 / WBS 8.9.1：参数位形态归一
+// `Param ::= Identifier ':' TypeExpr | TypeExpr`（SPEC type-system §3.5）——
+// 裸标识符按**类型**解析为**未命名带型参数**，不再是「名为 Int 的无标注形参」。
+
+/// 裸类型项 = 未命名带型参数：`(Int, Int) -> Int` 的两个形参各带 Int 类型、
+/// 名字槽为空（名字属于实现，由 lambda 头提供，RFC-007 §47）。
+///
+/// 覆盖条款：SPEC type-system §3.5 / syntax §2.3。
+#[test]
+fn test_bare_type_params_parse_as_unnamed_typed() {
+    // Arrange & Act
+    let (params, return_type) = parse_fn_type_annotation("f: (Int, Int) -> Int = (a, b) => a + b");
+
+    // Assert
+    assert_eq!(params.len(), 2, "应有 2 个形参，got: {params:?}");
+    for (i, param) in params.iter().enumerate() {
+        assert!(
+            !param.is_named(),
+            "第 {} 个形参应是**未命名**参数（裸类型项不再产出名字），got: {param:?}",
+            i + 1
+        );
+        assert!(
+            matches!(param.ty.as_ref(), Some(Type::Name { name, .. }) if name == "Int"),
+            "第 {} 个形参的类型应是 Int（标注必须真的挂在形参上），got: {:?}",
+            i + 1,
+            param.ty
+        );
+    }
+    assert!(
+        matches!(&return_type, Type::Name { name, .. } if name == "Int"),
+        "返回类型应为 Int，got: {return_type:?}"
+    );
+}
+
+/// 混合形态：`(p: Point, Surface)` —— 具名项与裸类型项按位共存。
+#[test]
+fn test_mixed_named_and_bare_params_parse() {
+    // Arrange & Act
+    let (params, _) = parse_fn_type_annotation("f: (p: Point, Surface) -> Int = (p, s) => 1");
+
+    // Assert
+    assert_eq!(params.len(), 2, "应有 2 个形参，got: {params:?}");
+    assert_eq!(
+        params[0].name, "p",
+        "第 1 位是具名参数，got: {:?}",
+        params[0]
+    );
+    assert!(
+        matches!(params[0].ty.as_ref(), Some(Type::Name { name, .. }) if name == "Point"),
+        "具名参数的类型应是 Point，got: {:?}",
+        params[0].ty
+    );
+    assert!(
+        !params[1].is_named(),
+        "第 2 位是裸类型项（未命名），got: {:?}",
+        params[1]
+    );
+    assert!(
+        matches!(params[1].ty.as_ref(), Some(Type::Name { name, .. }) if name == "Surface"),
+        "第 2 位的类型应是 Surface，got: {:?}",
+        params[1].ty
+    );
+}
+
+/// `mut` 与两种形参项组合：`(mut Int)`（未命名）与 `(mut p: Point)`（具名）。
+#[test]
+fn test_mut_bare_and_mut_named_params_parse() {
+    // Arrange & Act
+    let (bare, _) = parse_fn_type_annotation("f: (mut Int) -> Int = (x) => x");
+    let (named, _) = parse_fn_type_annotation("g: (mut p: Point) -> Int = (p) => 1");
+
+    // Assert
+    assert!(
+        bare[0].is_mut,
+        "`mut Int` 的 is_mut 必须为真，got: {:?}",
+        bare[0]
+    );
+    assert!(
+        !bare[0].is_named(),
+        "`mut Int` 仍是未命名参数，got: {:?}",
+        bare[0]
+    );
+    assert!(
+        matches!(bare[0].ty.as_ref(), Some(Type::Name { name, .. }) if name == "Int"),
+        "`mut Int` 的类型应是 Int，got: {:?}",
+        bare[0].ty
+    );
+    assert!(
+        named[0].is_mut,
+        "`mut p: Point` 的 is_mut 必须为真，got: {:?}",
+        named[0]
+    );
+    assert_eq!(named[0].name, "p", "具名形参名应保留，got: {:?}", named[0]);
+    assert!(
+        matches!(named[0].ty.as_ref(), Some(Type::Name { name, .. }) if name == "Point"),
+        "具名形参类型应是 Point，got: {:?}",
+        named[0].ty
+    );
+}
+
+/// 柯里组：每一组都按同一产生式解析，裸类型项在组内同样是未命名带型参数。
+#[test]
+fn test_curry_groups_carry_unnamed_typed_params() {
+    // Arrange & Act
+    let (params, return_type) = parse_fn_type_annotation("f: (Int) -> (String) -> Int = (a) => 1");
+
+    // Assert
+    assert_eq!(params.len(), 1, "首组应有 1 个形参，got: {params:?}");
+    assert!(
+        !params[0].is_named(),
+        "首组形参应是未命名参数，got: {:?}",
+        params[0]
+    );
+    let Type::Fn {
+        params: inner_params,
+        return_type: inner_ret,
+    } = &return_type
+    else {
+        panic!("柯里组应把后续形参组解析为嵌套 Type::Fn，got: {return_type:?}");
+    };
+    assert_eq!(
+        inner_params.len(),
+        1,
+        "后续组应有 1 个形参，got: {inner_params:?}"
+    );
+    assert!(
+        !inner_params[0].is_named(),
+        "后续组的裸类型项同样是未命名参数，got: {:?}",
+        inner_params[0]
+    );
+    assert!(
+        matches!(inner_params[0].ty.as_ref(), Some(Type::Name { name, .. }) if name == "String"),
+        "后续组形参类型应是 String，got: {:?}",
+        inner_params[0].ty
+    );
+    assert!(
+        matches!(inner_ret.as_ref(), Type::Name { name, .. } if name == "Int"),
+        "最内层返回类型应是 Int，got: {inner_ret:?}"
+    );
+}
+
+/// 括号返回位（RFC-004）：`-> ((Int) -> Int)` 的内层形参组同样走 D53 产生式。
+///
+/// 顺带钉住既有 E0010 误报的消失：括号返回位只由「配平后是箭头」判定，
+/// 元组返回位 `-> ((Int, Int))` 不再误入内层解析（见下一条对照）。
+#[test]
+fn test_paren_return_inner_group_carries_unnamed_typed_param() {
+    // Arrange & Act
+    let (params, return_type) = parse_fn_type_annotation("f: () -> ((Int) -> Int) = (x) => x");
+
+    // Assert
+    assert!(params.is_empty(), "外层函数没有形参，got: {params:?}");
+    let Type::Paren(inner) = &return_type else {
+        panic!("括号返回位应保留为 Type::Paren（RFC-004 链条终止），got: {return_type:?}");
+    };
+    let Type::Fn {
+        params: inner_params,
+        ..
+    } = inner.as_ref()
+    else {
+        panic!("括号内应是函数类型，got: {inner:?}");
+    };
+    assert_eq!(
+        inner_params.len(),
+        1,
+        "内层应有 1 个形参，got: {inner_params:?}"
+    );
+    assert!(
+        !inner_params[0].is_named(),
+        "内层裸类型项应是未命名参数，got: {:?}",
+        inner_params[0]
+    );
+    assert!(
+        matches!(inner_params[0].ty.as_ref(), Some(Type::Name { name, .. }) if name == "Int"),
+        "内层形参类型应是 Int，got: {:?}",
+        inner_params[0].ty
+    );
+}
+
+/// 对照：`-> ((Int, Int))` 是**元组**返回位，不是括号返回位——解析必须零诊断，
+/// 且返回类型是 `Paren(Tuple)`。
+#[test]
+fn test_tuple_paren_return_is_not_treated_as_fn_group() {
+    // Arrange & Act
+    let (_, return_type) = parse_fn_type_annotation("f: () -> ((Int, Int)) = () => (1, 2)");
+
+    // Assert
+    let Type::Paren(inner) = &return_type else {
+        panic!("元组返回位的括号应保留为 Type::Paren，got: {return_type:?}");
+    };
+    assert!(
+        matches!(inner.as_ref(), Type::Tuple(items) if items.len() == 2),
+        "括号内应是二元组类型，got: {inner:?}"
+    );
+}
+
+/// 裸类型项接受**任意 TypeExpr**（不只是标识符）：`(Array(Int)) -> Int` 是
+/// 未命名带型参数，不再是「已移除的旧签名」拒绝面。
+#[test]
+fn test_bare_type_param_accepts_type_expression() {
+    // Arrange & Act
+    let (params, _) = parse_fn_type_annotation("f: (Array(Int)) -> Int = (xs) => 0");
+
+    // Assert
+    assert_eq!(params.len(), 1, "应有 1 个形参，got: {params:?}");
+    assert!(
+        !params[0].is_named(),
+        "构造器类型项仍是未命名参数，got: {:?}",
+        params[0]
+    );
+    assert!(
+        matches!(params[0].ty.as_ref(), Some(Type::Generic { name, args, .. }) if name == "Array" && args.len() == 1),
+        "形参类型应是 Array(Int)，got: {:?}",
+        params[0].ty
+    );
+}
+
 // 记录类型体里的匿名函数绑定 `name: FnType[pos] = lambda`（WBS 6.6.7）
 //
 // 形参与返回类型由注解提供。注解（剥掉透明的 `Paren` / `NamedParen` 后）是函数类型时

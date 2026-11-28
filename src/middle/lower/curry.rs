@@ -46,10 +46,11 @@ impl AstToIrGenerator {
                     return_type,
                 } => {
                     let start = cursor;
-                    // 运行期形参位只数**带类型**的形参（基线口径）：参数位的
-                    // 裸标识符（`(Int64)`→name="Int64"、ty=None）不占运行期槽位。
-                    // 它是否算参数由 WBS 8.9.1（参数位形态归一）裁决，6.5 只做
-                    // 零行为差分的表示重塑（锁定测试：middle/ir/tests/fn_param_slots.rs）。
+                    // 运行期形参位只数**带类型**的形参：D53（WBS 8.9.1）归一后
+                    // 裸类型项（`(Int64)`）按类型解析、带 `ty`，因此占位；
+                    // `ty = None` 只剩无标注值形参（lambda 头 / HM 推断位），仍不占位
+                    //（口径单点：`Param::occupies_runtime_param_slot`，
+                    // 锁定说明见 middle/ir/tests/fn_param_slots.rs）。
                     let runtime_param_count = type_params
                         .iter()
                         .filter(|p| p.occupies_runtime_param_slot())
@@ -260,7 +261,6 @@ impl AstToIrGenerator {
         frame.register_curry_layer_bindings(env_params, &layer.params, env_count);
         // curry 层形参全部来自声明注解本身（层参数由 `split_curry` 从注解切出），
         // 无需声明补位。
-        frame.note_param_written_types(&layer.params, &[]);
 
         // next_temp 起始 = 参数总数
         frame.next_temp = env_count + layer.params.len();

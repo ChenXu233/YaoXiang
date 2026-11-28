@@ -21,6 +21,7 @@ use crate::frontend::core::types::mono::StructType;
 use crate::frontend::core::types::{MonoType, PolyType, TypeVar};
 
 use super::environment::{GenericTypeDef, InterfaceImplEntry, TypeEnvironment};
+use crate::frontend::core::types::identity::Nominal;
 
 /// 运算符接口规格（Layer 2 声明 + Layer 0 方法名映射）
 pub struct OperatorInterfaceSpec {
@@ -91,7 +92,12 @@ pub fn try_member_signature(method: &str) -> MonoType {
         mutable: false,
         inner: Box::new(t),
     };
-    let p = |n: &str| MonoType::TypeRef(n.to_string());
+    let p = |n: &str| {
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&(n)))
+                .expect("type name must be bare and non-empty"),
+        )
+    };
     match method {
         "is_failure" => MonoType::Fn {
             params: vec![borrow(p("Self"))],
@@ -174,7 +180,12 @@ pub fn member_signature(spec: &OperatorInterfaceSpec) -> MonoType {
         mutable: false,
         inner: Box::new(t),
     };
-    let param = |n: &str| MonoType::TypeRef(n.to_string());
+    let param = |n: &str| {
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&(n)))
+                .expect("type name must be bare and non-empty"),
+        )
+    };
     let params = match spec.name {
         "Equal" => vec![borrow(param("Self")), borrow(param("R"))],
         "Index" => vec![borrow(param("Self")), borrow(param("Key"))],
@@ -289,6 +300,13 @@ pub struct OperatorDispatch {
     pub type_name: String,
     /// 派发方法名（如 "equal"）
     pub method: String,
+    /// **IR 最终函数名**（WBS 4.9.10 D-8）：`{module}.{Type}.{method}` 或单文件裸名。
+    ///
+    /// 由 typecheck 在记录派发点时按接收者**身份**（D-6）定名——IR 生成直接用它，
+    /// 不再在 lower 侧按短名二次查表（那等于按名字猜单元）。与 `type_name`/
+    /// `method` 的分工：后两者是**归因**口径（W1005 名字组、泛型特化展开），
+    /// 本条是**调用名**口径（D-8：必须是 IR 函数表里真实存在的名字）。
+    pub dispatch_name: String,
     /// 结果取反（`!=` 派发到 equal 后需 Not）
     pub negate: bool,
 }
@@ -296,9 +314,9 @@ pub struct OperatorDispatch {
 /// 名义头提取：Struct/TypeRef/Generic 取名字；内建标量无名字返回 None。
 fn type_head_name(ty: &MonoType) -> Option<&str> {
     match ty {
-        MonoType::Struct(s) => Some(&s.name),
-        MonoType::TypeRef(n) => Some(n),
-        MonoType::Generic { name, .. } => Some(name),
+        MonoType::Struct(s) => Some(s.name.bare()),
+        MonoType::TypeRef(n) => Some(n.bare()),
+        MonoType::Generic { name, .. } => Some(name.bare()),
         _ => None,
     }
 }
@@ -313,7 +331,8 @@ fn empty_struct(
     fields: Vec<(String, MonoType)>,
 ) -> StructType {
     StructType {
-        name: name.to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+            .expect("type name must be bare and non-empty"),
         fields: fields
             .into_iter()
             .map(
@@ -423,7 +442,7 @@ fn bind_pattern_args(
 ) {
     match (shape, actual) {
         (MonoType::TypeRef(n), actual) => {
-            subst.insert(n.clone(), actual.clone());
+            subst.insert(n.clone().bare().to_string(), actual.clone());
         }
         (
             MonoType::Generic { args, .. },
@@ -532,13 +551,13 @@ fn bind_template_self(
     let MonoType::Generic { name, args } = self_shape else {
         return None;
     };
-    let def = generic_type_defs.get(name)?.clone();
+    let def = generic_type_defs.get(name.bare())?.clone();
     let mut subst: HashMap<String, MonoType> = HashMap::new();
     match scrutinee {
         MonoType::Generic { name: n2, args: a2 } if n2 == name && a2.len() == args.len() => {
             for (shape_arg, actual) in args.iter().zip(a2.iter()) {
                 if let MonoType::TypeRef(pn) = shape_arg {
-                    subst.insert(pn.clone(), actual.clone());
+                    subst.insert(pn.clone().bare().to_string(), actual.clone());
                 }
             }
         }
@@ -559,7 +578,7 @@ fn bind_template_self(
             }
             for (shape_arg, fv) in args.iter().zip(fresh.iter()) {
                 if let MonoType::TypeRef(pn) = shape_arg {
-                    subst.insert(pn.clone(), solver.resolve_type(fv));
+                    subst.insert(pn.clone().bare().to_string(), solver.resolve_type(fv));
                 }
             }
         }
@@ -682,22 +701,35 @@ mod tests {
         // 登记侧 TypeRef("Point") 与查询侧 Struct(Point) 名义相同应命中
         let point_struct = MonoType::Struct(empty_struct("Point", Vec::new()));
         assert!(args_compatible(
-            &MonoType::TypeRef("Point".into()),
+            &MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Point")))
+                    .expect("type name must be bare and non-empty")
+            ),
             &point_struct
         ));
         // Generic 递归：List(Int) vs List(Int)
         let li = |t: MonoType| MonoType::Generic {
-            name: "List".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("List")))
+                .expect("type name must be bare and non-empty"),
             args: vec![t],
         };
         assert!(args_compatible(
-            &li(MonoType::TypeRef("Point".into())),
+            &li(MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Point")))
+                    .expect("type name must be bare and non-empty")
+            )),
             &li(point_struct),
         ));
         // 名字不同不命中
         assert!(!args_compatible(
-            &MonoType::TypeRef("Point".into()),
-            &MonoType::TypeRef("Vec".into()),
+            &MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Point")))
+                    .expect("type name must be bare and non-empty")
+            ),
+            &MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Vec")))
+                    .expect("type name must be bare and non-empty")
+            ),
         ));
     }
 

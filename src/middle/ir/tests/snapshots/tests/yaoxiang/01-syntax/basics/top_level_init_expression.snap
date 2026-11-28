@@ -12,8 +12,8 @@ module
     locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
-    value v1: TypeVar(TypeVar(47)) @block0
-    value v2: TypeVar(TypeVar(47)) @block0
+    value v1: Int(64) @block0
+    value v2: Int(64) @block0
     value v3: Int(64) @block0
     Load %0 <- arg%0
     Load v2 <- %0

@@ -10,3 +10,5 @@ mod integration;
 mod parser_state;
 mod patterns;
 mod probe;
+mod syntax_surface;
+mod wiring;

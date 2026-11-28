@@ -23,6 +23,7 @@ use super::AstToIrGenerator;
 use crate::ast;
 use crate::ast::Expr;
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
 
@@ -305,7 +306,13 @@ impl AstToIrGenerator {
             let payload_reg = self.next_temp_reg();
             self.generate_expr_ir_inner(expr, payload_reg.clone(), instructions, constants, env)?;
             // 包装点的结果类型 = 接口类型（值表用；不取具体实参类型）。
-            self.note_value_type(&result_reg, MonoType::TypeRef(iface.clone()));
+            self.note_value_type(
+                &result_reg,
+                MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&(iface.clone())))
+                        .expect("type name must be bare and non-empty"),
+                ),
+            );
             instructions.push(Instruction::CreateVariant {
                 dst: result_reg.clone(),
                 group,

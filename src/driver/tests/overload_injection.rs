@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 
 use crate::driver::{Driver, DriverError, DriverOutcome, Program, ProgramKind, Unit};
 use crate::frontend::config::CompileConfig;
-use crate::frontend::core::sema::environment::TypeEnvironment;
+use crate::frontend::core::sema::environment::{method_ir_name, method_ordinal, TypeEnvironment};
 use crate::frontend::core::types::MonoType;
 
 /// 合法 manifest（[package] 可解析 ⇒ 角色上下文可用）；入口 main.yx
@@ -119,11 +119,13 @@ fn test_method_overload_triple_stays_aligned_across_registration_and_injection()
         params: vec![MonoType::make_string()],
         return_type: Box::new(MonoType::Float(64)),
     };
-    let _ = source.add_method_overload_with_params("Temp.to", first.clone(), vec!["x".to_string()]);
     let _ =
-        source.add_method_overload_with_params("Temp.to", second.clone(), vec!["s".to_string()]);
+        source.add_method_overload_with_params("Temp", "to", first.clone(), vec!["x".to_string()]);
+    let _ =
+        source.add_method_overload_with_params("Temp", "to", second.clone(), vec!["s".to_string()]);
     // 同签名重复登记不占新声明序（既有去重口径不得因改写而变）
-    let _ = source.add_method_overload_with_params("Temp.to", first.clone(), vec!["x".to_string()]);
+    let _ =
+        source.add_method_overload_with_params("Temp", "to", first.clone(), vec!["x".to_string()]);
 
     // Act：快照（跨单元通路的出口）→ 注入另一个环境（通路的入口）
     let snapshot = source.method_overload_snapshot();
@@ -132,18 +134,33 @@ fn test_method_overload_triple_stays_aligned_across_registration_and_injection()
 
     // Assert：逐位对齐——候选序 = 声明序、混编名 0=裸名其后 #序、形参名同位
     let (key, group) = &snapshot[0];
-    assert_eq!(key, "Temp.to", "快照键 = 登记键，实际: {key}");
+    assert_eq!(
+        key.project(),
+        "Temp.to",
+        "快照键 = 登记键的投影（单文件形态无模块键），实际: {}",
+        key.project()
+    );
     assert_eq!(
         group.candidates,
         vec![first, second],
         "候选必须按声明序排列（重复登记不得占新序），实际: {:?}",
         group.candidates
     );
+    // #序 是**定义侧混编后缀**（D-8）：由序位拼出，消费端用同一 helper 读回
+    let names: Vec<String> = (0..group.candidates.len())
+        .map(|i| method_ir_name(key, i))
+        .collect();
     assert_eq!(
-        group.ir_names,
+        names,
         vec!["Temp.to".to_string(), "Temp.to#1".to_string()],
-        "混编名必须与候选同序（0=裸名、其后 #序），实际: {:?}",
-        group.ir_names
+        "混编名必须与候选同序（0=裸名、其后 #序），实际: {names:?}"
+    );
+    assert_eq!(
+        (1..group.candidates.len())
+            .map(|i| method_ordinal(&names[i], key))
+            .collect::<Vec<_>>(),
+        vec![Some(1)],
+        "混编后缀必须能读回同一序位（生成与读回同一语法）"
     );
     assert_eq!(
         group.param_names,

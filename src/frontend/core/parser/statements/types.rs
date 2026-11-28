@@ -236,128 +236,76 @@ fn parse_type_annotation_nested(
             })
         }
         Some(TokenKind::LParen) => {
-            // This could be either:
-            // 1. A tuple type: (T, U, V)
-            // 2. A function type: (Params) -> ReturnType where Params may have names like (value: T)
-            // We need to look ahead to check for ->
-
-            let saved = state.save_position();
-
-            // Try to parse as the parameter list of a function type
-            state.bump(); // consume '('
-
-            // Special case: check if first token is Identifier followed by Colon
-            // This indicates named parameters like (value: T, x: Int)
-            let has_named_params =
-                if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
-                    matches!(state.peek().map(|t| &t.kind), Some(TokenKind::Colon))
+            // 形态分流（唯一判据 = 括号配平后是不是 `->`）：
+            // 1. 一组形参 + 箭头 ⇒ 函数类型——与**声明签名**共用同一个产生式
+            //    （`Param ::= Identifier ':' TypeExpr | TypeExpr`，RFC-039 D53）；
+            // 2. 其余 ⇒ 元组 / 完整类型括号 / 返回位具名括号（RFC-004 / RFC-027 §3）。
+            //
+            // 此处已在类型递归闸内（本函数由 `parse_type_annotation_with` 计数），
+            // 故直接进闸内本体，不二次计数。
+            if at_fn_param_group(state) {
+                // 形参位口径随所在类型位走：普通类型位用签名口径（类型必需、
+                // 常量续接照常）；`as` 目标位（`allow_const_expr == false`，D1）
+                // 用宽容 + 禁续接口径，否则 `x as (a: Int) -> Int * y` 的
+                // `* y` 会被目标类型吞成返回位常量表达式。
+                let mode = if allow_const_expr {
+                    ParamTyMode::Signature
                 } else {
-                    false
+                    ParamTyMode::SignatureNoConst
                 };
-
-            let mut param_types = Vec::new();
-            // RFC-027 §3：具名参数的**名字**不再无条件丢弃——单具名形态
-            // （`(r: IsPositive(r + 1))`，括号后不跟 `->`）声明的正是**返回形式参数名**，
-            // 类型检查器据此按名识别返回点义务（见 `Type::NamedParen`）。
-            let mut named_params: Vec<(String, Span)> = Vec::new();
-
-            if has_named_params {
-                // Parse named parameters: (name: Type, name: Type, ...) -> ReturnType
-                while !state.at(&TokenKind::RParen) && !state.at_end() {
-                    let Some(TokenKind::Identifier(param_name)) = state.current().map(|t| &t.kind)
-                    else {
-                        break;
-                    };
-                    let param_name = param_name.clone();
-                    let param_name_span = state.span();
-                    state.bump(); // consume name
-
-                    // Expect colon and type
-                    if !state.skip(&TokenKind::Colon) {
-                        break;
-                    }
-
-                    // Parse the type
-                    if let Some(ty) = parse_type_annotation_with(state, allow_const_expr) {
-                        named_params.push((param_name, param_name_span));
-                        param_types.push(ty);
-                    } else {
-                        break;
-                    }
-
-                    // Skip comma if present
-                    if !state.skip(&TokenKind::Comma) {
-                        break;
-                    }
-                }
-            } else {
-                // Parse types without names: (Type, Type, ...) -> ReturnType
-                if !state.at(&TokenKind::RParen) {
-                    while let Some(ty) = parse_type_annotation_with(state, allow_const_expr) {
-                        param_types.push(ty);
-
-                        if !state.skip(&TokenKind::Comma) {
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if !state.skip(&TokenKind::RParen) {
-                // 深度闸拒绝弹出期（issue #540 修复轮）：元组回退重试同样只
-                // 会以错位起点重扫残骸——直退，残骸交给语句层的 drain。
-                if state.is_depth_rejected() {
-                    return None;
-                }
-                state.restore_position(saved);
-                return parse_tuple_type(state);
-            }
-
-            // Check if followed by ->
-            if state.at(&TokenKind::Arrow) {
-                state.bump(); // consume '->'
-                let return_type = Box::new(parse_type_annotation_with(state, allow_const_expr)?);
-                // 名字与类型同栖（RFC-039 6.8.1）：具名参数位带真实名字，
-                // 无名位置（纯类型列表）合成匿名形参——名字不再另存。
-                let params: Vec<Param> = param_types
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, ty)| match named_params.get(i) {
-                        Some((name, span)) => Param {
-                            name: name.clone(),
-                            ty: Some(ty),
-                            is_mut: false,
-                            quantity: None,
-                            span: *span,
-                        },
-                        None => Param::from_type(ty),
-                    })
-                    .collect();
+                let (params, return_type) = parse_fn_type_with_names_nested(state, mode)?;
                 return Some(Type::Fn {
                     params,
                     return_type,
                 });
             }
 
-            // Not a function type, just a tuple
-            if param_types.len() == 1 {
-                let inner = Box::new(param_types.pop().unwrap());
-                match named_params.first() {
+            let saved = state.save_position();
+            state.bump(); // consume '('
+
+            // 非箭头形态仍复用**同一个**形参项产生式（探针口径）：多项元组
+            // 丢弃名字（元组元素没有形参名），单项具名 = 返回位精化 binder。
+            // 探针口径不消费 `mut`、不报类型诊断——失败一律回退元组解析。
+            let mut params = match parse_param_items(state, ParamTyMode::Probe { allow_const_expr })
+            {
+                Some(params) if state.skip(&TokenKind::RParen) => params,
+                _ => {
+                    // 深度闸拒绝弹出期（issue #540 修复轮）：元组回退重试同样只
+                    // 会以错位起点重扫残骸——直退，残骸交给语句层的 drain。
+                    if state.is_depth_rejected() {
+                        return None;
+                    }
+                    state.restore_position(saved);
+                    return parse_tuple_type(state);
+                }
+            };
+
+            // Not a function type, just a tuple / paren
+            if params.len() == 1 {
+                let param = params.pop().expect("len == 1");
+                let named = param.is_named();
+                let param_span = param.span;
+                let inner = Box::new(param.ty?);
+                if named {
                     // 单具名参数（`(r: IsPositive(r + 1))`）= RFC-027 §3 的返回位
                     // 具名精化：binder 名必须留存（其余语义与 `Paren` 同构）。
-                    Some((param, param_span)) => Some(Type::NamedParen {
-                        param: param.clone(),
-                        param_span: *param_span,
+                    Some(Type::NamedParen {
+                        param: param.name,
+                        param_span,
                         inner,
-                    }),
+                    })
+                } else {
                     // 单元素括号 = 完整类型（RFC-004 柯里化语义）：
                     // 保留为 `Paren`，让 split_curry 知道此处链条终止。
                     // 此前直接剥掉，导致 `() -> ((a:Int)->Int)` 与
                     // `() -> (a:Int)->Int` 解析成同一个 AST（括号无意义）。
-                    None => Some(Type::Paren(inner)),
+                    Some(Type::Paren(inner))
                 }
             } else {
-                Some(Type::Tuple(param_types))
+                // 元组元素没有形参名：名字槽丢弃，只留类型。
+                Some(Type::Tuple(
+                    params.into_iter().filter_map(|p| p.ty).collect(),
+                ))
             }
         }
         Some(TokenKind::LBrace) => parse_struct_type(state),
@@ -545,6 +493,143 @@ fn parse_constructor_type(
     })
 }
 
+/// 形参项 / 形参列表里**类型子表达式**的解析口径。
+///
+/// 私有实现口径，不是新概念：三态各对应既有的一个类型解析入口
+/// （`parse_type_annotation_required` / `parse_type_annotation_with` 的两种开关）。
+#[derive(Clone, Copy)]
+pub(super) enum ParamTyMode {
+    /// 签名位（声明签名 / 箭头命中的类型位）：类型必需（失败报 E0010 并消费
+    /// 肇事 token），允许类型级常量表达式续接（`Array(Int, N + 1)`）。
+    Signature,
+    /// `as` 目标类型里的形参位：类型宽容（失败静默，由调用方回退），且
+    /// **禁止**常量表达式续接——D1：`x as (a: Int) -> Int * y` 的 `* y` 属值级，
+    /// 不得被目标类型吞掉。
+    SignatureNoConst,
+    /// 类型位试探（元组 / 返回位具名括号）：不消费 `mut`、失败静默；
+    /// 常量续接按字段开关（与 `parse_type_annotation_with` 同一语义）。
+    Probe { allow_const_expr: bool },
+}
+
+impl ParamTyMode {
+    fn parse(
+        self,
+        state: &mut ParserState<'_>,
+    ) -> Option<Type> {
+        match self {
+            Self::Signature => parse_type_annotation_required(state),
+            Self::SignatureNoConst => parse_type_annotation_with(state, false),
+            Self::Probe { allow_const_expr } => parse_type_annotation_with(state, allow_const_expr),
+        }
+    }
+
+    /// 是否在**形参位**（形参列表项）：只有形参位消费 `mut` 与 `+` 约束。
+    /// 元组/括号类型位的 `(mut T, U)`、`(r: A + B)` 不是形参表，保持既有否定。
+    fn is_signature(self) -> bool {
+        matches!(self, Self::Signature | Self::SignatureNoConst)
+    }
+}
+
+/// 当前位置是否是「一组形参 + 箭头」：`(` 且配平后紧跟 `->`。
+///
+/// **唯一实现点**。三处前瞻共用：类型位的 `(` 分支、柯里组
+/// （`(a: Int) -> (Int) -> Int` 的返回位）、括号返回位
+/// （`-> ((a: Int) -> Int)`）。判据只问「配平后是不是箭头」——形参项是
+/// **命名**（`a: Int`）还是**裸类型**（`Int`）不参与判定：D53 之后两者都是形参，
+/// 按首 token 形态分流会让 `(Int, Int) -> Int` 与 `(List(Int)) -> Int` 走不同分支。
+pub(super) fn at_fn_param_group(state: &mut ParserState<'_>) -> bool {
+    if !state.at(&TokenKind::LParen) {
+        return false;
+    }
+    let saved = state.save_position();
+    state.skip_balanced_parens();
+    let after_is_arrow = state.at(&TokenKind::Arrow);
+    state.restore_position(saved);
+    after_is_arrow
+}
+
+/// 单个形参项（**唯一**产生式实现，RFC-039 D53 / SPEC type-system §3.5）：
+///
+/// ```text
+/// Param ::= 'mut'? Identifier ':' TypeExpr    // 带名：名字进契约
+///         | 'mut'? TypeExpr                   // 未命名带型参数：约束按位置生效
+/// ```
+///
+/// 分流判据只有「标识符后面跟不跟 `:`」这一处。裸类型项产出
+/// `name = ""` 的形参（[`Param::anonymous`] 的同一形态）——名字属于实现
+/// （lambda 头自带，RFC-007 §47），AST 不伪造名字。
+///
+/// `mut` 只在**形参位**口径（`Signature` / `SignatureNoConst`）消费：`(mut x: Int)`
+/// 是形参，而元组/括号**类型位**的 `(mut T, U)` 不是形参表，保持既有
+/// 「`mut` 不是类型起始」的语法否定。
+fn parse_param_item(
+    state: &mut ParserState<'_>,
+    mode: ParamTyMode,
+) -> Option<Param> {
+    let span = state.span();
+    let is_mut = if mode.is_signature() {
+        state.skip(&TokenKind::KwMut)
+    } else {
+        false
+    };
+
+    if let Some(TokenKind::Identifier(name)) = state.current().map(|t| &t.kind) {
+        if matches!(state.peek().map(|t| &t.kind), Some(TokenKind::Colon)) {
+            let name = name.clone();
+            state.bump(); // 形参名
+            state.skip(&TokenKind::Colon);
+            let parsed_type = mode.parse(state)?;
+            let ty = if mode.is_signature() && state.at(&TokenKind::Plus) {
+                // `T: Clone + Add`：多约束用 `Type::Tuple` 容器承载，
+                // `extract_generic_params` 会解包成多条约束（既有口径，未改）。
+                let mut all_types = vec![parsed_type];
+                while state.skip(&TokenKind::Plus) {
+                    if let Some(extra_type) = mode.parse(state) {
+                        all_types.push(extra_type);
+                    } else {
+                        break;
+                    }
+                }
+                Type::Tuple(all_types)
+            } else {
+                wrap_literal_type_if_needed(name.clone(), parsed_type)
+            };
+            return Some(Param {
+                name,
+                ty: Some(ty),
+                is_mut,
+                quantity: None,
+                span,
+            });
+        }
+    }
+
+    // 裸类型项：未命名带型参数（类型约束按位置生效，名字由实现提供）。
+    let ty = mode.parse(state)?;
+    Some(Param {
+        name: String::new(),
+        ty: Some(ty),
+        is_mut,
+        quantity: None,
+        span,
+    })
+}
+
+/// 形参列表（`(` 已消费，`)` 留给调用方）：`Param (',' Param)* ','?`。
+fn parse_param_items(
+    state: &mut ParserState<'_>,
+    mode: ParamTyMode,
+) -> Option<Vec<Param>> {
+    let mut params = Vec::new();
+    while !state.at(&TokenKind::RParen) && !state.at_end() {
+        params.push(parse_param_item(state, mode)?);
+        if !state.skip(&TokenKind::Comma) {
+            break;
+        }
+    }
+    Some(params)
+}
+
 /// Parse function type with parameter names: `(a: Int, b: Int) -> Int`
 /// Returns (Vec<Param>, return_type)
 /// This is for RFC-010 unified syntax: `name: (a: Int, b: Int) -> Ret = body`
@@ -554,85 +639,31 @@ fn parse_constructor_type(
 /// 返回位的自递归（`-> (a: Int) -> (b: Int) -> …`）不经
 /// [`parse_type_annotation`]，须在本入口过同一 enter/exit 计数——否则深
 /// 柯里链是真递归栈膨胀的绕闸入口。
-pub fn parse_fn_type_with_names(state: &mut ParserState<'_>) -> Option<(Vec<Param>, Box<Type>)> {
+pub(super) fn parse_fn_type_with_names(
+    state: &mut ParserState<'_>,
+    mode: ParamTyMode,
+) -> Option<(Vec<Param>, Box<Type>)> {
     if !state.enter_nested_parse() {
         return None;
     }
-    let result = parse_fn_type_with_names_nested(state);
+    let result = parse_fn_type_with_names_nested(state, mode);
     state.exit_nested_parse();
     result
 }
 
-/// [`parse_fn_type_with_names`] 的闸内本体（原实现逐字保留）。
-fn parse_fn_type_with_names_nested(state: &mut ParserState<'_>) -> Option<(Vec<Param>, Box<Type>)> {
+/// [`parse_fn_type_with_names`] 的闸内本体。
+///
+/// 形参项的产生式在 [`parse_param_item`]（唯一实现）：`Param ::= Identifier ':' TypeExpr | TypeExpr`
+/// （RFC-039 D53）。此处只负责列表与尾部的 `)` / `->` / 返回位。
+fn parse_fn_type_with_names_nested(
+    state: &mut ParserState<'_>,
+    mode: ParamTyMode,
+) -> Option<(Vec<Param>, Box<Type>)> {
     if !state.expect(&TokenKind::LParen) {
         return None;
     }
 
-    let mut params = Vec::new();
-
-    // Check for empty params: ()
-    if !state.at(&TokenKind::RParen) {
-        while !state.at(&TokenKind::RParen) && !state.at_end() {
-            // Skip comma between params
-            if !params.is_empty() && !state.skip(&TokenKind::Comma) {
-                break;
-            }
-
-            let param_span = state.span();
-
-            // Check for mut keyword
-            let is_mut = state.skip(&TokenKind::KwMut);
-
-            // Parse parameter name
-            let name = match state.current().map(|t| &t.kind) {
-                Some(TokenKind::Identifier(n)) => n.clone(),
-                _ => break,
-            };
-            state.bump();
-
-            // RFC-007: 类型标注是可选的（HM 推断）
-            // 检查是否有冒号和类型
-            let ty = if state.skip(&TokenKind::Colon) {
-                // Parse type annotation
-                // Check if this is a literal type (const parameter reference)
-                // e.g., (n: n) where n is a const generic parameter
-                // 冒号后类型必需：用严格版，非法 token 报 E0010 而非静默变无标注参数
-                // （#250 残余缺口：`(a: "hello")` 曾被静默吞掉）
-                let parsed_type = parse_type_annotation_required(state)?;
-
-                // Handle `+` constraint syntax: T: Clone + Add
-                // Collect all constraint types separated by `+`
-
-                if state.at(&TokenKind::Plus) {
-                    let mut all_types = vec![parsed_type];
-                    while state.skip(&TokenKind::Plus) {
-                        if let Some(extra_type) = parse_type_annotation(state) {
-                            all_types.push(extra_type);
-                        } else {
-                            break;
-                        }
-                    }
-                    // Use Type::Tuple as a container for multiple constraints.
-                    // extract_generic_params will unpack this into multiple constraints.
-                    Some(Type::Tuple(all_types))
-                } else {
-                    Some(wrap_literal_type_if_needed(name.clone(), parsed_type))
-                }
-            } else {
-                // 无类型标注，HM 推断
-                None
-            };
-
-            params.push(Param {
-                name,
-                ty,
-                is_mut,
-                quantity: None,
-                span: param_span,
-            });
-        }
-    }
+    let params = parse_param_items(state, mode)?;
 
     if !state.expect(&TokenKind::RParen) {
         return None;
@@ -642,67 +673,29 @@ fn parse_fn_type_with_names_nested(state: &mut ParserState<'_>) -> Option<(Vec<P
     if !state.expect(&TokenKind::Arrow) {
         return None;
     }
-    // return_type 位置可能是另一组 curry（如 (n: N) -> Int）。
-    // parse_type_annotation 会丢参数名，故自行检测 curry 组并递归收集带名参数。
-    // 返回值收敛为**两元组**（6.5.2 commit ③）：第一组形参 + 返回类型；后续各组的
-    // 形参名与类型同栖在嵌套 `Type::Fn.params` 里，调用方经
+    // 返回位后面的柯里组（`(n: N) -> (Int) -> Int`）：判据 = 括号配平后紧跟 `->`，
+    // 与类型位的 `(` 分支共用 [`at_fn_param_group`]——返回类型本身可能是元组
+    // `(T, U)`（#253），故必须前瞻箭头。返回值收敛为**两元组**（6.5.2 commit ③）：
+    // 第一组形参 + 返回类型；后续各组同栖在嵌套 `Type::Fn.params` 里，调用方经
     // `Type::fn_params_flat` 拍平取得全部 curry 形参——不再旁路返回同一份数据。
-    // 注意：必须前瞻到 `)` 之后确认是 `->` 才算 curry 组——
-    // 返回类型本身可能是元组类型 (T, U)（#253），否则会把元组误判为 curry 参数组。
-    let saved = state.save_position();
-    let is_named_curry = if state.at(&TokenKind::LParen) {
-        state.bump();
-        let starts_with_name =
-            if let Some(TokenKind::Identifier(_)) = state.current().map(|t| &t.kind) {
-                let next = state.peek().map(|t| &t.kind);
-                matches!(next, Some(TokenKind::Colon))
-                    || matches!(next, Some(TokenKind::Comma) | Some(TokenKind::RParen))
-            } else {
-                false
-            };
-        // 扫描括号内容，确认 `)` 后跟 `->`
-        let mut paren_depth = 1;
-        while paren_depth > 0 && !state.at_end() {
-            if state.at(&TokenKind::LParen) {
-                paren_depth += 1;
-            } else if state.at(&TokenKind::RParen) {
-                paren_depth -= 1;
-            }
-            state.bump();
-        }
-        let after_is_arrow = state.at(&TokenKind::Arrow);
-        state.restore_position(saved);
-        starts_with_name && after_is_arrow
-    } else {
-        false
-    };
-
-    if is_named_curry {
-        if let Some((inner_params, inner_ret)) = parse_fn_type_with_names(state) {
-            let nested_fn = Type::Fn {
-                params: inner_params,
-                return_type: inner_ret,
-            };
-            return Some((params, Box::new(nested_fn)));
-        }
-        // 深度闸拒绝弹出期（issue #540 修复轮）：内层已报 E0019，回退重试
-        // 只会以错位起点重解析残骸（同因第二诊断 + 二次方重扫）——残骸交给
-        // 语句层的 drain_broken_construct，与 expect() 的弹出期压制同构。
-        if state.is_depth_rejected() {
-            return None;
-        }
-        state.restore_position(saved);
+    if at_fn_param_group(state) {
+        // 前瞻已命中箭头：内层失败即收口（回退只会以错位起点重扫残骸）。
+        // 深度闸拒绝时内层已报 E0019——残骸交给语句层的 drain_broken_construct。
+        let (inner_params, inner_ret) = parse_fn_type_with_names(state, mode)?;
+        let nested_fn = Type::Fn {
+            params: inner_params,
+            return_type: inner_ret,
+        };
+        return Some((params, Box::new(nested_fn)));
     }
     // RFC-004 括号语义：`-> ((a: Int) -> Int)` —— 外层括号声明“返回值是函数”，
-    // 链条到此终止（`split_curry` 遇 `Paren` 停下）。内层参数名与类型同栖在
-    // 嵌套 `Type::Fn.params`（6.8.1），这里只需把带名的内层函数类型放进
-    // `Paren`，调用方拍平即可拿到它——返回类型保持 `Paren`。
+    // 链条到此终止（`split_curry` 遇 `Paren` 停下）。判定走同一个
+    // [`at_fn_param_group`]：只有「括号内是形参组 + 箭头」才是括号返回位，
+    // 元组返回位 `-> ((Int, Int))` 因此不再误入内层解析（既有 E0010 误报的根因）。
     let saved_paren = state.save_position();
-    if state.skip(&TokenKind::LParen) && state.at(&TokenKind::LParen) {
-        if let Some((inner_params, inner_ret)) = parse_fn_type_with_names(state) {
-            // 仅在全部内层参数都带类型时采用——否则 `((Int) -> Int)` 的 `Int`
-            // 会被 parse_fn_type_with_names 误当作参数名（无名参数 ty=None）。
-            if inner_params.iter().all(|p| p.ty.is_some()) && state.skip(&TokenKind::RParen) {
+    if state.skip(&TokenKind::LParen) && at_fn_param_group(state) {
+        if let Some((inner_params, inner_ret)) = parse_fn_type_with_names(state, mode) {
+            if state.skip(&TokenKind::RParen) {
                 let inner_fn = Type::Fn {
                     params: inner_params,
                     return_type: inner_ret,
@@ -710,11 +703,15 @@ fn parse_fn_type_with_names_nested(state: &mut ParserState<'_>) -> Option<(Vec<P
                 return Some((params, Box::new(Type::Paren(Box::new(inner_fn)))));
             }
         }
+        // 内层解析失败：诊断已发射（含深度闸的 E0019），恢复后按普通返回类型
+        // 再解析只会以错位起点重扫残骸并重复报错——收口，残骸交给语句层 drain。
+        return None;
     }
     state.restore_position(saved_paren);
 
-    // `->` 后返回类型必需：严格版，非法 token 报错而非静默吞掉整个签名（审计发现）
-    let return_type = Box::new(parse_type_annotation_required(state)?);
+    // `->` 后返回类型按签名口径解析（`Signature` = 严格版，非法 token 报错而非
+    // 静默吞掉整个签名；`SignatureNoConst` = `as` 目标位，禁止常量续接）。
+    let return_type = Box::new(mode.parse(state)?);
     Some((params, return_type))
 }
 

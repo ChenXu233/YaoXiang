@@ -143,9 +143,9 @@ pub(crate) fn resolve_record_model<'a>(
     match ty {
         MonoType::Refined { base, .. } => resolve_record_model(models, base),
         MonoType::Ref { inner, .. } => resolve_record_model(models, inner),
-        MonoType::Struct(structure) => models.get(&structure.name),
-        MonoType::TypeRef(name) => models.get(name),
-        MonoType::Generic { name, .. } => models.get(name),
+        MonoType::Struct(structure) => models.get(structure.name.bare()),
+        MonoType::TypeRef(name) => models.get(name.bare()),
+        MonoType::Generic { name, .. } => models.get(name.bare()),
         _ => None,
     }
 }

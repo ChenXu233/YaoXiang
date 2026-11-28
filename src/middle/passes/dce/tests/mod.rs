@@ -7,7 +7,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::frontend::core::sema::MonoType;
-use crate::frontend::module::symbol::DefId;
+use crate::frontend::core::types::identity::DefId;
 use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, LocalSlot, ModuleIR, Operand,
     TypeDeclBody, ValueId, ValueInfo,

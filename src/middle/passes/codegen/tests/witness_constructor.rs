@@ -14,6 +14,7 @@
 //! `CreateStruct.fields`、`z` 的 operand 位置 = 1。
 
 use crate::ast::Quantity;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::MonoType;
 use crate::middle::bytecode::file::FunctionCode;
 use crate::middle::bytecode::opcode;
@@ -42,11 +43,17 @@ fn module_with_type_decl(fields: Vec<TypeDeclField>) -> ModuleIR {
             name: "Box".to_string(),
             def: None,
             params: Vec::new(),
-            return_type: MonoType::TypeRef("Box".to_string()),
+            return_type: MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Box")))
+                    .expect("type name must be bare and non-empty"),
+            ),
             body: FunctionBody::TypeDecl {
                 body: TypeDeclBody {
                     fields,
-                    self_type: MonoType::TypeRef("Box".to_string()),
+                    self_type: MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&("Box")))
+                            .expect("type name must be bare and non-empty"),
+                    ),
                 },
             },
             generic_params: None,

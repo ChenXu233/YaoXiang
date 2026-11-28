@@ -14,11 +14,10 @@
 //! `source_container_face` 调用上。
 
 use crate::ast::{Expr, PlanId};
-use crate::frontend::core::sema::environment::MethodOverloadCandidates;
 use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::{MonoType, TypeCheckResult};
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::module::registry::ModuleRegistry;
-use crate::frontend::module::{ModuleInfo, ModuleSource};
 use crate::middle::ir::ir::{ConstValue, Operand};
 use crate::middle::lower::AstToIrGenerator;
 use crate::util::span::Span;
@@ -75,9 +74,11 @@ fn test_ir_view_type_args_normalize_list_to_vec() {
     // 同时域的 L2 pin（frontend::core::types::tests::mono）在 M3 下保持绿——两 pin
     // 各自杀死本面变异（M1），互不搭便车。
     let expected = Some(MonoType::Generic {
-        name: "Vec".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Vec")))
+            .expect("type name must be bare and non-empty"),
         args: vec![MonoType::Generic {
-            name: "Vec".to_string(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Vec")))
+                .expect("type name must be bare and non-empty"),
             args: vec![MonoType::Int(64)],
         }],
     });
@@ -137,74 +138,25 @@ fn test_resolve_function_name_native_arm_keeps_chain_order() {
     );
 }
 
-/// 空名表守卫（WBS 4.9.9）：`method_param_info` 的**空形参名表**分支。
-///
-/// 这是**单元级守卫测试**，不是生产端直驱（coding-rules 第六部分）：空名表形态
-/// 在现有公开语法下不可达——登记期 `add_method_overload_with_params` 只在
-/// 「形参名与候选签名对不齐」时留空，而能造出对不齐的 RFC-004 外部绑定形态在
-/// 跨单元下另有既有缺陷（被绑函数名未限定 ⇒ 运行期 E6006，位置实参同样失败），
-/// 与命名实参无关；把守卫整行删掉（`if names.is_empty() { return None; }`）
-/// 后整套多文件判据仍全绿。故本测试**手工构造**注册表里的空名表候选组，只钉
-/// 一条性质：名字不可用 ⇒ 查询返回 None（不得把空表当成「名字已核对」）；
-/// 同表非空的正对照证明守卫只拦空表。用途是防止守卫被误删。
-#[test]
-fn test_method_param_info_empty_name_table_returns_none() {
-    // Arrange：两个模块各带一个同名方法候选组——`empty` 的形参名表留空
-    //（登记期对不齐），`named` 的名字表与候选同序
-    let candidate = MonoType::Fn {
-        params: vec![MonoType::Int(64), MonoType::Float(64)],
-        return_type: Box::new(MonoType::Float(64)),
-    };
-    let mut registry = ModuleRegistry::new();
-    registry.register(module_with_group(
-        "empty",
-        "Point.scale_by",
-        MethodOverloadCandidates {
-            candidates: vec![candidate.clone()],
-            ir_names: vec!["Point.scale_by".to_string()],
-            param_names: vec![Vec::new()],
-        },
-    ));
-    registry.register(module_with_group(
-        "named",
-        "Point.scale_by",
-        MethodOverloadCandidates {
-            candidates: vec![candidate],
-            ir_names: vec!["Point.scale_by".to_string()],
-            param_names: vec![vec!["self".to_string(), "k".to_string()]],
-        },
-    ));
-    let type_result = TypeCheckResult::default();
-    let generator = AstToIrGenerator::new_with_type_result(
-        &type_result,
-        registry,
-        None,
-        TypeLevelNamespace::default(),
-    );
-
-    // Act
-    let empty = generator.lookup_param_info("empty.Point.scale_by", "scale_by");
-    let named = generator.lookup_param_info("named.Point.scale_by", "scale_by");
-
-    // Assert
-    assert!(
-        empty.is_none(),
-        "空形参名表必须返回 None（名字不可用），不得拿空表冒充名字已核对；实际: {empty:?}"
-    );
-    assert_eq!(
-        named.map(|info| info.names),
-        Some(vec!["self".to_string(), "k".to_string()]),
-        "同表非空的候选必须原样返回声明序形参名（正对照：守卫只拦空表）"
-    );
-}
-
-/// 造一个只带一个方法候选组的注册表模块（空名表守卫测试的输入面）。
-fn module_with_group(
-    key: &str,
-    group_key: &str,
-    group: MethodOverloadCandidates,
-) -> ModuleInfo {
-    let mut module = ModuleInfo::new(key.to_string(), ModuleSource::User);
-    module.method_overloads.insert(group_key.to_string(), group);
-    module
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// WBS 4.9.10 D-3 退役登记（coding-rules 7.3 三扇门）
+//
+// 判据 `test_method_param_info_empty_name_table_returns_none`（WBS 4.9.9）随
+// `lower/query.rs::method_param_info` 一并退役——该函数把「IR 调用名 → 投影索引 →
+// 候选组 → 第 k 个形参名表」反查了一遍，D-3 起这条通路整体消失：名字由 typecheck
+// 随重载决议载荷（`MethodResolution::param_names`）直达 IR 生成。
+//
+// 三扇门：
+// - 条款门：现行条款不再要求 IR 侧具备该反查能力——D-3 的判据是「载荷携带名字」，
+//   相应判据在 driver 级落位（值断言）：`src/driver/tests/named_args_cross_unit_method.rs`
+//   （裸名导入 + 单候选/两候选按名筛候选）与 `src/driver/tests/named_args_import_shapes.rs`
+//   （别名导入 / 命名空间写法 / 推断接收者三形态）；载荷面另有
+//   `frontend::core::sema::tests::overload_resolutions`；
+// - 病史门：本测试钉的是「空名表不得冒充已核对」，该形态自登记期留空的路径在
+//   公开语法下不可达（测试自己的文档已写明），历史红态由 S1 矩阵 18 号记录；
+// - 证明门：同一性质在新装置的落点改为**生产端**——`add_method_overload_with_params`
+//   对不齐的名字表留空 ⇒ 载荷 `param_names` 为空 ⇒ 消费端 `bind_args_to_params`
+//   遇命名实参响亮报 E1014（不静默丢弃），由 `sema` 的 E1014 判据与上列两个
+//   driver 判据文件共同守住。
+//
+// 输入构造 helper `module_with_group` 仅服务该测试，一并删除。

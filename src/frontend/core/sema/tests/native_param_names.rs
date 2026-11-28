@@ -20,6 +20,7 @@ use crate::frontend::core::sema::checker::TypeChecker;
 use crate::frontend::core::sema::environment::ExportParamInfo;
 use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::{MonoType, PolyType};
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::lower::AstToIrGenerator;
 
@@ -42,7 +43,8 @@ fn host_checker() -> TypeChecker {
     checker.env().add_var(
         "host".to_string(),
         PolyType::mono(MonoType::Struct(crate::frontend::core::types::StructType {
-            name: "host".to_string(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("host")))
+                .expect("type name must be bare and non-empty"),
             fields: vec![
                 crate::frontend::core::types::mono::StructFieldInfo {
                     name: "add".to_string(),

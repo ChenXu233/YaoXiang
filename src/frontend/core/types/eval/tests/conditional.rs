@@ -10,6 +10,7 @@ use crate::frontend::core::types::eval::conditional::{
     PatternMatchArm, PatternMatchType, PatternMatcher, TypeCondition,
 };
 use crate::frontend::core::types::eval::TypeLevelResult;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::MonoType;
 
 // §5.1: TypeCondition — 所有条件变体
@@ -256,13 +257,22 @@ fn test_pattern_matcher_tuple_arity() {
 #[test]
 fn test_pattern_match_type() {
     let mt = PatternMatchType::on(
-        MonoType::TypeRef("Zero".to_string()),
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Zero")))
+                .expect("type name must be bare and non-empty"),
+        ),
         vec![
             PatternMatchArm::new(
                 MatchPattern::named("Zero"),
-                MonoType::TypeRef("Nat".to_string()),
+                MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&("Nat")))
+                        .expect("type name must be bare and non-empty"),
+                ),
             ),
-            PatternMatchArm::wildcard(MonoType::TypeRef("Unknown".to_string())),
+            PatternMatchArm::wildcard(MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Unknown")))
+                    .expect("type name must be bare and non-empty"),
+            )),
         ],
     );
     assert!(mt.has_wildcard());
@@ -282,8 +292,14 @@ fn test_pattern_builder() {
 #[test]
 fn test_nat_examples() {
     let mt = nat_examples::add_type(
-        MonoType::TypeRef("Zero".to_string()),
-        MonoType::TypeRef("Nat".to_string()),
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Zero")))
+                .expect("type name must be bare and non-empty"),
+        ),
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Nat")))
+                .expect("type name must be bare and non-empty"),
+        ),
     );
     assert_eq!(mt.arm_count(), 2);
 }

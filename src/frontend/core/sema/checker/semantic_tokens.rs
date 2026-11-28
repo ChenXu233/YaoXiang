@@ -444,6 +444,11 @@ impl TypeChecker {
                             },
                         );
                         for param in &params {
+                            // 未命名形参（D53 的裸类型项）没有标识符可高亮：
+                            // 空名字 token 在 LSP 侧无位置语义，跳过。
+                            if !param.is_named() {
+                                continue;
+                            }
                             self.semantic_db.add_token(
                                 &fp,
                                 SemanticToken {
@@ -473,6 +478,11 @@ impl TypeChecker {
                         );
                         global_symbols.push(name.clone());
                         for param in &params {
+                            // 未命名形参（D53 的裸类型项）没有标识符可高亮：
+                            // 空名字 token 在 LSP 侧无位置语义，跳过。
+                            if !param.is_named() {
+                                continue;
+                            }
                             self.semantic_db.add_token(
                                 &fp,
                                 SemanticToken {

@@ -895,7 +895,7 @@ impl Driver {
 > 15. 3.4.8 R1（①）落地（2026-10-10，a9438007）。按 #14 设计落地限定调用
 >     实例化收集：`ExpressionInferrer` 注入模块限定键表（`use` 三臂登记——普通
 >     / 别名 / 逐项别名且仅 SubModule 类导出），`callee_generic_name` 经
->     `SymbolTable::qualify` 拼接与 merged IR 同源的限定名；限定调用首路径
+>     统一限定名拼接得到与 merged IR 同源的限定名（拼接实现见 `frontend::module::symbol`）；限定调用首路径
 >     arity 判据收紧（参数表解不出时落第二路径按签名取实参，避免跨模块同名函数
 >     错配误报 E3018）。实施中实证 mono 侧**三个不对称缺陷**并同轮修复：
 >     (1) 删除键（泛型名集合）与改写键（containing_fn + 名 + span 三元组）

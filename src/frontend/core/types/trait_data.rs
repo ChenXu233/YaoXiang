@@ -2,6 +2,7 @@
 //!
 //! 核心 trait 系统：数据结构 + 标准库初始化 + trait 满足性检查 + 自动派生。
 
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::mono::MonoType;
 use std::collections::HashMap;
 
@@ -197,7 +198,7 @@ impl TraitTable {
             MonoType::Ref { mutable: false, .. } => matches!(trait_name, "Clone" | "Dup"),
 
             // TypeRef：查表
-            MonoType::TypeRef(name) => self.has_impl(trait_name, name),
+            MonoType::TypeRef(name) => self.has_impl(trait_name, name.bare()),
 
             // List、Dict、Set、Option、Result、Fn、&mut T、其他：不自动满足
             _ => false,
@@ -268,8 +269,14 @@ impl TraitTable {
                 methods.insert(
                     "clone".to_string(),
                     MonoType::Fn {
-                        params: vec![MonoType::TypeRef("Self".to_string())],
-                        return_type: Box::new(MonoType::TypeRef(type_name.to_string())),
+                        params: vec![MonoType::TypeRef(
+                            Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                                .expect("type name must be bare and non-empty"),
+                        )],
+                        return_type: Box::new(MonoType::TypeRef(
+                            Nominal::flat(AsRef::<str>::as_ref(&(type_name)))
+                                .expect("type name must be bare and non-empty"),
+                        )),
                     },
                 );
             }
@@ -278,8 +285,14 @@ impl TraitTable {
                     "equal".to_string(),
                     MonoType::Fn {
                         params: vec![
-                            MonoType::TypeRef("Self".to_string()),
-                            MonoType::TypeRef("Self".to_string()),
+                            MonoType::TypeRef(
+                                Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                                    .expect("type name must be bare and non-empty"),
+                            ),
+                            MonoType::TypeRef(
+                                Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                                    .expect("type name must be bare and non-empty"),
+                            ),
                         ],
                         return_type: Box::new(MonoType::Bool),
                     },
@@ -290,8 +303,14 @@ impl TraitTable {
                     "debug".to_string(),
                     MonoType::Fn {
                         params: vec![
-                            MonoType::TypeRef("Self".to_string()),
-                            MonoType::TypeRef("Formatter".to_string()),
+                            MonoType::TypeRef(
+                                Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                                    .expect("type name must be bare and non-empty"),
+                            ),
+                            MonoType::TypeRef(
+                                Nominal::flat(AsRef::<str>::as_ref(&("Formatter")))
+                                    .expect("type name must be bare and non-empty"),
+                            ),
                         ],
                         return_type: Box::new(MonoType::Void),
                     },
@@ -334,8 +353,14 @@ impl TraitTable {
                 "clone".to_string(),
                 TraitMethodSignature {
                     name: "clone".to_string(),
-                    params: vec![MonoType::TypeRef("Self".to_string())],
-                    return_type: MonoType::TypeRef("Self".to_string()),
+                    params: vec![MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                            .expect("type name must be bare and non-empty"),
+                    )],
+                    return_type: MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                            .expect("type name must be bare and non-empty"),
+                    ),
                     is_static: false,
                 },
             )]),
@@ -363,8 +388,14 @@ impl TraitTable {
                 TraitMethodSignature {
                     name: "equal".to_string(),
                     params: vec![
-                        MonoType::TypeRef("Self".to_string()),
-                        MonoType::TypeRef("Self".to_string()),
+                        MonoType::TypeRef(
+                            Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                                .expect("type name must be bare and non-empty"),
+                        ),
+                        MonoType::TypeRef(
+                            Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                                .expect("type name must be bare and non-empty"),
+                        ),
                     ],
                     return_type: MonoType::Bool,
                     is_static: false,
@@ -384,8 +415,14 @@ impl TraitTable {
                 TraitMethodSignature {
                     name: "debug".to_string(),
                     params: vec![
-                        MonoType::TypeRef("Self".to_string()),
-                        MonoType::TypeRef("Formatter".to_string()),
+                        MonoType::TypeRef(
+                            Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                                .expect("type name must be bare and non-empty"),
+                        ),
+                        MonoType::TypeRef(
+                            Nominal::flat(AsRef::<str>::as_ref(&("Formatter")))
+                                .expect("type name must be bare and non-empty"),
+                        ),
                     ],
                     return_type: MonoType::Void,
                     is_static: false,
@@ -404,8 +441,14 @@ impl TraitTable {
                 "next".to_string(),
                 TraitMethodSignature {
                     name: "next".to_string(),
-                    params: vec![MonoType::TypeRef("Self".to_string())],
-                    return_type: MonoType::TypeRef("Option".to_string()),
+                    params: vec![MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                            .expect("type name must be bare and non-empty"),
+                    )],
+                    return_type: MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&("Option")))
+                            .expect("type name must be bare and non-empty"),
+                    ),
                     is_static: false,
                 },
             )]),
@@ -440,8 +483,14 @@ impl TraitTable {
             HashMap::from([(
                 "clone".to_string(),
                 MonoType::Fn {
-                    params: vec![MonoType::TypeRef("Self".to_string())],
-                    return_type: Box::new(MonoType::TypeRef("Self".to_string())),
+                    params: vec![MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                            .expect("type name must be bare and non-empty"),
+                    )],
+                    return_type: Box::new(MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                            .expect("type name must be bare and non-empty"),
+                    )),
                 },
             )])
         };
@@ -450,8 +499,14 @@ impl TraitTable {
                 "equal".to_string(),
                 MonoType::Fn {
                     params: vec![
-                        MonoType::TypeRef("Self".to_string()),
-                        MonoType::TypeRef("Self".to_string()),
+                        MonoType::TypeRef(
+                            Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                                .expect("type name must be bare and non-empty"),
+                        ),
+                        MonoType::TypeRef(
+                            Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                                .expect("type name must be bare and non-empty"),
+                        ),
                     ],
                     return_type: Box::new(MonoType::Bool),
                 },
@@ -462,8 +517,14 @@ impl TraitTable {
                 "debug".to_string(),
                 MonoType::Fn {
                     params: vec![
-                        MonoType::TypeRef("Self".to_string()),
-                        MonoType::TypeRef("Formatter".to_string()),
+                        MonoType::TypeRef(
+                            Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                                .expect("type name must be bare and non-empty"),
+                        ),
+                        MonoType::TypeRef(
+                            Nominal::flat(AsRef::<str>::as_ref(&("Formatter")))
+                                .expect("type name must be bare and non-empty"),
+                        ),
                     ],
                     return_type: Box::new(MonoType::Void),
                 },
@@ -473,17 +534,26 @@ impl TraitTable {
         // 值类型：Clone + Equal + Debug（不是 Dup）
         for type_name in &["Int", "Float", "Bool", "Char"] {
             self.add_impl(TraitImplementation {
-                trait_name: "Clone".into(),
+                trait_name: Nominal::flat(AsRef::<str>::as_ref(&("Clone")))
+                    .expect("type name must be bare and non-empty")
+                    .bare()
+                    .to_string(),
                 for_type_name: (*type_name).into(),
                 methods: clone_fn(),
             });
             self.add_impl(TraitImplementation {
-                trait_name: "Equal".into(),
+                trait_name: Nominal::flat(AsRef::<str>::as_ref(&("Equal")))
+                    .expect("type name must be bare and non-empty")
+                    .bare()
+                    .to_string(),
                 for_type_name: (*type_name).into(),
                 methods: equal_fn(),
             });
             self.add_impl(TraitImplementation {
-                trait_name: "Debug".into(),
+                trait_name: Nominal::flat(AsRef::<str>::as_ref(&("Debug")))
+                    .expect("type name must be bare and non-empty")
+                    .bare()
+                    .to_string(),
                 for_type_name: (*type_name).into(),
                 methods: debug_fn(),
             });
@@ -491,74 +561,152 @@ impl TraitTable {
 
         // String: Clone + Dup + Equal + Debug
         self.add_impl(TraitImplementation {
-            trait_name: "Clone".into(),
-            for_type_name: "String".into(),
+            trait_name: Nominal::flat(AsRef::<str>::as_ref(&("Clone")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
+            for_type_name: Nominal::flat(AsRef::<str>::as_ref(&("String")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
             methods: clone_fn(),
         });
         self.add_impl(TraitImplementation {
-            trait_name: "Dup".into(),
-            for_type_name: "String".into(),
+            trait_name: Nominal::flat(AsRef::<str>::as_ref(&("Dup")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
+            for_type_name: Nominal::flat(AsRef::<str>::as_ref(&("String")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
             methods: HashMap::new(),
         });
         self.add_impl(TraitImplementation {
-            trait_name: "Equal".into(),
-            for_type_name: "String".into(),
+            trait_name: Nominal::flat(AsRef::<str>::as_ref(&("Equal")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
+            for_type_name: Nominal::flat(AsRef::<str>::as_ref(&("String")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
             methods: equal_fn(),
         });
         self.add_impl(TraitImplementation {
-            trait_name: "Debug".into(),
-            for_type_name: "String".into(),
+            trait_name: Nominal::flat(AsRef::<str>::as_ref(&("Debug")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
+            for_type_name: Nominal::flat(AsRef::<str>::as_ref(&("String")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
             methods: debug_fn(),
         });
 
         // Bytes: Clone + Dup + Debug（不是 Equal）
         self.add_impl(TraitImplementation {
-            trait_name: "Clone".into(),
-            for_type_name: "Bytes".into(),
+            trait_name: Nominal::flat(AsRef::<str>::as_ref(&("Clone")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
+            for_type_name: Nominal::flat(AsRef::<str>::as_ref(&("Bytes")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
             methods: clone_fn(),
         });
         self.add_impl(TraitImplementation {
-            trait_name: "Dup".into(),
-            for_type_name: "Bytes".into(),
+            trait_name: Nominal::flat(AsRef::<str>::as_ref(&("Dup")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
+            for_type_name: Nominal::flat(AsRef::<str>::as_ref(&("Bytes")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
             methods: HashMap::new(),
         });
         self.add_impl(TraitImplementation {
-            trait_name: "Debug".into(),
-            for_type_name: "Bytes".into(),
+            trait_name: Nominal::flat(AsRef::<str>::as_ref(&("Debug")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
+            for_type_name: Nominal::flat(AsRef::<str>::as_ref(&("Bytes")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
             methods: debug_fn(),
         });
 
         // Void: Dup + Equal + Debug（不是 Clone）
         self.add_impl(TraitImplementation {
-            trait_name: "Dup".into(),
-            for_type_name: "Void".into(),
+            trait_name: Nominal::flat(AsRef::<str>::as_ref(&("Dup")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
+            for_type_name: Nominal::flat(AsRef::<str>::as_ref(&("Void")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
             methods: HashMap::new(),
         });
         self.add_impl(TraitImplementation {
-            trait_name: "Equal".into(),
-            for_type_name: "Void".into(),
+            trait_name: Nominal::flat(AsRef::<str>::as_ref(&("Equal")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
+            for_type_name: Nominal::flat(AsRef::<str>::as_ref(&("Void")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
             methods: equal_fn(),
         });
         self.add_impl(TraitImplementation {
-            trait_name: "Debug".into(),
-            for_type_name: "Void".into(),
+            trait_name: Nominal::flat(AsRef::<str>::as_ref(&("Debug")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
+            for_type_name: Nominal::flat(AsRef::<str>::as_ref(&("Void")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
             methods: debug_fn(),
         });
 
         // Never: Dup + Equal + Debug（底部类型，无实例可构造）
         self.add_impl(TraitImplementation {
-            trait_name: "Dup".into(),
-            for_type_name: "Never".into(),
+            trait_name: Nominal::flat(AsRef::<str>::as_ref(&("Dup")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
+            for_type_name: Nominal::flat(AsRef::<str>::as_ref(&("Never")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
             methods: HashMap::new(),
         });
         self.add_impl(TraitImplementation {
-            trait_name: "Equal".into(),
-            for_type_name: "Never".into(),
+            trait_name: Nominal::flat(AsRef::<str>::as_ref(&("Equal")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
+            for_type_name: Nominal::flat(AsRef::<str>::as_ref(&("Never")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
             methods: equal_fn(),
         });
         self.add_impl(TraitImplementation {
-            trait_name: "Debug".into(),
-            for_type_name: "Never".into(),
+            trait_name: Nominal::flat(AsRef::<str>::as_ref(&("Debug")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
+            for_type_name: Nominal::flat(AsRef::<str>::as_ref(&("Never")))
+                .expect("type name must be bare and non-empty")
+                .bare()
+                .to_string(),
             methods: debug_fn(),
         });
     }

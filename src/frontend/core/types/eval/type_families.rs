@@ -17,6 +17,7 @@
 //! ```
 
 use crate::frontend::core::types::eval::TypeLevelResult;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::MonoType;
 
 /// Bool 类型族的变体
@@ -281,9 +282,11 @@ pub trait TypeFamilyOps {
 impl TypeFamilyOps for Bool {
     fn to_mono_type(&self) -> MonoType {
         MonoType::TypeRef(if self.is_true() {
-            "True".to_string()
+            Nominal::flat(AsRef::<str>::as_ref(&("True")))
+                .expect("type name must be bare and non-empty")
         } else {
-            "False".to_string()
+            Nominal::flat(AsRef::<str>::as_ref(&("False")))
+                .expect("type name must be bare and non-empty")
         })
     }
 }
@@ -291,8 +294,14 @@ impl TypeFamilyOps for Bool {
 impl TypeFamilyOps for Nat {
     fn to_mono_type(&self) -> MonoType {
         match self {
-            Nat::Zero => MonoType::TypeRef("Zero".to_string()),
-            Nat::Succ(n) => MonoType::TypeRef(format!("Succ({})", n.to_usize())),
+            Nat::Zero => MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("Zero")))
+                    .expect("type name must be bare and non-empty"),
+            ),
+            Nat::Succ(n) => MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&(format!("Succ({})", n.to_usize()))))
+                    .expect("type name must be bare and non-empty"),
+            ),
         }
     }
 }

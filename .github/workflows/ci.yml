@@ -122,23 +122,21 @@ jobs:
       - name: Check docs against source of truth
         run: python3 scripts/ci/check-docs-truth.py
 
-      # 生成物必须与「码表注册表 + zh 文案」同源同时。生成器自称幂等
-      # （见 scripts/docs/gen-error-code-docs.py 模块文档），所以"跑完 git diff
-      # 非空"就是"已提交页面落后于注册表"的直证。实例（2026-10-15）：#452/#454
-      # 的判据收敛把 E1014 发射点 6→4、E1015 3→1，收敛提交未再跑生成器，页面
-      # 停在旧计数上——上面的 check-docs-truth.py 只对账"码有没有页面"，对不到
-      # 每码的发射点计数。diff 范围 = 生成器声明的全部输出（11 个文件 / 3 目录）。
-      - name: Error-code docs up to date (generator idempotent)
+      # 错误码参考页是**构建期产物**，不入库（见根 .gitignore 与 dev/HOWTO）：
+      # 页面由 scripts/docs/gen-error-code-docs.py 从码表注册表与 locales/*.json
+      # 生成，站点每次构建都重新生成，因此不可能显示旧事实。
+      #
+      # 原先这里有一道「入库快照 == 生成器输出」的逐字节比对门禁：它冻的是精确
+      # 行号（实现选择），按 coding-rules 7.1 不进门禁、7.3 退役——连续 25 次
+      # 报同一句「行号漂了」，信号量恒为 0，真事实变化（E0011 发射点 18→19）
+      # 反而淹在里面没人认得出。替代覆盖就是下面这一步：构建期再生。
+      #
+      # 这里先再生一份，让本 job 后续门禁（事实对账 / 孤儿页 / 引用可解析）看到的
+      # 是当前码表与 locales 的产物，而不是任何入库快照。
+      - name: Generate error-code reference pages (zh + en)
         run: |
-          python3 scripts/docs/gen-error-code-docs.py
-          if ! git diff --quiet -- \
-              docs/src/reference/error-code \
-              docs/src/reference/warning-code \
-              docs/src/reference/package; then
-            echo "::error::错误码文档落后于码表/locales——请跑 python scripts/docs/gen-error-code-docs.py 并同提交入库"
-            git diff --stat -- docs/src/reference/error-code docs/src/reference/warning-code docs/src/reference/package
-            exit 1
-          fi
+          python3 scripts/docs/gen-error-code-docs.py --lang zh
+          python3 scripts/docs/gen-error-code-docs.py --lang en
 
       - name: Check docs structure (orphan / frontmatter / dead link)
         run: python3 scripts/ci/check-docs-orphan.py

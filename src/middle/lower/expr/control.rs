@@ -599,17 +599,19 @@ impl AstToIrGenerator {
                 }
                 let (sum_name, args): (String, Vec<MonoType>) = match &stripped {
                     Some(MonoType::Generic { name, args })
-                        if self.sum_type_variants.contains_key(name) =>
+                        if self.sum_type_variants.contains_key(name.bare()) =>
                     {
-                        (name.clone(), args.clone())
+                        (name.clone().bare().to_string(), args.clone())
                     }
-                    Some(MonoType::Struct(s)) if self.sum_type_variants.contains_key(&s.name) => {
-                        (s.name.clone(), Vec::new())
+                    Some(MonoType::Struct(s))
+                        if self.sum_type_variants.contains_key(s.name.bare()) =>
+                    {
+                        (s.name.clone().bare().to_string(), Vec::new())
                     }
                     Some(MonoType::TypeRef(n))
                         if self.sum_type_variants.contains_key(n.as_str()) =>
                     {
-                        (n.clone(), Vec::new())
+                        (n.clone().bare().to_string(), Vec::new())
                     }
                     _ => return Err(unsupported(variant)),
                 };

@@ -1,0 +1,21 @@
+// same-name-type-local-and-alias-import/main.yx
+// 覆盖: RFC-029 #244 同名类型跨模块共存（本单元自有 Temp + 别名导入的 TempA）
+// 验证: 本单元 Temp 的方法语义 tag + 100，lib 的 Temp 的方法语义 tag × 10；
+//       a = Temp(1.0) ⇒ a.tag_of() = 101.0、b = TempA(2.0) ⇒ b.tag_of() = 20.0
+//       （P0 形态 9 同形：方法派发按身份的模块归属各自落地）
+// 状态: ✅ 可运行（run 退出码 0）
+use std.assert
+use lib.{Temp as TempA}
+
+Temp: Type = { tag: Float }
+
+Temp.tag_of: (self: &Temp) -> Float = {
+    return self.tag + 100.0
+}
+
+main = () => {
+    a = Temp(1.0)
+    b = TempA(2.0)
+    assert.assert(a.tag_of() == 101.0, "本单元 Temp.tag_of 应由本单元定义（1.0 + 100 = 101.0）")
+    assert.assert(b.tag_of() == 20.0, "别名导入的 TempA.tag_of 应由 lib 定义（2.0 × 10 = 20.0）")
+}

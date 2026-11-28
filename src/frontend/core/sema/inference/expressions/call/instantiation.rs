@@ -3,8 +3,8 @@
 //! 自 `inference/expressions.rs` 纯搬移（WBS 7.0.4）：方法体与文档注释零改动，
 //! 仅补跨模块可见性（`pub(super)`）与相对路径（`super::` 改指 crate 路径）。
 
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::core::types::MonoType;
-use crate::frontend::module::symbol::SymbolTable;
 use crate::middle::passes::mono::instance::{GenericFunctionId, InstantiationRequest};
 use crate::util::diagnostic::ErrorCodeDefinition;
 use std::collections::{HashMap, HashSet};
@@ -13,6 +13,7 @@ use super::super::{
     concrete_type_from_expr_arg, extract_const_value_from_expr, ConstArgOutcome, ExpressionInferrer,
 };
 use crate::frontend::core::sema::inference::arg_binding;
+use crate::frontend::core::types::identity::Nominal;
 
 impl<'a> ExpressionInferrer<'a> {
     /// 递归收集类型中的所有 TypeVar 索引
@@ -112,9 +113,12 @@ impl<'a> ExpressionInferrer<'a> {
     pub(super) fn type_arg_of_expr(expr: &crate::ast::Expr) -> MonoType {
         use crate::ast::Expr;
         match expr {
-            Expr::Var(name, _) => {
-                MonoType::from_builtin_name(name).unwrap_or_else(|| MonoType::TypeRef(name.clone()))
-            }
+            Expr::Var(name, _) => MonoType::from_builtin_name(name).unwrap_or_else(|| {
+                MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
+                        .expect("type name must be bare and non-empty"),
+                )
+            }),
             // `Vec(Int)` / `Array(Int, 3)` 形态：类型构造器应用
             Expr::Call { func, args, .. } => {
                 if let Expr::Var(cname, _) = func.as_ref() {
@@ -122,14 +126,23 @@ impl<'a> ExpressionInferrer<'a> {
                         // #403：与注解同一落点判据——`List(Int)` 作类型实参
                         // 同样落 `Vec` 面（单源 `MonoType::source_container_face`，
                         // 源名进类型域的门共用）。
-                        name: MonoType::source_container_face(cname),
+                        name: Nominal::flat(AsRef::<str>::as_ref(
+                            &(MonoType::source_container_face(cname)),
+                        ))
+                        .expect("type name must be bare and non-empty"),
                         args: args.iter().map(Self::type_arg_of_expr).collect(),
                     }
                 } else {
-                    MonoType::TypeRef("_".to_string())
+                    MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&("_")))
+                            .expect("type name must be bare and non-empty"),
+                    )
                 }
             }
-            _ => MonoType::TypeRef("_".to_string()),
+            _ => MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("_")))
+                    .expect("type name must be bare and non-empty"),
+            ),
         }
     }
 
@@ -234,7 +247,10 @@ impl<'a> ExpressionInferrer<'a> {
                 },
             ) => {
                 if type_params.iter().any(|p| p == name) {
-                    bindings.insert(name.clone(), MonoType::TypeRef(a_head.clone()));
+                    bindings.insert(
+                        name.clone().bare().to_string(),
+                        MonoType::TypeRef(a_head.clone()),
+                    );
                 }
                 if s_args.len() == a_args.len() {
                     for (s, a) in s_args.iter().zip(a_args.iter()) {
@@ -244,7 +260,10 @@ impl<'a> ExpressionInferrer<'a> {
             }
             (MonoType::Generic { name, .. }, MonoType::Struct(st)) => {
                 if type_params.iter().any(|p| p == name) {
-                    bindings.insert(name.clone(), MonoType::TypeRef(st.name.clone()));
+                    bindings.insert(
+                        name.clone().bare().to_string(),
+                        MonoType::TypeRef(st.name.clone()),
+                    );
                 }
             }
             (MonoType::Ref { inner: s, .. }, MonoType::Ref { inner: a, .. }) => {
@@ -286,7 +305,10 @@ impl<'a> ExpressionInferrer<'a> {
         subst: &HashMap<String, MonoType>,
     ) -> MonoType {
         match ty {
-            MonoType::TypeRef(name) => subst.get(name).cloned().unwrap_or_else(|| ty.clone()),
+            MonoType::TypeRef(name) => subst
+                .get(name.bare())
+                .cloned()
+                .unwrap_or_else(|| ty.clone()),
             MonoType::Ref { mutable, inner } => MonoType::Ref {
                 mutable: *mutable,
                 inner: Box::new(Self::substitute_type_refs(inner, subst)),
@@ -355,7 +377,8 @@ impl<'a> ExpressionInferrer<'a> {
                 if matches!(name, "Vec" | "Array") && !args.is_empty() {
                     self.last_type_args = args.clone();
                     return MonoType::Generic {
-                        name: name.to_string(),
+                        name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+                            .expect("type name must be bare and non-empty"),
                         args,
                     };
                 }
@@ -635,7 +658,8 @@ impl<'a> ExpressionInferrer<'a> {
                             return MonoType::Fn {
                                 params: new_params,
                                 return_type: Box::new(MonoType::Generic {
-                                    name: name.to_string(),
+                                    name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+                                        .expect("type name must be bare and non-empty"),
                                     args,
                                 }),
                             };
@@ -661,7 +685,7 @@ impl<'a> ExpressionInferrer<'a> {
     /// - 裸 `Var`：其名本身（既有行为，`main`/单文件路径一字不改）；
     /// - 限定调用 `lib.f`：与 merged-IR 同源的限定名 `{module_key}.{f}`——
     ///   `module_key` 取该别名的模块限定键（use 路径），拼接经
-    ///   [`SymbolTable::qualify`]（全仓限定名格式的唯一所有者，与 ir_gen
+    ///   [`DefPath::project`]（唯一拼接实现，与 ir_gen
     ///   `qualify_names`、`Resolver::resolve_namespace` 同源）。
     ///
     /// 返回 None 的形态不发请求：非 Var 结尾的接收者（lambda 调用、值接收者
@@ -681,7 +705,7 @@ impl<'a> ExpressionInferrer<'a> {
                     return None;
                 };
                 let module_key = self.module_namespaces?.get(alias)?;
-                Some(SymbolTable::qualify(module_key, field))
+                Some(DefPath::item(module_key, field).project())
             }
             _ => None,
         }
@@ -771,7 +795,7 @@ impl<'a> ExpressionInferrer<'a> {
         args: &[crate::ast::Expr],
         named_args: &[(String, crate::ast::Expr)],
         span: crate::util::span::Span,
-        method_binding_key: Option<String>,
+        method_binding_key: Option<DefPath>,
     ) -> ConstArgOutcome {
         use crate::frontend::core::sema::proof::verdict::ProofFailure;
         use crate::frontend::core::types::const_data::{ConstExpr, ConstValue};
@@ -825,7 +849,8 @@ impl<'a> ExpressionInferrer<'a> {
                 let Some(method_key) = method_binding_key else {
                     return ConstArgOutcome::NotTarget;
                 };
-                let Some(slots) = self.declared_call_site_params.get(&method_key) else {
+                // 调用点形参名表按**投影**键控（函数名与方法键同一张表）
+                let Some(slots) = self.declared_call_site_params.get(&method_key.project()) else {
                     // 事实不足（方法面的跨模块方法导入——#553 face ④ / #539 轴，
                     // 方法槽位尚无跨界载体；无 q=0 事实的类型体匿名绑定等非 const
                     // 形态——方法自带 q=0 槽被 E1003/E1094 拦在声明面）⇒ 不判，不猜
@@ -837,7 +862,7 @@ impl<'a> ExpressionInferrer<'a> {
                 let Some(method_ty) = self.method_bindings.get(&method_key) else {
                     return ConstArgOutcome::NotTarget;
                 };
-                fn_name = method_key;
+                fn_name = method_key.project();
                 const_names = slots.const_params.clone();
                 body = method_ty.clone();
             }

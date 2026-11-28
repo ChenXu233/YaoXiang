@@ -1,0 +1,6 @@
+// lib.yx —— 被导入单元：记录类型 + 单个方法（形参名 k 供命名实参对照）
+Temp: Type = { v: Float }
+
+Temp.bump: (self: &Temp, k: Float) -> Float = {
+    return self.v + k
+}

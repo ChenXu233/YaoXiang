@@ -218,7 +218,7 @@ fn param_types(
 /// `MonoType` 里出现的全部 `TypeRef` 名（只收容器，其余变体不可能携带名字）。
 fn type_ref_names(ty: &MonoType) -> Vec<String> {
     match ty {
-        MonoType::TypeRef(name) => vec![name.clone()],
+        MonoType::TypeRef(name) => vec![name.bare().to_string()],
         MonoType::Generic { args, .. } => args.iter().flat_map(type_ref_names).collect(),
         MonoType::Fn {
             params,

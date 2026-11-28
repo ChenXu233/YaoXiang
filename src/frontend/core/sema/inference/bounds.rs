@@ -178,16 +178,14 @@ impl BoundsChecker {
             _ => Vec::new(),
         };
 
-        // 查找方法绑定：从 TypeEnvironment.method_bindings 扁平表获取
+        // 查找方法绑定：按身份表的**归属段**筛——`DefPath.owner` 就是方法所属
+        // 类型的裸名，字符串前缀拼接不再需要（WBS 4.9.10 D-1）
         let method_bindings: Vec<(String, MonoType)> =
             if let (Some(env), Some(ref name)) = (env, &type_name) {
                 env.method_bindings
                     .iter()
-                    .filter(|(key, _)| key.starts_with(&format!("{}.", name)))
-                    .map(|(key, fn_type)| {
-                        let method_name = key.split('.').next_back().unwrap_or(key).to_string();
-                        (method_name, fn_type.clone())
-                    })
+                    .filter(|(key, _)| key.owner.as_deref() == Some(name.as_str()))
+                    .map(|(key, fn_type)| (key.name.clone(), fn_type.clone()))
                     .collect()
             } else {
                 Vec::new()

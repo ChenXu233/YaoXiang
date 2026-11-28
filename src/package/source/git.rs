@@ -25,10 +25,11 @@ pub enum GitRef {
 
 /// git 子进程的稳定工作目录。
 ///
-/// 进程级 cwd 可能被并行的 chdir 测试（如 init 的 CwdGuard）移进随后
-/// 被删除的临时目录：子进程 spawn 时 getcwd 失败，报 "Unable to read
-/// current working directory"。显式钉到系统临时根（生命周期覆盖进程）
-/// 免疫该竞态；git 命令的路径参数均为绝对/显式路径，cwd 无业务含义。
+/// 进程级 cwd 是进程内共享状态，可能被并行调用（如 publish / build 的包根
+/// 切换、REPL 的 cd）临时移走；子进程若继承到已失效的目录，spawn 时 getcwd
+/// 失败，报 "Unable to read current working directory"。显式钉到系统临时根
+/// （生命周期覆盖进程）免疫该竞态；git 命令的路径参数均为绝对/显式路径，
+/// cwd 无业务含义。
 fn stable_cwd() -> PathBuf {
     std::env::temp_dir()
 }

@@ -96,29 +96,32 @@ impl AstToIrGenerator {
                     ty = *inner;
                 }
                 match ty {
-                    crate::frontend::core::types::MonoType::Generic { name, .. } => Some(name),
-                    crate::frontend::core::types::MonoType::Struct(s) => Some(s.name.clone()),
-                    crate::frontend::core::types::MonoType::TypeRef(n) => Some(n.clone()),
+                    crate::frontend::core::types::MonoType::Generic { name, .. } => {
+                        Some(name.bare().to_string())
+                    }
+                    crate::frontend::core::types::MonoType::Struct(s) => {
+                        Some(s.name.bare().to_string())
+                    }
+                    crate::frontend::core::types::MonoType::TypeRef(n) => {
+                        Some(n.bare().to_string())
+                    }
                     _ => None,
                 }
             })
         });
         let method_names = base_name.map(|base| {
             use crate::frontend::core::sema::operator_interfaces::TRY_METHODS;
-            let qualified = self.registry.std_method_binding_qualified_map();
             // 名字集合的唯一真相源是 `TRY_METHODS`（typecheck 侧注册同表）；
             // 此处不再手抄一遍，否则改名时两边静默漂移。
+            // std 面按**方法身份**取限定名（D-1：投影是唯一拼接实现），
+            // 其余保持定义侧裸键；base 是定义侧裸类型名（#465 同族）。
             let names: Vec<String> = TRY_METHODS
                 .iter()
                 .map(|m| {
-                    let key = format!("{}.{}", base, m);
-                    let std_qualified = qualified.get(&key).cloned().unwrap_or(key);
-                    // WBS 3.18.3 / issue #506：派发名同经 method_dispatch_name 单一
-                    // 判据——base 是定义侧裸类型名（#465 同族），接收者类型经导入面
-                    // （含别名）引入时按定义单元限定；std 已限定名与本单元类型
-                    // 原样返回。可达路径上该改写与 qualify_names 的终点一致
-                    // （已限定名经 resolve_call_target 原样通过），零漂移。
-                    self.method_dispatch_name(expr, &std_qualified)
+                    self.registry
+                        .std_method_path(&base, m)
+                        .map(|path| path.project())
+                        .unwrap_or_else(|| format!("{}.{}", base, m))
                 })
                 .collect();
             // TRY_METHODS 恒为四元（见 operator_interfaces.rs 定义）
@@ -227,10 +230,6 @@ impl AstToIrGenerator {
                     if inferred != "<unknown>" {
                         self.local_var_types.insert(var_name.clone(), inferred);
                     }
-                    // WBS 4.9.8 / issue #465：赋值的**写出**类型名（构造器形态）
-                    if let Some(written) = self.constructor_written_type_name(right) {
-                        self.note_local_written_type(var_name, &written);
-                    }
 
                     // 统一走 Store — 消除 Var→Var 走 Move 的特殊情况
                     instructions.push(Instruction::Store {
@@ -330,20 +329,10 @@ impl AstToIrGenerator {
 
                 // RFC-011b: 显式接口派发——`==`/`!=` 命中 Equal 实例化时
                 // 生成方法调用（接收者居首），`!=` 对结果取反
-                if let Some((type_name, method, negate)) =
-                    self.operator_dispatches.get(span).cloned()
-                {
-                    let short_name = format!("{}.{}", type_name, method);
-                    let func_name = if let Some(qualified) =
-                        self.registry.short_to_qualified_map().get(&short_name)
-                    {
-                        qualified.clone()
-                    } else {
-                        short_name
-                    };
-                    // WBS 4.9.8 修复轮 R1 / issue #465：同 Index 臂——接收者（左操作数）
-                    // 是导入类型时按定义单元限定派发名，本地类型行为不变。
-                    let dispatch_name = self.method_dispatch_name(left, &func_name);
+                if let Some(dispatch) = self.operator_dispatches.get(span).cloned() {
+                    let negate = dispatch.negate;
+                    // 调用名即上游给出的名字（D-8）：限定已在方法身份里，这里不再查表
+                    let dispatch_name = dispatch.dispatch_name;
                     instructions.push(Instruction::Call {
                         dst: Some(result_reg.clone()),
                         func: Operand::Const(ConstValue::String(dispatch_name)),

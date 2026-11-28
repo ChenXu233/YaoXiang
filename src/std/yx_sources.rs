@@ -43,8 +43,8 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
     use crate::frontend::core::sema::checker::TypeChecker;
     use crate::frontend::core::sema::SemanticProbe;
     use crate::frontend::core::tokenize;
+    use crate::frontend::core::types::identity::DefPath;
     use crate::frontend::core::types::mono::MonoType;
-    use crate::frontend::module::symbol::SymbolTable;
     use crate::frontend::module::{Export, ExportKind, ModuleInfo, ModuleSource};
 
     let source = embedded_std_source(use_path)?;
@@ -54,6 +54,10 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
         return None;
     }
     let mut checker = TypeChecker::new(use_path);
+    // 单元键与限定开关（WBS 4.9.10 D-4/D-8）：std 模块的方法身份**必须**带模块键
+    // （IR 函数表里的 std 方法名一直是 `std.result.Result.is_ok` 这类限定名）。
+    checker.env().unit_key = use_path.to_string();
+    checker.env().qualify_methods = true;
     // 谓词名可见面（WBS 3.20.9 / #522）：嵌入 std 只见自身单元，scan 自身
     // 模块传入（std.yx 源里现无谓词声明，内置谓词名仍由 scan 收进）
     let namespace =
@@ -89,7 +93,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                     });
                     info.add_export(Export {
                         name: name.clone(),
-                        full_path: SymbolTable::qualify(use_path, name),
+                        full_path: DefPath::item(use_path, name).project(),
                         kind: ExportKind::Type,
                         signature: String::new(),
                         mono_type: Some(ty),
@@ -132,7 +136,7 @@ pub fn embedded_std_module_info(use_path: &str) -> Option<crate::frontend::modul
                             .unwrap_or_default();
                         info.add_export(Export {
                             name: name.clone(),
-                            full_path: SymbolTable::qualify(use_path, name),
+                            full_path: DefPath::item(use_path, name).project(),
                             kind: if matches!(ty, MonoType::Fn { .. }) {
                                 ExportKind::Function
                             } else {

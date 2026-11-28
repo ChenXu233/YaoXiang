@@ -497,10 +497,15 @@ main = () => {
     run(&source).unwrap_or_else(|e| panic!("Execution failed:\n{e:#}\n\nSource:\n{source}"));
 }
 
-/// #477 锚③：**静默错误值形态**——用户 `read: (File, Int)` 与 native read
-/// 元数与实参运行期形态都兼容（File 运行期即 Int fd）：修前 native_read
+/// #477 锚③：**静默错误值形态**——用户 `read: (Any, Int)` 与 native read
+/// 元数与实参运行期形态都兼容（句柄运行期即 Int fd）：修前 native_read
 /// 拿用户 fd 真读文件、静默返回文件内容（空文件 → 空串），exit 0 但值错；
 /// 只有值断言能区分两种行为。修后用户函数执行。
+///
+/// 形参位迁移（RFC-039 D53 / WBS 8.9.1）：本夹具原写 `(File, Int)`——D53 之前
+/// 裸标识符是「无标注形参」（HM 推断），D53 之后按**类型**解析，而未导入
+/// `File` 这个类型名（native 句柄类型不在类型命名空间）⇒ 构造期 E1003。
+/// 本用例只钉遮蔽派发、不钉句柄类型，故按运行期事实收窄到 `(Any, Int)`。
 #[test]
 fn test_shadowed_read_with_compatible_arity_returns_user_result() {
     // Arrange：native_read 修前会真读该文件（fd 查表命中），静默返回文件内容。
@@ -520,7 +525,7 @@ use std.os
 use std.io
 use std.assert
 
-read: (File, Int) -> String = (f, n) => {{ "user-read-called" }}
+read: (Any, Int) -> String = (f, n) => {{ "user-read-called" }}
 
 main = () => {{
     f = os.open("{anchor_path}", "r")

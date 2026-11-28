@@ -1,0 +1,6 @@
+[package]
+name = "namespace-form-positional-method-args"
+version = "0.1.0"
+
+[run]
+main = "main.yx"

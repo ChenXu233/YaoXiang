@@ -606,7 +606,7 @@ fn dump_type_detail(ty: &crate::frontend::core::sema::MonoType) -> String {
             let ret_str = dump_type_detail(return_type);
             format!("fn({}) -> {}", params_str, ret_str)
         }
-        crate::frontend::core::sema::MonoType::TypeRef(name) => name.clone(),
+        crate::frontend::core::sema::MonoType::TypeRef(name) => name.bare().to_string(),
         crate::frontend::core::sema::MonoType::TypeVar(var) => format!("T{:?}", var),
         crate::frontend::core::sema::MonoType::Union(types) => {
             let inner = types

@@ -120,3 +120,12 @@ docs/src/blog/cubk-style-comment.md
 
 # 工具误把 %SystemDrive% 当相对路径展开时留下的目录，禁止入库
 %SystemDrive%/
+
+# 错误码参考页：构建期由 scripts/docs/gen-error-code-docs.py 生成（zh + en），不入库。
+# 生成物随代码的约定对它不再适用——页面在文档站构建时从码表与 locales 重新生成。
+docs/src/reference/error-code/
+docs/src/reference/warning-code/warning-codes.md
+docs/src/reference/package/error-codes.md
+docs/src/en/reference/error-code/
+docs/src/en/reference/warning-code/warning-codes.md
+docs/src/en/reference/package/error-codes.md

@@ -5,6 +5,7 @@
 
 use crate::ast;
 use crate::frontend::core::lexer::tokens::Literal;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::EnumType;
 use crate::frontend::core::types::{MonoType, PolyType, StructType, TypeVar};
 use crate::util::span::Span;
@@ -79,7 +80,8 @@ fn int_literal_type(n: i128) -> MonoType {
 fn test_container_element_slot_replaces_length_literal_with_base_type() {
     // Arrange — `Vec(3)`（字面量实参 = 长度槽）与 `Vec(Int)`（既有元素槽形态）。
     let vec_of_three = MonoType::Generic {
-        name: "Vec".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Vec")))
+            .expect("type name must be bare and non-empty"),
         args: vec![int_literal_type(3)],
     };
     let vec_of_int = MonoType::make_vec(MonoType::Int(64));
@@ -107,16 +109,25 @@ fn test_container_length_slot_reads_only_literal_arguments() {
     // Arrange — 三格：`Vec(3)` 的字面量是长度；`Array(Int, 3)` 的第二位是长度；
     // `Array(Int, N)` 的 N 是符号常量（RFC-011 const 参数形态），长度推迟。
     let vec_of_three = MonoType::Generic {
-        name: "Vec".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Vec")))
+            .expect("type name must be bare and non-empty"),
         args: vec![int_literal_type(3)],
     };
     let array_of_three = MonoType::Generic {
-        name: "Array".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Array")))
+            .expect("type name must be bare and non-empty"),
         args: vec![MonoType::Int(64), int_literal_type(3)],
     };
     let array_of_symbolic_n = MonoType::Generic {
-        name: "Array".to_string(),
-        args: vec![MonoType::Int(64), MonoType::TypeRef("N".to_string())],
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Array")))
+            .expect("type name must be bare and non-empty"),
+        args: vec![
+            MonoType::Int(64),
+            MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("N")))
+                    .expect("type name must be bare and non-empty"),
+            ),
+        ],
     };
     let vec_of_int = MonoType::make_vec(MonoType::Int(64));
 
@@ -168,7 +179,13 @@ fn test_from_ast_type_name() {
         span: Span::dummy(),
     };
     let mono: MonoType = ast_ty.into();
-    assert_eq!(mono, MonoType::TypeRef("MyType".to_string()));
+    assert_eq!(
+        mono,
+        MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("MyType")))
+                .expect("type name must be bare and non-empty")
+        )
+    );
 }
 
 #[test]
@@ -186,7 +203,8 @@ fn test_from_ast_type_primitives() {
     assert_eq!(
         MonoType::from(name_ty("Bytes")),
         MonoType::Generic {
-            name: "Bytes".into(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Bytes")))
+                .expect("type name must be bare and non-empty"),
             args: vec![]
         },
         "Bytes 落 Generic，不再有专用变体"
@@ -273,8 +291,9 @@ fn test_from_ast_type_tuple() {
 
 #[test]
 fn test_from_ast_type_fn_drops_untyped_param_as_loss() {
-    // Arrange: 一个带类型形参 + 一个**裸标识符形参**（`ty = None`——6.5 / 8.9.1 的
-    // `(Int64)` 形参位：标识符占位、无类型标注）。后者在 AST 里是合法且常见的形态。
+    // Arrange: 一个带类型形参 + 一个**无标注形参**（`ty = None`）。D53 之后
+    // `ty = None` 只来自无标注的值形参（lambda 头 / HM 推断位）——D53 之前还有
+    // 参数位裸标识符（`(Int64)`）这一来源，现已按类型解析并带 `ty`。
     let ast_ty = ast::Type::Fn {
         params: vec![
             ast::Param::from_type(name_ty("Int32")),
@@ -463,7 +482,7 @@ fn test_from_ast_type_name_never() {
 fn test_from_ast_type_ptr() {
     let ast_ty = ast::Type::Ptr(Box::new(name_ty("Int32")));
     let mono: MonoType = ast_ty.into();
-    assert!(matches!(mono, MonoType::TypeRef(n) if n.starts_with("*")));
+    assert!(matches!(mono, MonoType::TypeRef(n) if n.bare().starts_with("*")));
 }
 
 #[test]
@@ -555,12 +574,14 @@ fn test_type_name_dict_set_range() {
     let d = MonoType::make_dict(MonoType::make_string(), MonoType::Int(32));
     assert_eq!(d.type_name(), "Dict(string, int32)");
     let s = MonoType::Generic {
-        name: "Set".into(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Set")))
+            .expect("type name must be bare and non-empty"),
         args: vec![MonoType::Bool],
     };
     assert_eq!(s.type_name(), "Set(bool)");
     let r = MonoType::Generic {
-        name: "Range".into(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Range")))
+            .expect("type name must be bare and non-empty"),
         args: vec![MonoType::Int(64)],
     };
     assert_eq!(r.type_name(), "Range(int64)");
@@ -581,7 +602,10 @@ fn test_is_constraint_and_constraint_fields() {
             "clone",
             MonoType::Fn {
                 params: vec![],
-                return_type: Box::new(MonoType::TypeRef("Self".to_string())),
+                return_type: Box::new(MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&("Self")))
+                        .expect("type name must be bare and non-empty"),
+                )),
             },
             false,
             false,
@@ -590,9 +614,12 @@ fn test_is_constraint_and_constraint_fields() {
     assert!(iface.is_constraint());
     let fields = iface.constraint_fields();
     assert_eq!(fields.len(), 1);
-    assert!(MonoType::TypeRef("Clone".to_string())
-        .constraint_fields()
-        .is_empty());
+    assert!(MonoType::TypeRef(
+        Nominal::flat(AsRef::<str>::as_ref(&("Clone")))
+            .expect("type name must be bare and non-empty")
+    )
+    .constraint_fields()
+    .is_empty());
 }
 
 #[test]
@@ -612,11 +639,13 @@ fn test_struct_field_is_mut_found() {
 #[test]
 fn test_enum_type_partial_eq() {
     let a = EnumType {
-        name: "Opt".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Opt")))
+            .expect("type name must be bare and non-empty"),
         variants: vec!["some".to_string(), "none".to_string()],
     };
     let b = EnumType {
-        name: "Opt".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("Opt")))
+            .expect("type name must be bare and non-empty"),
         variants: vec!["some".to_string(), "none".to_string()],
     };
     assert_eq!(a, b);
@@ -761,7 +790,8 @@ fn record_with(
     fields: Vec<(&str, MonoType, bool, bool)>,
 ) -> StructType {
     StructType {
-        name: name.to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+            .expect("type name must be bare and non-empty"),
         fields: fields
             .into_iter()
             .map(|(n, t, is_mut, has_default)| {
@@ -903,7 +933,8 @@ fn record_with_quantities(
     fields: Vec<(&str, Option<ast::Quantity>)>,
 ) -> StructType {
     StructType {
-        name: name.to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+            .expect("type name must be bare and non-empty"),
         fields: fields
             .into_iter()
             .map(

@@ -41,6 +41,35 @@ fn test_formatter_emits_paren_destructure() {
     );
 }
 
+/// RFC-039 D53 / SPEC type-system §3.5：未命名带型参数（裸类型项）必须原样输出——
+/// 名字槽是空串，写成 `: Int` 会产出无法再解析的源码（idempotency 会当场红）。
+#[test]
+fn test_formatter_keeps_bare_type_params() {
+    // Arrange：声明签名里两种形参项并存（未命名裸类型 / 具名）。
+    let source = "\
+        Point: Type = { x: Int }\n\
+        Surface: Type = { w: Int }\n\
+        add: (Int, Int) -> Int = (a, b) => a + b\n\
+        mk: (p: Point, Surface) -> Int = (p, s) => p.x\n";
+
+    // Act
+    let out = format_or_panic(source);
+
+    // Assert：裸类型项只写类型；具名项保持 `名: 类型`。
+    assert!(
+        out.contains("add: (Int, Int) -> Int"),
+        "未命名带型参数必须原样输出为 `(Int, Int)`：\n{out}"
+    );
+    assert!(
+        out.contains("mk: (p: Point, Surface) -> Int"),
+        "混合形参必须按位保留（具名 `p: Point` + 裸类型 `Surface`）：\n{out}"
+    );
+    assert!(
+        !out.contains("(: "),
+        "空名字槽不得渲染成 `: 类型`（会产生无法再解析的源码）：\n{out}"
+    );
+}
+
 #[test]
 fn test_formatter_emits_semicolon_for_same_line_statements() {
     // Arrange：块内同一行的多条语句（§3.1 要求 `;` 分隔）。

@@ -13,6 +13,13 @@ export interface LanguageConfig {
   name: string;
   /** 语言风格指令；省略则用默认技术文档 prompt */
   prompt?: string;
+  /**
+   * 是否把错误码 title 统一成句首大写。
+   *
+   * 只对有大小写的语言开启（CJK 无大小写）。ja / 文言文 / 喵语里以技术标识符
+   * （`const` / `unsafe` / `spawn`）开头的标题是既有写法，保持原样。
+   */
+  capitalizeTitles?: boolean;
 }
 
 /** 单个翻译系统的配置（决定源文件、目标目录、适配器） */

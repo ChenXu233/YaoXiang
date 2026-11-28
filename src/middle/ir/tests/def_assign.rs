@@ -4,7 +4,7 @@
 //! 按名分发——行为不变但 DefId 不再承重，本测试即是防静默回退的哨兵。
 
 use crate::frontend::compiler::Compiler;
-use crate::frontend::module::symbol::DefId;
+use crate::frontend::core::types::identity::DefId;
 use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
 };

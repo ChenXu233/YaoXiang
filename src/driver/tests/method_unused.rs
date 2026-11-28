@@ -41,8 +41,10 @@ use super::check_rootless_mono::{check_codes, make_rootless_project, run_check};
 use super::driver::{make_script_project, run_merged_slot_values, run_multi};
 use super::ref_pool::assert_warnings;
 use crate::driver::helpers::resolved_method_marks;
-use crate::frontend::core::sema::types::OverloadResolutions;
+use crate::frontend::core::sema::types::{MethodResolution, OverloadResolutions};
 use crate::frontend::core::sema::TypeCheckResult;
+use crate::frontend::core::types::identity::DefPath;
+use crate::frontend::module::symbol::SymbolTable;
 use crate::util::plan_id::PlanId;
 
 /// 带 `[run].main` 声明面的多文件夹具——`yaoxiang check main.yx` 的直驱等价形态：
@@ -254,20 +256,25 @@ fn test_cross_unit_key_scope_reports_unhit_siblings_without_cross_unit_exemption
 /// 4.9.7 / #464 ⑦ 驱动侧读取是纯读：读归因标记**不触达** `OverloadResolutions::get`
 /// ⇒ 决议条目仍在未消费差集里——否则「消费必达」结算（W1090）会被驱动侧的读取掩盖
 /// （读一次 = 记一次消费）。空 `units`/`asts`：本条只钉读取面本身。
+///
+/// WBS 4.9.10 D-8：读取面按**方法身份**出标记（决议名经投影索引换回 `DefPath`）
+/// ——故夹具给一份只含该方法的符号表，断言下到身份而不是名字字符串。
 #[test]
 fn test_resolved_method_marks_read_leaves_consumption_ledger_untouched() {
-    // Arrange：一条已登记、尚无消费者（lower 未跑）的决议条目
+    // Arrange：一条已登记、尚无消费者（lower 未跑）的决议条目；符号表里有该方法
     let call = PlanId::from_ordinal(7);
     let mut result = TypeCheckResult::default();
     result.overload_resolutions =
-        OverloadResolutions::from_entries([(call, "Temp.to".to_string())]);
+        OverloadResolutions::from_entries([(call, MethodResolution::target_only("Temp.to"))]);
+    let mut symbols = SymbolTable::new();
+    symbols.intern_method(DefPath::method("", "Temp", "to"));
 
     // Act：驱动侧唯一读取面
-    let marks = resolved_method_marks(&[], &[], &[Some(&result)]);
+    let marks = resolved_method_marks(&[], &[], &[Some(&result)], &symbols);
 
     // Assert：读取面命中该条目（不是空转）；台账的未消费差集不变（纯读）
     assert!(
-        marks.groups.contains("Temp.to"),
+        marks.groups.contains(&DefPath::method("", "Temp", "to")),
         "读取面必须命中决议条目（否则本条断言空转）: {:?}",
         marks.groups
     );

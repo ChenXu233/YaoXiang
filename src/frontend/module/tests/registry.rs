@@ -16,6 +16,7 @@
 //! 纯 yx（Result 类型 + Try 方法）的**混合面**，而嵌入模块本身也带
 //! ModuleSource::Std——任何按模块来源的回答都会在这里判错一半。
 
+use crate::frontend::core::types::identity::DefPath;
 use crate::frontend::module::registry::{ModuleRegistry, QualifiedNameConcern};
 
 /// 混合面：同一个 std.result 里，yx 定义的导出答「是」、native 导出答「否」。
@@ -56,7 +57,7 @@ fn registry_with_user_module() -> ModuleRegistry {
     ] {
         lib.add_export(Export {
             name: name.to_string(),
-            full_path: format!("lib.{name}"),
+            full_path: DefPath::item("lib", name).project(),
             kind,
             signature: String::new(),
             mono_type: Some(MonoType::Int(64)),
@@ -71,7 +72,7 @@ fn registry_with_user_module() -> ModuleRegistry {
         });
     }
     lib.method_bindings
-        .insert("Point.get_x".to_string(), MonoType::Int(64));
+        .insert(DefPath::method("lib", "Point", "get_x"), MonoType::Int(64));
     registry.register(lib);
     registry
 }

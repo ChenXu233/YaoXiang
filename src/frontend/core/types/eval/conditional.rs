@@ -22,6 +22,7 @@
 //! ```
 
 use crate::frontend::core::types::eval::{TypeLevelError, TypeLevelResult};
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::MonoType;
 
 /// 条件类型的布尔条件
@@ -158,7 +159,10 @@ impl If {
         match self.condition.eval() {
             Some(true) => TypeLevelResult::Normalized(*self.true_branch.clone()),
             Some(false) => TypeLevelResult::Normalized(*self.false_branch.clone()),
-            None => TypeLevelResult::Pending(MonoType::TypeRef("If".to_string())),
+            None => TypeLevelResult::Pending(MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&("If")))
+                    .expect("type name must be bare and non-empty"),
+            )),
         }
     }
 
@@ -228,7 +232,10 @@ impl MatchType {
         Self::new(
             target,
             vec![MatchArm {
-                pattern: MonoType::TypeRef("_".to_string()),
+                pattern: MonoType::TypeRef(
+                    Nominal::flat(AsRef::<str>::as_ref(&("_")))
+                        .expect("type name must be bare and non-empty"),
+                ),
                 result,
             }],
         )
@@ -461,12 +468,18 @@ impl MatchPattern {
 
     /// 创建 True 模式
     pub fn t() -> Self {
-        MatchPattern::Literal(MonoType::TypeRef("True".to_string()))
+        MatchPattern::Literal(MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("True")))
+                .expect("type name must be bare and non-empty"),
+        ))
     }
 
     /// 创建 False 模式
     pub fn f() -> Self {
-        MatchPattern::Literal(MonoType::TypeRef("False".to_string()))
+        MatchPattern::Literal(MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("False")))
+                .expect("type name must be bare and non-empty"),
+        ))
     }
 }
 
@@ -629,7 +642,7 @@ impl PatternMatcher {
             // 检查类型引用是否匹配构造器名称
             MonoType::TypeRef(type_name) => {
                 // 处理参数化类型如 Some(T)
-                if let Some((ctor, params)) = self.parse_type_app(type_name) {
+                if let Some((ctor, params)) = self.parse_type_app(type_name.bare()) {
                     ctor == name && (arguments.is_empty() || params.len() >= arguments.len())
                 } else {
                     // 简单类型引用
@@ -745,7 +758,7 @@ impl Default for MatchBinding {
 ///
 /// let pattern = PatternBuilder::new()
 ///     .wildcard("x")
-///     .literal(MonoType::TypeRef("Int".to_string()))
+///     .literal(MonoType::TypeRef(Nominal::flat(AsRef::<str>::as_ref(&("Int"))).expect("type name must be bare and non-empty")))
 ///     .build();
 /// ```
 #[derive(Debug, Default)]
@@ -841,7 +854,10 @@ pub mod nat_examples {
                         MatchPattern::zero(),
                         MatchPattern::wildcard_named("b"),
                     ]),
-                    MonoType::TypeRef("b".to_string()),
+                    MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&("b")))
+                            .expect("type name must be bare and non-empty"),
+                    ),
                 ),
                 // (Succ(A'), B) => Succ(Add(A', B))
                 PatternMatchArm::new(
@@ -849,7 +865,10 @@ pub mod nat_examples {
                         MatchPattern::succ(MatchPattern::wildcard_named("a'")),
                         MatchPattern::wildcard_named("b"),
                     ]),
-                    MonoType::TypeRef("Succ".to_string()), // 简化：实际需要计算
+                    MonoType::TypeRef(
+                        Nominal::flat(AsRef::<str>::as_ref(&("Succ")))
+                            .expect("type name must be bare and non-empty"),
+                    ), // 简化：实际需要计算
                 ),
             ],
         )

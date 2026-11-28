@@ -7,6 +7,7 @@
 use super::{AstToIrGenerator, BindingLocation, LoopTargets, SymbolEntry};
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::middle::ir::ir::{FrameId, Instruction, LocalSlot, Operand, ValueId, ValueInfo};
 use crate::tlog;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -59,7 +60,6 @@ impl AstToIrGenerator {
                 name.to_string(),
                 SymbolEntry {
                     location: BindingLocation::Local(local_idx),
-                    written_type: None,
                 },
             );
         }
@@ -119,7 +119,6 @@ impl AstToIrGenerator {
                 name.to_string(),
                 SymbolEntry {
                     location: BindingLocation::Upvalue(upvalue_idx),
-                    written_type: None,
                 },
             );
         }
@@ -241,7 +240,10 @@ impl AstToIrGenerator {
         let value = self.next_value;
         self.next_value += 1;
         self.cur_values.push(ValueInfo {
-            ty: MonoType::TypeRef(UNKNOWN_VALUE_TYPE.to_string()),
+            ty: MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&(UNKNOWN_VALUE_TYPE)))
+                    .expect("type name must be bare and non-empty"),
+            ),
             debug_name: None,
             defining_block: self.cur_block_label,
         });
@@ -309,49 +311,11 @@ impl AstToIrGenerator {
         values
     }
 
-    /// 记下局部变量**写出**的类型名（注解原文或构造器名）。
-    ///
-    /// 只记「用户写出来的名字」，不重判类型：`x: TempB` 记 `TempB`，
-    /// `u = TempB(2.0)` 记 `TempB`，`u = b.Temp(2.0)` 记 `b.Temp`。
-    /// 「这个名字属于哪个单元」的判定只在 [`Self::imported_type_owner`] 一处。
-    pub(in crate::middle) fn note_local_written_type(
-        &mut self,
-        name: &str,
-        written: &str,
-    ) {
-        for scope in self.symbols.iter_mut().rev() {
-            if let Some(entry) = scope.get_mut(name) {
-                entry.written_type = Some(written.to_string());
-                return;
-            }
-        }
-    }
-
-    /// 形参写出的类型名（注解原文）——与局部变量走同一条派发归因链。
-    ///
-    /// `declared` 是同一形参位在**声明**里的形参（`declaration_runtime_param_slots`）：
-    /// parser 不再往实现头填声明类型（WBS 6.8.3），故第 i 位「写出的是什么类型名」
-    /// 按「作者标注 → 声明同类位」取——与形参类型、调用侧可用名同一来源。
-    pub(in crate::middle) fn note_param_written_types(
-        &mut self,
-        params: &[ast::Param],
-        declared: &[ast::Param],
-    ) {
-        let written: Vec<(String, String)> = params
-            .iter()
-            .enumerate()
-            .filter_map(|(i, p)| {
-                let ty =
-                    p.ty.as_ref()
-                        .or_else(|| declared.get(i).and_then(|d| d.ty.as_ref()))
-                        .and_then(Self::written_type_name_of)?;
-                Some((p.name.clone(), ty.to_string()))
-            })
-            .collect();
-        for (name, ty) in written {
-            self.note_local_written_type(&name, &ty);
-        }
-    }
+    // WBS 4.9.10 F1 退役：本模块曾有 `note_local_written_type` /
+    // `note_param_written_types` 两个写入点，把「用户写出来的类型名」记进
+    // `SymbolEntry::written_type`，供派发归因时反查。那条链已整体删除——
+    // 「这个名字属于哪个单元」的判定已上移 typecheck 的 `ImportFace`
+    //（D-5 导入面 / D-6 绑定类型身份），IR 生成侧不再持有该信息的副本。
 
     /// 把量词事实写进**当前作用域**里该名字的槽位（`LocalSlot::quantity` 的唯一写入点）。
     ///
@@ -373,8 +337,9 @@ impl AstToIrGenerator {
         }
     }
 
-    /// 实现头第 i 位 ↔ 声明运行期值位第 i 位（与 `note_param_written_types` **同一**
-    /// 对齐口径）：把声明侧已解析的量词事实写到该形参的槽位上。
+    /// 实现头第 i 位 ↔ 声明运行期值位第 i 位（与形参类型、调用侧可用名**同一**
+    /// 对齐口径：`declaration_runtime_param_slots`）：把声明侧已解析的量词事实
+    /// 写到该形参的槽位上。
     ///
     /// 按位而不是按名：实现头可以改名（`f: (a: Int) -> Int = (b) => b`），名字不是
     /// 绑定身份，位次才是。
@@ -387,28 +352,6 @@ impl AstToIrGenerator {
             let quantity = declared.get(i).and_then(|d| d.quantity);
             self.note_slot_quantity(&param.name, quantity);
         }
-    }
-
-    /// 局部变量写出类型名的查找（作用域由符号表本身给出）。
-    fn local_written_type(
-        &self,
-        name: &str,
-    ) -> Option<&str> {
-        for scope in self.symbols.iter().rev() {
-            if let Some(entry) = scope.get(name) {
-                return entry.written_type.as_deref();
-            }
-        }
-        None
-    }
-
-    /// 变量写出的类型名：先查局部作用域，再查本文件顶层绑定位。
-    pub(super) fn binding_written_type(
-        &self,
-        name: &str,
-    ) -> Option<&str> {
-        self.local_written_type(name)
-            .or_else(|| self.global_written_types.get(name).map(String::as_str))
     }
 }
 
@@ -503,7 +446,8 @@ fn is_unknown_value_type(ty: &MonoType) -> bool {
 
 fn string_type() -> MonoType {
     MonoType::Generic {
-        name: "String".to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&("String")))
+            .expect("type name must be bare and non-empty"),
         args: Vec::new(),
     }
 }

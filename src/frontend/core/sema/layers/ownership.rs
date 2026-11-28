@@ -13,6 +13,7 @@
 use super::super::proof::context::ProofContext;
 use super::super::proof::verdict::{ProofFailure, ProofResult, ProofResultExt};
 use crate::frontend::core::types::const_data::{BinOp, ConstExpr, UnOp};
+use crate::frontend::core::types::identity::DefPath;
 use crate::util::consumption::ConsumptionLedger;
 use crate::util::plan_id::PlanId;
 use crate::util::span::Span;
@@ -1178,7 +1179,7 @@ impl OwnershipChecker {
             .or_else(|| {
                 if func_name.contains('.') && !func_name.starts_with("std.") {
                     env.native_signatures
-                        .get(&format!("std.{func_name}"))
+                        .get(&DefPath::item("std", func_name).project())
                         .cloned()
                 } else {
                     None
@@ -1463,7 +1464,7 @@ impl OwnershipChecker {
                     CopySemantics::Move
                 }
             }
-            MonoType::TypeRef(name) => match self.resolve_type_def(name) {
+            MonoType::TypeRef(name) => match self.resolve_type_def(name.bare()) {
                 Some(body) => self.classify_mono_deep(&body, depth - 1),
                 None => CopySemantics::Move,
             },
@@ -1578,7 +1579,7 @@ impl OwnershipChecker {
                     .map(|field| field.ty.clone())?,
                 crate::frontend::core::types::MonoType::Ref { inner, .. } => inner.as_ref().clone(),
                 crate::frontend::core::types::MonoType::TypeRef(n) => {
-                    let poly = env.types.get(n)?;
+                    let poly = env.types.get(n.bare())?;
                     let body = poly.body.clone();
                     match &body {
                         crate::frontend::core::types::MonoType::Struct(st) => st
@@ -1597,7 +1598,7 @@ impl OwnershipChecker {
             crate::frontend::core::types::MonoType::TypeRef(n) => n.clone(),
             _ => return None,
         };
-        let method = env.get_method_binding(&type_name, field)?;
+        let method = env.get_method_binding(type_name.bare(), field)?;
         let crate::frontend::core::types::MonoType::Fn { params, .. } = method else {
             return None;
         };

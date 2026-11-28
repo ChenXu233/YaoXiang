@@ -7,16 +7,17 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use super::symbol::{DefKind, SymbolTable};
+use super::symbol::SymbolTable;
 use super::{Export, ExportKind, ModuleError, ModuleInfo, ModuleSource};
 use crate::frontend::core::sema::environment::MethodOverloadCandidates;
+use crate::frontend::core::types::identity::{DefKind, DefPath};
 use crate::frontend::core::types::mono::MonoType;
 
 /// 「限定名指向什么」的关注面——issue #494（WBS 3.6.6）三臂收敛后的查询参数。
 ///
 /// 收敛前「这个限定名指向什么」在三处各答一次：原生名判定（原
 /// `ModuleRegistry::is_native_name`）/ 命名空间臂（lower 侧
-/// `registry.symbols().def + DefKind` 分派）/ 别名判据（lower 侧
+/// `registry.symbols().def_by_projection + DefKind` 分派）/ 别名判据（lower 侧
 /// `qualified_export_is_code`，#479 引入、#493 改导出粒度）。按禁令三
 /// （同一行为 ≥2 处复制 ⇒ 收敛到共享层），判据本体只保留在
 /// [`ModuleRegistry::qualified_name_is`] 一处，调用点按本枚举传关注面；
@@ -112,9 +113,12 @@ impl ModuleRegistry {
 
     /// 把一个模块的导出与方法登记进项目符号表。
     ///
-    /// 限定名直接采用 `export.full_path`（即 `{module_key}.{bare}`，与 SymbolTable::qualify 一致）。
-    /// 子模块不是绑定，跳过。方法从 `method_bindings`（键 `Type.method`）登记，
-    /// 链接到所属类型并构建静态 vtable。
+    /// 导出项按**路径**登记：模块键 + 导出裸名。用户模块与嵌入 yx std 的
+    /// `full_path` 就是该路径的投影（`orchestrator::make_export` /
+    /// `embedded_std_module_info` 两处都经 `DefPath::item(..).project()` 生成）；
+    /// native 的 FFI 名允许是任意字面量，那类按**无模块扁平名**登记（见循环内注释），
+    /// 投影仍与 `full_path` 逐字相同。子模块不是绑定，跳过。方法从
+    /// `method_bindings`（键 `Type.method`）登记，链接到所属类型并构建静态 vtable。
     fn intern_module(
         &mut self,
         module: &ModuleInfo,
@@ -126,16 +130,23 @@ impl ModuleRegistry {
                 ExportKind::Constant => DefKind::Constant,
                 ExportKind::SubModule => continue,
             };
-            self.symbols
-                .borrow_mut()
-                .intern_full(&export.full_path, kind);
+            // 导出面的 `full_path` 是权威投影：一般形态即 `{module}.{bare}`。native
+            // 的 FFI 名允许是任意字面量（VM 内建 `int.to_string` 就注册在 std.convert
+            // 下），那类不是「模块 + 裸名」的投影 —— 按**无模块扁平名**登记，
+            // 投影仍与 `full_path` 逐字相同（否则调用侧按 full_path 查投影索引会落空）。
+            let canonical = DefPath::item(&module.path, &export.name);
+            let path = if canonical.project() == export.full_path {
+                canonical
+            } else {
+                DefPath::item("", &export.full_path)
+            };
+            self.symbols.borrow_mut().intern(path, kind);
         }
         for method_key in module.method_bindings.keys() {
-            if let Some((type_bare, method)) = method_key.split_once('.') {
-                self.symbols
-                    .borrow_mut()
-                    .intern_method(&module.path, type_bare, method);
-            }
+            // 键即方法路径：模块键 / 归属段 / 裸名三段在 typecheck 侧已经由
+            // `TypeEnvironment::resolve_method_key` 定死（WBS 4.9.10 D-1/D-2），
+            // 这里只登记身份，不再拆字符串（拆名是反解，投影语法只归 `DefPath`）。
+            self.symbols.borrow_mut().intern_method(method_key.clone());
         }
     }
 
@@ -165,49 +176,85 @@ impl ModuleRegistry {
 
     /// 获取所有模块的方法绑定（RFC-029 跨文件方法调用）。
     ///
-    /// **确定性**（WBS 4.9.9）：按**模块键升序**合并——同名类型的同名方法键在
-    /// 多个单元里存在时，哈希表迭代序会让合并结果随进程变化（实测同一输入曾
-    /// 给出两种诊断）。升序 + 后者覆盖 ⇒ 末位模块稳定胜出；本表只保证「同一
-    /// 输入同一结果」，不判断胜出的是否是最优绑定。
-    pub fn all_method_bindings(&self) -> HashMap<String, MonoType> {
-        let mut module_keys: Vec<&String> = self.modules.keys().collect();
-        module_keys.sort();
+    /// 键是方法身份 [`DefPath`]（WBS 4.9.10 D-1/D-2）：不同单元的同名类型各有
+    /// 一条路径，合并**不会互相覆盖**——确定性来自身份而不是装配顺序，故本表
+    /// 没有排序依赖（旧实现按模块键升序 + 后者覆盖，是字符串键空间的补丁）。
+    pub fn all_method_bindings(&self) -> HashMap<DefPath, MonoType> {
         let mut bindings = HashMap::new();
-        for module_key in module_keys {
-            if let Some(module) = self.modules.get(module_key) {
-                bindings.extend(module.method_bindings.clone());
+        for module in self.modules.values() {
+            for (key, ty) in &module.method_bindings {
+                bindings.insert(key.clone(), ty.clone());
             }
         }
         bindings
     }
 
-    /// 方法**重载候选**表的确定性合并（RFC-029f 改进 4 / WBS 4.9.7 / issue #464）：
-    /// 对 `scoped` 给出的模块键**升序**逐模块追加候选组——模块间按键序、模块内按
-    /// 定义序，任一键位下的候选顺序因此与 HashMap 迭代序无关。
+    /// 跨单元方法候选的**注入面**（WBS 4.9.10 D-1）：注册表全部模块**除本单元**。
     ///
-    /// 为什么带作用域参数而不是无条件"全注册表并集"：候选按**裸类型名**键控
-    /// （`{Type}.{method}`）。两个单元各自定义同名类型时键相同，把调用单元
-    /// **命名不到**的单元的候选并进来会让同一调用点匹配到两个签名相同的候选 ⇒
-    /// 匹配数虚高、按「歧义即报错」规则报 E1107 误报（实测形态见
-    /// `driver::helpers::visible_method_overloads` 的注释）。作用域由调用方按
-    /// import face 单点给出，本函数不做任何名字解析。
-    pub fn merge_method_overloads(
+    /// 键是方法身份，同名类型分属两个单元也各有路径 ⇒ 不需要按名字裁剪作用域
+    /// （旧的 `merge_method_overloads(scoped)` 是字符串键空间的补丁）。本单元
+    /// 自己的候选由本单元签名收集现场登记——重复注入会把候选翻倍。
+    pub fn injectable_method_overloads(
         &self,
-        scoped: &[String],
-    ) -> HashMap<String, MethodOverloadCandidates> {
-        let mut modules: Vec<&String> = scoped.iter().collect();
-        modules.sort();
-        modules.dedup();
-        let mut merged: HashMap<String, MethodOverloadCandidates> = HashMap::new();
-        for path in modules {
-            let Some(module) = self.modules.get(path) else {
-                continue; // 不在注册表里的模块键不贡献候选（宁漏勿误）
-            };
+        own_module_key: &str,
+    ) -> Vec<(DefPath, MethodOverloadCandidates)> {
+        let mut out = Vec::new();
+        for (path, module) in &self.modules {
+            if path == own_module_key {
+                continue;
+            }
             for (key, group) in &module.method_overloads {
-                merged.entry(key.clone()).or_default().merge_from(group);
+                out.push((key.clone(), group.clone()));
             }
         }
-        merged
+        out
+    }
+
+    /// 裸方法键（`Type.method`）→ **std** 方法身份：算子派发面的身份查询。
+    ///
+    /// 旧 `std_method_binding_qualified_map` 只做字符串拼接（`Type.method` →
+    /// `{module}.Type.method`）；本查询用同一张身份表回答同一个问题：按
+    /// **归属段 + 裸名**找 std 模块里的那条路径。仅收 std 模块（用户模块的裸方法键
+    /// 由入口单元自己承载，跨单元限定会错分发）。模块键升序 ⇒ 同输入同结果。
+    pub fn std_method_path(
+        &self,
+        type_bare: &str,
+        method: &str,
+    ) -> Option<DefPath> {
+        let mut module_keys: Vec<&String> = self.modules.keys().collect();
+        module_keys.sort();
+        for module_key in module_keys {
+            let module = self.modules.get(module_key)?;
+            if module.source != ModuleSource::Std {
+                continue;
+            }
+            let path = DefPath::method(&module.path, type_bare, method);
+            if module.method_bindings.contains_key(&path) {
+                return Some(path);
+            }
+        }
+        None
+    }
+
+    /// std 模块导出的**类型名 → 提供模块键**（导入面的 std 基线，D-5 ④）。
+    ///
+    /// std 的类型名在每个单元都可见（与 `TypeChecker::new` 注入全部 std 方法
+    /// 绑定同源），故它们不是「导入」而是**基线**。按（类型名，模块键）升序返回：
+    /// 两个 std 模块导出同名类型时由建表侧 first-wins，升序保证同输入同结果。
+    pub fn std_type_origins(&self) -> Vec<(String, String)> {
+        let mut out: Vec<(String, String)> = Vec::new();
+        for (path, module) in &self.modules {
+            if module.source != ModuleSource::Std {
+                continue;
+            }
+            for (name, export) in &module.exports {
+                if export.kind == ExportKind::Type {
+                    out.push((name.clone(), path.clone()));
+                }
+            }
+        }
+        out.sort();
+        out
     }
 
     /// 解析模块路径，查找指定的导出项
@@ -274,27 +321,6 @@ impl ModuleRegistry {
         map
     }
 
-    /// 方法绑定的**限定名**映射（`"Result.is_failure"` → `"std.result.Result.is_failure"`）。
-    ///
-    /// yx std 模块的方法（`Type.method` 定义）在方法调用点按 `{类型名}.{方法}`
-    /// 命名，但 IR 函数表里的名字是「模块路径 + 方法全键」限定的
-    /// （`std.result.Result.is_failure`，模块内原名含类型前缀）——此映射补齐。
-    /// 仅收录 std 模块（用户模块方法本就在入口 IR 里以 `Type.method` 原名
-    /// 存在，限定会错分发）。
-    pub fn std_method_binding_qualified_map(&self) -> HashMap<String, String> {
-        let mut map = HashMap::new();
-        for module in self.modules.values() {
-            if module.source != ModuleSource::Std {
-                continue;
-            }
-            for key in module.method_bindings.keys() {
-                map.entry(key.clone())
-                    .or_insert_with(|| format!("{}.{}", module.path, key));
-            }
-        }
-        map
-    }
-
     /// 获取所有 native 函数名列表（用于 IR 生成的快速查找）
     pub fn native_names(&self) -> Vec<String> {
         let mut names = Vec::new();
@@ -313,7 +339,7 @@ impl ModuleRegistry {
     /// 限定名指向什么——registry 侧单一查询接口（issue #494 / WBS 3.6.6）。
     ///
     /// 收敛前三份判据（原生名 / lower 侧 `qualified_export_is_code`（#479/#493）/
-    /// lower 侧命名空间臂 `symbols().def + DefKind`）各答一次「这个限定名指向
+    /// lower 侧命名空间臂 `symbols().def_by_projection + DefKind`）各答一次「这个限定名指向
     /// 什么」，拆名与查表的机械面随之复制——按禁令三收拢为本接口；调用点各自
     /// 传关注面参数（[`QualifiedNameConcern`]），**新增第四处消费不得再各写一份**。
     /// 三臂语义与收敛前逐字节一致（形态全集 × 三关注面的答案表钉在
@@ -348,7 +374,9 @@ impl ModuleRegistry {
             QualifiedNameConcern::FunctionOrMethodDef => {
                 // 原 lower 侧命名空间臂判据原样：项目符号表 def 类别分派。
                 let symbols = self.symbols.borrow();
-                symbols.def(qualified).is_some_and(|def| {
+                // 入参是本编译期的**投影产物**（调用名/限定名），故走投影索引；
+                // 索引只读、不反解字符串（权威反查是 `SymbolTable::def_path`）。
+                symbols.def_by_projection(qualified).is_some_and(|def| {
                     matches!(symbols.kind(def), DefKind::Function | DefKind::Method)
                 })
             }
@@ -423,7 +451,7 @@ impl ModuleRegistry {
         &self,
         name: &str,
     ) -> bool {
-        let path = format!("std.{}", name);
+        let path = DefPath::item("std", name).project();
         self.modules.contains_key(&path)
     }
 
@@ -569,10 +597,12 @@ mod tests {
             .expect("std.result should be registered");
         assert!(m.exports.contains_key("Result"), "yx type export missing");
         for method in crate::frontend::core::sema::operator_interfaces::TRY_METHODS {
-            let key = format!("Result.{method}");
+            // 键是方法身份（D-1）：std.result 的 Result 方法归该模块键
+            let key = DefPath::method("std.result", "Result", method);
             assert!(
                 m.method_bindings.contains_key(&key),
-                "missing yx Try method {key}"
+                "missing yx Try method {}",
+                key.project()
             );
         }
         for f in [
@@ -615,121 +645,111 @@ mod tests {
         }
     }
 
-    /// WBS 4.9.7 / #464：跨单元候选合并的**确定性**与**作用域**（单一合并入口的钉板）。
+    /// WBS 4.9.10 D-1：**同名类型分属两个单元**时，候选按方法身份各归各家。
     ///
-    /// 判据：① 模块间按键升序（与调用方给出的顺序无关）；② 作用域外的模块不贡献候选；
-    /// ③ 候选三元组（候选/混编名/形参名）同序对齐——配对不得错位。
+    /// 判据（取代字符串键空间的 `merge_method_overloads(scoped)` 钉板）：
+    /// ① 注入面 = 注册表全部模块**除本单元**——本单元自己的候选由本单元登记，
+    ///    重复注入会翻倍；② `a.Temp.to` 与 `b.Temp.to` 是**两条身份**，既不合并
+    ///    也不互相覆盖（旧的字符串键空间里它们撞同一个键，只能靠作用域裁剪补）；
+    /// ③ 候选与形参名同组同序（配对不得错位）。
+    ///
+    /// 过**证明**门：换一个正确的替代实现（例如改成按键排序后合并）本测试仍绿——
+    /// 它守的是「身份区分同名类型」这条与实现选择无关的性质。
     #[test]
-    fn merge_method_overloads_is_deterministic_and_scoped() {
-        // Arrange：a / b 两个模块各自登记同名键 "Temp.to" 的候选组（a 的候选为 Int，b 为 Bool）
+    fn injectable_method_overloads_keeps_same_name_types_distinct() {
+        // Arrange：a / b 两个模块各自登记**同名类型** Temp 的 to 方法（签名可区分）
         let mut registry = ModuleRegistry::new();
         let mut a = ModuleInfo::new("a".to_string(), ModuleSource::User);
+        let a_key = DefPath::method("a", "Temp", "to");
         a.method_overloads.insert(
-            "Temp.to".to_string(),
+            a_key.clone(),
             MethodOverloadCandidates {
                 candidates: vec![MonoType::Int(64)],
-                ir_names: vec!["Temp.to".to_string()],
                 param_names: vec![vec!["self".to_string()]],
             },
         );
         let mut b = ModuleInfo::new("b".to_string(), ModuleSource::User);
+        let b_key = DefPath::method("b", "Temp", "to");
         b.method_overloads.insert(
-            "Temp.to".to_string(),
+            b_key.clone(),
             MethodOverloadCandidates {
                 candidates: vec![MonoType::Bool],
-                ir_names: vec!["Temp.to".to_string()],
                 param_names: vec![vec!["self".to_string()]],
             },
         );
         registry.register(a);
         registry.register(b);
 
-        // Act：同一作用域集合按两种给出顺序各并一次；再各取「只含 a」「只含 b」「空」三种作用域
-        let by_ba = registry.merge_method_overloads(&["b".to_string(), "a".to_string()]);
-        let by_ab = registry.merge_method_overloads(&["a".to_string(), "b".to_string()]);
-        let only_a = registry.merge_method_overloads(&["a".to_string()]);
-        let empty = registry.merge_method_overloads(&[]);
+        // Act：两个单元各自的注入面
+        let from_a = registry.injectable_method_overloads("a");
+        let from_b = registry.injectable_method_overloads("b");
 
-        // Assert：合并序 = 模块键升序（a 先 b 后），与调用方顺序无关
-        let merged = by_ba
-            .get("Temp.to")
-            .expect("a/b 都在作用域内 ⇒ 键位必须存在");
+        // Assert：注入面 = 全部模块除本单元（含顺序无关，因为键是身份）
         assert_eq!(
-            merged.candidates,
-            vec![MonoType::Int(64), MonoType::Bool],
-            "候选必须按模块键升序合并（a 先、b 后），实际: {:?}",
-            merged.candidates
-        );
-        assert_eq!(
-            by_ab.get("Temp.to").map(|group| group.candidates.clone()),
-            Some(merged.candidates.clone()),
-            "合并结果不得依赖调用方给出的模块顺序"
-        );
-        // Assert：三元组同序对齐（配对错位 ⇒ 调用点名与定义名不再对应）
-        assert_eq!(
-            (merged.ir_names.len(), merged.param_names.len()),
-            (merged.candidates.len(), merged.candidates.len()),
-            "混编名/形参名必须与候选逐个对齐，实际: names={:?} params={:?}",
-            merged.ir_names,
-            merged.param_names
-        );
-        // Assert：作用域是唯一入口——作用域外的模块不贡献候选
-        assert_eq!(
-            only_a.get("Temp.to").map(|group| group.candidates.clone()),
-            Some(vec![MonoType::Int(64)]),
-            "作用域只含 a 时不得并入 b 的候选"
-        );
-        assert!(empty.is_empty(), "空作用域必须得到空表（无候选来源）");
-    }
-
-    /// **C 类判据**（WBS 4.9.9 收窄轮，非原始 bug 的修复）：`all_method_bindings`
-    /// 的合并结果必须与 HashMap 实例的随机哈希种子无关——同一组模块、同一方法键
-    /// 只给出**一个**单绑定。
-    ///
-    /// **准入（病史门）**：本判据钉的是一次真实缺陷——`all_method_bindings` 曾按
-    /// HashMap 迭代序覆盖同名方法键，同一输入跨进程给出不同单绑定（诊断随进程
-    /// 变化）。判别力（先红后绿）：合并曾按 `modules.values()` 的迭代序 `extend`，
-    /// 两个模块定义同名方法键时「谁最后覆盖」取决于 HashMap 随机种子 ⇒ 同一输入
-    /// 跨实例给出不同单绑定。本判据构造 32 个**插入序交替**的注册表实例，断言
-    /// 同名键的单绑定完全一致；删掉升序合并的变异实测给出 {"Int(64)", "Bool"}
-    /// 两种结果（32 实例偶然全同的概率 2^-31）。
-    #[test]
-    fn test_all_method_bindings_merge_is_deterministic_across_hash_seeds() {
-        // Arrange：a / b 两个模块各自定义同名键 Temp.tag，单绑定类型可区分
-        let mut observed: std::collections::HashSet<String> = std::collections::HashSet::new();
-        for instance in 0..32 {
-            let mut registry = ModuleRegistry::new();
-            let mut a = ModuleInfo::new("a".to_string(), ModuleSource::User);
-            a.method_bindings
-                .insert("Temp.tag".to_string(), MonoType::Bool);
-            let mut b = ModuleInfo::new("b".to_string(), ModuleSource::User);
-            b.method_bindings
-                .insert("Temp.tag".to_string(), MonoType::Int(64));
-            // 插入序交替：模块迭代序还受哈希种子影响，两种写法都要覆盖
-            if instance % 2 == 0 {
-                registry.register(a);
-                registry.register(b);
-            } else {
-                registry.register(b);
-                registry.register(a);
-            }
-
-            // Act
-            let binding = registry
-                .all_method_bindings()
-                .get("Temp.tag")
-                .cloned()
-                .expect("同名方法键必须留在合并结果里");
-
-            // Assert 的输入面：逐实例收集单绑定的调试形态
-            observed.insert(format!("{binding:?}"));
-        }
-
-        // Assert：32 个实例只能观察到同一种单绑定
-        assert_eq!(
-            observed.len(),
+            from_a.len(),
             1,
-            "同一组模块对同一方法键只能给出一个单绑定（不得随 HashMap 哈希种子变化），实际出现：{observed:?}"
+            "a 的注入面只应含 b 的一组候选，实际: {from_a:?}"
+        );
+        assert_eq!(from_a[0].0, b_key, "a 的注入面不得含自己的候选");
+        assert_eq!(
+            from_a[0].1.candidates,
+            vec![MonoType::Bool],
+            "b 的候选必须原样带出"
+        );
+        assert_eq!(from_b[0].0, a_key, "b 的注入面不得含自己的候选");
+        assert_eq!(
+            from_b[0].1.candidates,
+            vec![MonoType::Int(64)],
+            "a 的候选必须原样带出"
+        );
+        // Assert：两条身份互不覆盖——同名类型在两个单元里各有自己的路径
+        assert_ne!(
+            a_key.project(),
+            b_key.project(),
+            "同名类型分属两单元必须投影不同（a.Temp.to / b.Temp.to）"
+        );
+        // Assert：配对同组同序（候选 ↔ 形参名）
+        assert_eq!(
+            from_a[0].1.candidates.len(),
+            from_a[0].1.param_names.len(),
+            "候选与形参名必须逐个对齐"
+        );
+    }
+    /// WBS 4.9.10 D-1：`all_method_bindings` 的**同名类型不互相覆盖**。
+    ///
+    /// 旧判据（病史门）钉的是字符串键空间里的覆盖顺序缺陷：两个模块定义同名
+    /// `Temp.tag` 时按 HashMap 迭代序后者覆盖前者，同一输入跨进程给出不同单绑定。
+    /// 键改成方法身份后该缺陷**不可表达**：`a.Temp.tag` 与 `b.Temp.tag` 是两条
+    /// 路径，各自留下自己的单绑定——排序依赖随之消失（无覆盖即无顺序）。
+    ///
+    /// 过**证明**门：换一个正确的替代实现（例如仍按模块键升序合并）本测试仍绿；
+    /// 它守的是「同名类型各有身份、合并不得丢一条」这条与实现选择无关的性质。
+    #[test]
+    fn test_all_method_bindings_keeps_same_name_types_of_two_modules() {
+        // Arrange：a / b 两个模块各自定义同名类型 Temp 的 tag，单绑定类型可区分
+        let mut registry = ModuleRegistry::new();
+        let a_key = DefPath::method("a", "Temp", "tag");
+        let b_key = DefPath::method("b", "Temp", "tag");
+        let mut a = ModuleInfo::new("a".to_string(), ModuleSource::User);
+        a.method_bindings.insert(a_key.clone(), MonoType::Bool);
+        let mut b = ModuleInfo::new("b".to_string(), ModuleSource::User);
+        b.method_bindings.insert(b_key.clone(), MonoType::Int(64));
+        registry.register(a);
+        registry.register(b);
+
+        // Act
+        let merged = registry.all_method_bindings();
+
+        // Assert：两条身份各自留下自己的单绑定（同名类型不互相覆盖）
+        assert_eq!(
+            merged.get(&a_key).cloned(),
+            Some(MonoType::Bool),
+            "a.Temp.tag 的单绑定必须留在合并结果里，实际: {merged:?}"
+        );
+        assert_eq!(
+            merged.get(&b_key).cloned(),
+            Some(MonoType::Int(64)),
+            "b.Temp.tag 的单绑定必须留在合并结果里，实际: {merged:?}"
         );
     }
 
@@ -742,22 +762,30 @@ mod tests {
         lib.add_export(export("PI", "lib.PI", ExportKind::Constant));
         // 方法绑定：Point.get_x / Point.get_y
         lib.method_bindings
-            .insert("Point.get_x".to_string(), MonoType::Int(64));
+            .insert(DefPath::method("lib", "Point", "get_x"), MonoType::Int(64));
         lib.method_bindings
-            .insert("Point.get_y".to_string(), MonoType::Int(64));
+            .insert(DefPath::method("lib", "Point", "get_y"), MonoType::Int(64));
         registry.register(lib);
 
         let symbols = registry.symbols();
         // 导出按类别登记
-        let helper = symbols.def("lib.helper").expect("function interned");
-        let point = symbols.def("lib.Point").expect("type interned");
-        let pi = symbols.def("lib.PI").expect("constant interned");
+        let helper = symbols
+            .def_by_projection("lib.helper")
+            .expect("function interned");
+        let point = symbols
+            .def_by_projection("lib.Point")
+            .expect("type interned");
+        let pi = symbols
+            .def_by_projection("lib.PI")
+            .expect("constant interned");
         assert_eq!(symbols.kind(helper), DefKind::Function);
         assert_eq!(symbols.kind(point), DefKind::Type);
         assert_eq!(symbols.kind(pi), DefKind::Constant);
 
         // 方法登记并链接到类型，构建静态 vtable
-        let get_x = symbols.def("lib.Point.get_x").expect("method interned");
+        let get_x = symbols
+            .def_by_projection("lib.Point.get_x")
+            .expect("method interned");
         assert_eq!(symbols.kind(get_x), DefKind::Method);
         assert_eq!(symbols.parent(get_x), Some(point));
         let vt = symbols.vtable(point);
@@ -773,7 +801,13 @@ mod tests {
         registry.register(lib.clone());
         registry.register(lib);
         // 重复注册不产生重复 DefId
-        assert_eq!(registry.symbols().def("lib.helper").map(|d| d.0), Some(0));
+        assert_eq!(
+            registry
+                .symbols()
+                .def_by_projection("lib.helper")
+                .map(|d| d.0),
+            Some(0)
+        );
         assert_eq!(registry.symbols().len(), 1);
     }
 
@@ -781,7 +815,7 @@ mod tests {
     fn with_std_interns_std_exports() {
         let registry = ModuleRegistry::with_std();
         // std.io.println 应被 intern 为函数
-        let println = registry.symbols().def("std.io.println");
+        let println = registry.symbols().def_by_projection("std.io.println");
         assert!(println.is_some(), "std.io.println interned");
         assert_eq!(registry.symbols().kind(println.unwrap()), DefKind::Function);
     }

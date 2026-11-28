@@ -1,0 +1,6 @@
+// b.yx —— 模块 b：与 a 同名类型，Temp.tag_of 语义 tag × 10
+Temp: Type = { tag: Float }
+
+Temp.tag_of: (self: &Temp) -> Float = {
+    return self.tag * 10.0
+}

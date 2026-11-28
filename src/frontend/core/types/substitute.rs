@@ -2,6 +2,7 @@
 //!
 //! 提供通用的类型替换算法，消除各模块间的重复代码。
 
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::mono::StructFieldInfo;
 use crate::frontend::core::types::{EnumType, MonoType, StructType, TypeVar};
 use std::collections::HashMap;
@@ -88,8 +89,10 @@ impl Substitution {
 /// 层级：Type1/Type2+ 的构造器在类型实参位以**名字**传递）。
 pub fn ctor_head_name(ty: &MonoType) -> Option<String> {
     match ty {
-        MonoType::TypeRef(name) => Some(name.clone()),
-        MonoType::Generic { name, args } if args.is_empty() => Some(name.clone()),
+        MonoType::TypeRef(name) => Some(name.clone().bare().to_string()),
+        MonoType::Generic { name, args } if args.is_empty() => {
+            Some(name.clone().bare().to_string())
+        }
         _ => None,
     }
 }
@@ -113,7 +116,13 @@ pub fn substitute_ctor_heads(
     }
     match ty {
         MonoType::Generic { name, args } => MonoType::Generic {
-            name: head_map.get(name).cloned().unwrap_or_else(|| name.clone()),
+            name: Nominal::flat(AsRef::<str>::as_ref(
+                &(head_map
+                    .get(name.bare())
+                    .cloned()
+                    .unwrap_or_else(|| name.clone().bare().to_string())),
+            ))
+            .expect("type name must be bare and non-empty"),
             args: args
                 .iter()
                 .map(|a| substitute_ctor_heads(a, head_map))
@@ -215,9 +224,15 @@ pub fn rebind_nominal_refs(
         return ty.clone();
     }
     match ty {
-        MonoType::TypeRef(name) => {
-            MonoType::TypeRef(rebinds.get(name).cloned().unwrap_or_else(|| name.clone()))
-        }
+        MonoType::TypeRef(name) => MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(
+                &(rebinds
+                    .get(name.bare())
+                    .cloned()
+                    .unwrap_or_else(|| name.clone().bare().to_string())),
+            ))
+            .expect("type name must be bare and non-empty"),
+        ),
         MonoType::Fn {
             params,
             return_type,
@@ -251,7 +266,15 @@ pub fn rebind_nominal_refs(
             interfaces: s
                 .interfaces
                 .iter()
-                .map(|iface| rebinds.get(iface).cloned().unwrap_or_else(|| iface.clone()))
+                .map(|iface| {
+                    Nominal::flat(AsRef::<str>::as_ref(
+                        &(rebinds
+                            .get(iface.bare())
+                            .cloned()
+                            .unwrap_or_else(|| iface.bare().to_string())),
+                    ))
+                    .expect("type name must be bare and non-empty")
+                })
                 .collect(),
             ..s.clone()
         }),

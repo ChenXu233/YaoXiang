@@ -5,7 +5,7 @@ YaoXiang 是一门编程语言及其编译器（Rust 实现）。`src/` 约 16 �
 ## 元规则（强制）
 
 1. **文档里不得出现私有内容**：写进仓库的任何文字（AGENTS.md、WBS、实录、任务契约、报告、提交信息、代码注释）都必须**任何人可解析**。判据：换一个既没有本机环境、也没有本会话记录的贡献者来读——他能不能顺着这段文字独立找到同一事实？不能＝私有内容，必须改写。
-   - **典型的私有内容**：记忆系统节点 id、会话 id / 任务 attempt id、个人缓存目录、仅本机存在的绝对路径（例外：讲本机工作台 / 环境配置的文档，那里的路径是**内容**而非引用）、只有某个私有账号或模型能访问的资源、未公开的内部代号、**工作区内被 `.gitignore` 排除的目录**（如批次验证树与探针目录——它字面在仓库内，却**不在仓库里**：别人 clone 后根本没有这个目录。门禁：`scripts/ci/check-docs-refs.py`）。
+   - **典型的私有内容**：记忆系统节点 id、会话 id / 任务 attempt id、个人缓存目录、仅本机存在的绝对路径（例外：讲本机工作台 / 环境配置的文档，那里的路径是**内容**而非引用）、只有某个私有账号或模型能访问的资源、未公开的内部代号、**工作区内被 `.gitignore` 排除的目录**（如批次验证树与探针目录——它字面在仓库内，却**不在仓库里**：别人 clone 后根本没有这个目录。门禁：`scripts/ci/check-docs-refs.py`）。**例外**：构建期生成物（如错误码参考页 `docs/src/reference/error-code/`）不是私有内容——它由仓库内的 `scripts/docs/gen-error-code-docs.py` 从码表与 `locales/*.json` 生成，任何人 clone 后都能重建。
    - **正确写法**：写**事实与证据本身**——谁在何时测到什么数字、哪条命令、哪个 run id / issue 号 / revision。
 2. **先查证，再断言**：被问「有没有这条规则 / 做过这件事 / 这是谁定的」时，**先查**（仓库文档 → 变更记录 → 可用的记忆或检索工具（若有）），再回答；**不得**只凭对话上下文直接答「没有」。查不到时要说明**查了哪些地方**。
 
@@ -31,7 +31,7 @@ YaoXiang 是一门编程语言及其编译器（Rust 实现）。`src/` 约 16 �
 
 同一条「先读再动手」也适用于文档。改任何规范 / 设计 / 计划文档前，必须读：
 
-1. **上游设计依据**：这次改动对应的 RFC 决议（[RFC-039](docs/src/rfc/accepted/039-compiler-architecture.md) 的决议登记 D1–D59，或该领域的专题 RFC）；
+1. **上游设计依据**：这次改动对应的 RFC 决议（[RFC-039](docs/src/rfc/accepted/039-compiler-architecture.md) 的决议登记 D1–D64，或该领域的专题 RFC）；
 2. **同层相邻文档**：同一张表 / 同一组术语是否在别处已有定义（两处各写一份 = 「不得生造」的翻版）；
 3. **[docs-rules.md](docs/src/dev/docs-rules.md)**（文档规则本体；§5 是权威链与修改前提）。
 
@@ -48,7 +48,7 @@ YaoXiang 是一门编程语言及其编译器（Rust 实现）。`src/` 约 16 �
 
 只报"有问题，等你定"而不给优缺点与推荐，等于把工作推回给用户。
 
-**语义偏差的适用面（RFC-039 D59 分流）**：不是所有语义修正都要等裁决——**A/B/C 三类**（旧行为**非成功**：崩溃/爆栈、静默失败、静默错配、静默不动作、静默给错答案）可随重构**顺路修**，条件是**先红后绿 + 不改变「原先成功」程序的对外表现 + 同提交登记 + 基线同提交再生与人工 review**；**D/E/F 三类**（改变原先成功程序的可观察行为、对外契约表、RFC 级设计变更）**仍然必须先找用户裁决**。判据见 [07](docs/src/dev/architecture/07-equivalence-oracle.md) §语义修正的分流判据 与 [RFC-039 决议登记 D59](docs/src/rfc/accepted/039-compiler-architecture.md)。
+**语义偏差的适用面（RFC-039 D59 分流）**：**入口判据是「旧行为与已写条款是否一致」**，不是「编译器此前是否接受」——编译器误接受的程序不算成功。能指到 RFC/SPEC 节号并给出最小反例（应报未报 / 应过未过 / 静默给错结果）⇒ **A/B/C 三类可顺路修**，条件是**先红后绿 + 条款与反例 + 不改变「原先符合规范」程序的对外表现 + 同提交登记 + 基线同提交再生与人工 review**；**指不到条款（规范未写明、歧义、旧行为本已合规）⇒ D/E/F，仍须先找用户裁决**。规范未写明 ≠ 违反规范。判据见 [07](docs/src/dev/architecture/07-equivalence-oracle.md) §语义修正的分流判据 与 [RFC-039 决议登记 D59](docs/src/rfc/accepted/039-compiler-architecture.md)。
 
 ## 团队编排约定（强制）
 
@@ -132,4 +132,4 @@ git pull --rebase origin dev        # 与对端无冲突（merge-tree 干净）�
 | [07](docs/src/dev/architecture/07-equivalence-oracle.md) | 等价性判据 C1–C6 |
 | [test-specification](docs/src/dev/test-specification.md) | 测试怎么写（命名/AAA/断言消息——写测试前必读） |
 | [docs-rules](docs/src/dev/docs-rules.md) | 文档怎么写（分类/风格/权威链——改文档前必读） |
-| [RFC-039](docs/src/rfc/accepted/039-compiler-architecture.md) | 总纲、决议登记 D1–D59 |
+| [RFC-039](docs/src/rfc/accepted/039-compiler-architecture.md) | 总纲、决议登记 D1–D64 |

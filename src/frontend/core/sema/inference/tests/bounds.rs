@@ -10,6 +10,7 @@
 use crate::frontend::core::sema::inference::bounds::BoundsChecker;
 use crate::frontend::core::sema::proof::verdict::ProofResultExt;
 use crate::frontend::core::types::const_data::ConstVarDef;
+use crate::frontend::core::types::identity::Nominal;
 use crate::frontend::core::types::{MonoType, StructType, TraitTable};
 use std::collections::HashMap;
 
@@ -22,7 +23,8 @@ fn record(
     defaults: Vec<bool>,
 ) -> MonoType {
     MonoType::Struct(StructType {
-        name: name.to_string(),
+        name: Nominal::flat(AsRef::<str>::as_ref(&(name)))
+            .expect("type name must be bare and non-empty"),
         fields: fields
             .into_iter()
             .enumerate()
@@ -54,7 +56,13 @@ fn mono_fn(
 
 /// `(Surface) -> ret` 函数类型。
 fn surface_fn(ret: MonoType) -> MonoType {
-    mono_fn(vec![MonoType::TypeRef("Surface".to_string())], ret)
+    mono_fn(
+        vec![MonoType::TypeRef(
+            Nominal::flat(AsRef::<str>::as_ref(&("Surface")))
+                .expect("type name must be bare and non-empty"),
+        )],
+        ret,
+    )
 }
 
 /// 约束侧接口 `Drawable { draw: (Surface) -> Void }`。

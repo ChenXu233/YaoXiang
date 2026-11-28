@@ -7,6 +7,8 @@
 //! - RFC-004/010/011 支撑
 
 use crate::ast::Module;
+use crate::frontend::core::types::identity::DefPath;
+use crate::frontend::core::types::identity::Nominal;
 
 // ============ 子模块声明 ============
 
@@ -24,6 +26,9 @@ pub mod semantic_db;
 
 // 类型环境
 pub mod environment;
+
+// 导入面（WBS 4.9.10 D-5）：类型名 → 提供模块的唯一来源
+pub mod import_face;
 
 // RFC-011b: 运算符接口与实现登记表
 pub mod operator_interfaces;
@@ -160,7 +165,10 @@ pub fn add_builtin_types(env: &mut environment::TypeEnvironment) {
     for resource_type in &["FilePath", "HttpUrl", "DBUrl", "Console"] {
         env.types.insert(
             resource_type.to_string(),
-            PolyType::mono(MonoType::TypeRef(resource_type.to_string())),
+            PolyType::mono(MonoType::TypeRef(
+                Nominal::flat(AsRef::<str>::as_ref(&(resource_type)))
+                    .expect("type name must be bare and non-empty"),
+            )),
         );
     }
 }
@@ -183,7 +191,7 @@ pub fn add_native_function_types(
 
     // 遍历所有 std 子模块，自动注册导出的函数
     for submodule_name in registry.std_submodule_names() {
-        let module_path = format!("std.{}", submodule_name);
+        let module_path = DefPath::item("std", &submodule_name).project();
         if let Some(module) = registry.get(&module_path) {
             for export in module.exports.values() {
                 // 使用签名字符串解析出正确的函数类型
@@ -263,7 +271,8 @@ pub fn add_native_function_types(
     env.add_var(
         "Native".to_string(),
         PolyType::mono(MonoType::Struct(crate::frontend::core::types::StructType {
-            name: "Native".to_string(),
+            name: Nominal::flat(AsRef::<str>::as_ref(&("Native")))
+                .expect("type name must be bare and non-empty"),
             fields: vec![
                 crate::frontend::core::types::mono::StructFieldInfo {
                     name: "c".to_string(),

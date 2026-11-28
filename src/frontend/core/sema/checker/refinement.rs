@@ -123,7 +123,7 @@ impl TypeChecker {
             } => {
                 let mut registered = Vec::new();
                 if let Expr::Var(name, _) = target.as_ref() {
-                    let mono_ty = MonoType::from(type_ann.clone());
+                    let mono_ty = self.mono_from_annotation(&type_ann.clone());
                     let resolved_ty = self.resolve_type_annotation(&mono_ty, ctx.diags);
                     // 初始值常量折叠（对前置值环境求值）——初始校验与值追踪共用
                     let init_value = value
@@ -536,7 +536,10 @@ impl TypeChecker {
             return Some(refined);
         }
         // 2. 证明函数（源码定义、返回 `Type`）：约束是不透明应用
-        let mono_args: Vec<MonoType> = args.iter().map(|a| MonoType::from(a.clone())).collect();
+        let mono_args: Vec<MonoType> = args
+            .iter()
+            .map(|a| self.mono_from_annotation(&a.clone()))
+            .collect();
         let base = match self.lookup_proof_fn_base_type(name, &mono_args) {
             Some(Ok(base)) => base,
             _ => return None,
@@ -570,7 +573,7 @@ impl TypeChecker {
             AstType::Paren(inner) | AstType::NamedParen { inner, .. } => {
                 self.ast_type_to_const_expr(inner)
             }
-            other => self.mono_type_to_const_expr(&MonoType::from(other.clone())),
+            other => self.mono_type_to_const_expr(&self.mono_from_annotation(&other.clone())),
         }
     }
 

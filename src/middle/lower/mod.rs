@@ -49,16 +49,13 @@ pub(super) enum BindingLocation {
 }
 
 /// 符号表条目
+///
+/// 与 WBS 4.9.8 时代的差别：本条目**不再**记录「绑定时写出的类型名」
+/// （`written_type`，F1 退役）。名字属于哪个单元由 typecheck 的 `ImportFace`
+/// 判定（D-5/D-6：绑定身份 + 导入面），IR 生成侧不再持有该信息的副本。
 #[derive(Debug, Clone)]
 pub(super) struct SymbolEntry {
     location: BindingLocation,
-    /// 该变量绑定时**写出**的类型名（`x: TempB = ..` 的注解原文，或构造器调用
-    /// `TempB(..)` / `ns.Temp(..)` 写出的名字）。WBS 4.9.8 / issue #465：
-    /// `MonoType` 对导入类型只留**定义侧裸名**，两单元的同名类型分不出来；
-    /// 「这个名字是从哪个单元带进来的」在本单元唯一有据的是 `use` 面
-    /// （[`AstToIrGenerator::imported_type_owner`]）——故把写出名留在符号表里，
-    /// 方法派发时据此归因到定义单元。
-    written_type: Option<String>,
 }
 
 /// AST 到 IR 的生成器
@@ -81,10 +78,7 @@ pub struct AstToIrGenerator {
     pub(super) temp_high_water: usize,
     /// 局部变量类型追踪（用于错误消息中显示实际类型）
     pub(super) local_var_types: HashMap<String, String>,
-    /// 顶层绑定**写出**的类型名（Script 形态的 `t = Temp(1.0)` 是全局槽位，
-    /// 与块内局部变量走同一条派发归因链——WBS 4.9.8 / issue #465）。
-    /// 键 = 本文件的绑定名（不含模块限定）。
-    pub(super) global_written_types: HashMap<String, String>,
+
     /// FFI 库绑定
     pub(super) ffi_libs: Vec<crate::middle::ir::ir::FfiLibBinding>,
     /// FFI 绑定 — 不透明类型或外部函数
@@ -211,9 +205,14 @@ pub struct AstToIrGenerator {
     /// generate_expr_ir 入口查表命中 → 值生成后包 CreateVariant。
     pub(super) existential_wraps: HashMap<Span, String>,
 
-    /// RFC-011b: 运算符派发点（span → 接收者类型名, 方法名, 取反）。
+    /// RFC-011b: 运算符派发点（span → typecheck 的派发记录）。
     /// `==`/`!=` 命中显式 Equal 实例化时，原生比较指令替换为方法调用。
-    pub(super) operator_dispatches: HashMap<Span, (String, String, bool)>,
+    ///
+    /// 记录里带 **IR 最终函数名**（D-8 的 `dispatch_name`）——调用名由 typecheck
+    /// 按接收者身份定死，本生成器直接消费，不再按短名二次查表（那等于按名字
+    /// 猜单元：同名类型分属两单元时谁先注册谁赢，静默错值）。
+    pub(super) operator_dispatches:
+        HashMap<Span, crate::frontend::core::sema::operator_interfaces::OperatorDispatch>,
     /// RFC-011b：`?` 表达式的 Try 实现类型名（span 键控）
     pub(super) try_expr_impls: HashMap<Span, String>,
     /// RFC-011a §3：方法级重载决议（**调用点 PlanId** 键控 → 混编 IR 名；
@@ -340,7 +339,6 @@ impl AstToIrGenerator {
             next_temp: 0,
             temp_high_water: 0,
             local_var_types: HashMap::new(),
-            global_written_types: HashMap::new(),
             ffi_libs: Vec::new(),
             ffi_bindings: Vec::new(),
             next_lib_id: 0,
@@ -376,7 +374,7 @@ impl AstToIrGenerator {
             operator_dispatches: type_result
                 .operator_dispatches
                 .iter()
-                .map(|d| (d.span, (d.type_name.clone(), d.method.clone(), d.negate)))
+                .map(|dispatch| (dispatch.span, dispatch.clone()))
                 .collect(),
             try_expr_impls: type_result
                 .try_expr_impls

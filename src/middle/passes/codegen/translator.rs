@@ -3,6 +3,7 @@
 //! 将中间表示（IR）翻译为字节码指令。
 
 use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::middle::bytecode::file::BytecodeInstruction;
 use crate::middle::bytecode::opcode;
 use crate::middle::bytecode::Reg;
@@ -101,7 +102,7 @@ pub struct Translator {
     /// 函数名到索引的映射
     function_name_to_idx: Option<HashMap<String, usize>>,
     /// DefId 到函数表索引的映射（Stage 3：按 DefId 分发的主路径）
-    function_def_to_idx: HashMap<crate::frontend::module::symbol::DefId, usize>,
+    function_def_to_idx: HashMap<crate::frontend::core::types::identity::DefId, usize>,
     /// FFI 函数元数据缓存: func_name → mechanism/lib/symbol
     ffi_func_meta: HashMap<String, FfiFuncMeta>,
 
@@ -729,7 +730,12 @@ impl Translator {
 
         // 创建临时 FunctionIR 用于 translate_instruction
         let mut locals: Vec<LocalSlot> = param_types.iter().cloned().map(LocalSlot::temp).collect();
-        locals.push(LocalSlot::temp(MonoType::TypeRef(struct_name.clone())));
+        // L3-1a 泄漏点（唯一具名）：struct_name 来自 IR TypeDecl 的函数名，
+        // 多文件里是已限定名（如 std.list.Iter）；本步原样保留为类型身份字符串，
+        // L3-1b 改为从 TypeDecl 的 DefPath/身份表解析后删除 Nominal::qualified_legacy。
+        locals.push(LocalSlot::temp(MonoType::TypeRef(
+            Nominal::qualified_legacy(struct_name),
+        )));
 
         let temp_func = FunctionIR {
             name: struct_name.clone(),
@@ -1203,7 +1209,7 @@ impl Translator {
         dst: &Option<Operand>,
         func: &Operand,
         args: &[Operand],
-        def: Option<crate::frontend::module::symbol::DefId>,
+        def: Option<crate::frontend::core::types::identity::DefId>,
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = if let Some(d) = dst {
             self.operand_resolver.to_reg(d)?
@@ -1699,7 +1705,7 @@ impl Translator {
         &mut self,
         dst: &Operand,
         func_name: &str,
-        def: Option<crate::frontend::module::symbol::DefId>,
+        def: Option<crate::frontend::core::types::identity::DefId>,
         env: &[Operand],
     ) -> Result<BytecodeInstruction, Diagnostic> {
         let dst_reg = self.operand_resolver.to_reg(dst)?;

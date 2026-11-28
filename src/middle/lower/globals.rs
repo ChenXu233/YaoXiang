@@ -9,7 +9,7 @@ use super::AstToIrGenerator;
 use super::PendingInit;
 use crate::ast;
 use crate::frontend::core::sema::MonoType;
-use crate::frontend::module::symbol::SymbolTable;
+use crate::frontend::core::types::identity::DefPath;
 use crate::middle::ir::ir::{ConstValue, FunctionBody, FunctionIR, Instruction, Operand};
 use crate::middle::lower::expr::collect_free_vars_expr;
 use crate::util::diagnostic::{Diagnostic, ErrorCodeDefinition};
@@ -63,7 +63,7 @@ impl AstToIrGenerator {
                 .unwrap_or(MonoType::Int(64));
             // 名字已限定（多文件）时布局键用限定名，否则用裸名
             let key = match &self.module_key {
-                Some(k) => SymbolTable::qualify(k, name),
+                Some(k) => DefPath::item(k, name).project(),
                 None => name.clone(),
             };
             let slot = self.global_slot_base + self.global_vars.len();
@@ -200,7 +200,7 @@ impl AstToIrGenerator {
         name: &str,
     ) -> Option<usize> {
         let key = match &self.module_key {
-            Some(k) => SymbolTable::qualify(k, name),
+            Some(k) => DefPath::item(k, name).project(),
             None => name.to_string(),
         };
         self.global_slot_layout.get(&key).copied()
@@ -238,18 +238,6 @@ impl AstToIrGenerator {
             }
         };
 
-        // WBS 4.9.8 / issue #465：顶层绑定同样记下**写出**的类型名（注解原文
-        // 优先，否则构造器名）——Script 形态的顶层 `t = Temp(1.0)` 是全局槽位，
-        // 与块内局部变量走同一条派发归因链。必须在生成初始化指令**之前**登记：
-        // 初始化里的 `t.tag()` 就是消费点（同一语句内的自引用不在本判据面）。
-        let written = type_annotation
-            .and_then(Self::written_type_name_of)
-            .map(str::to_string)
-            .or_else(|| initializer.and_then(|e| self.constructor_written_type_name(e)));
-        if let Some(written) = written {
-            self.global_written_types.insert(name.to_string(), written);
-        }
-
         // 生成初始化指令：求值 init 表达式，写入槽位。
         // 无 init 的绑定保留零初始化语义（C 风格默认值）。
         // 旧实现（E3007）要求 init 必须是编译期常量；T2 后改为运行时求值，
@@ -283,7 +271,7 @@ impl AstToIrGenerator {
         });
         // T3：入待定队列（不直接追加到 module_init）——尾部按依赖拓扑排序后写入。
         let key = match &self.module_key {
-            Some(k) => SymbolTable::qualify(k, name),
+            Some(k) => DefPath::item(k, name).project(),
             None => name.to_string(),
         };
         let deps = initializer
@@ -313,7 +301,7 @@ impl AstToIrGenerator {
         let mut out = Vec::new();
         Self::walk_expr_vars(expr, &mut |name: &str| {
             let key = match &self.module_key {
-                Some(k) => SymbolTable::qualify(k, name),
+                Some(k) => DefPath::item(k, name).project(),
                 None => name.to_string(),
             };
             // 自引用不算依赖（由循环检测单独报）
@@ -372,8 +360,6 @@ impl AstToIrGenerator {
 
             frame.register_local(&param.name, i);
         }
-        // 匿名绑定 / 闭包的形参就是声明（绑定注解 / 返回位内层 Fn）本身，无需补位。
-        frame.note_param_written_types(params, &[]);
 
         // 记录局部变量起始位置
         let local_var_start = params.len();

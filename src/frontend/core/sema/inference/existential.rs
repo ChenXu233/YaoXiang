@@ -127,7 +127,7 @@ fn walk(
                 }
             }
         }
-        MonoType::TypeRef(iface) if is_interface_ctor(generic_type_defs, iface) => {
+        MonoType::TypeRef(iface) if is_interface_ctor(generic_type_defs, iface.bare()) => {
             let span = expr_span(expr);
             if span == crate::util::span::Span::dummy() {
                 return; // 无法定位的表达式（If/Match 等）留给运行时守卫兜底
@@ -136,13 +136,16 @@ fn walk(
                 if s.interfaces.iter().any(|i| i == iface) {
                     out.push(ExistentialCoercion {
                         span,
-                        interface: iface.clone(),
+                        interface: iface.clone().bare().to_string(),
                     });
                 } else {
                     errors.push(
-                        ErrorCodeDefinition::type_does_not_implement_interface(&s.name, iface)
-                            .at(span)
-                            .build(),
+                        ErrorCodeDefinition::type_does_not_implement_interface(
+                            s.name.bare(),
+                            iface.bare(),
+                        )
+                        .at(span)
+                        .build(),
                     );
                 }
             }
