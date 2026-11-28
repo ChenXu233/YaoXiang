@@ -1682,11 +1682,13 @@ test_ffi_compile_time_types_are_rejected_without_panic	src/middle/bytecode/tests
 test_globals_table_round_trips_through_dot42	src/middle/bytecode/tests/file.rs	assert_eqx5 expectx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_global_initializer_is_rejected_without_silent_loss	src/middle/bytecode/tests/file.rs	assert_eqx1 assertx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_global_mutability_is_rejected_without_silent_loss	src/middle/bytecode/tests/file.rs	assert_eqx1 assertx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
-test_reversible_type_codes_round_trip_and_are_distinct	src/middle/bytecode/tests/file.rs	assert_eqx2 assert_nex1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_reversible_type_codes_round_trip_and_are_distinct	src/middle/bytecode/tests/file.rs	assert_eqx2 assert_nex1 expectx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_unsupported_type_widths_are_rejected_on_write	src/middle/bytecode/tests/file.rs	assert_eqx1 assertx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
-test_folded_type_codes_are_distinct_and_lossy	src/middle/bytecode/tests/file.rs	assert_eqx2 assert_nex1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_folded_type_codes_are_distinct_and_lossy	src/middle/bytecode/tests/file.rs	assert_eqx2 assert_nex1 expectx5	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_builtin_string_and_bytes_codes_require_flat_identity_without_args	src/middle/bytecode/tests/file.rs	assert_eqx2 matchesx1 assertx1 expectx6	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_debug_section_round_trip	src/middle/bytecode/tests/file.rs	assert_eqx5	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_debug_section_round_trip_global_names	src/middle/bytecode/tests/file.rs	assert_eqx2 expectx3	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_string_and_bytes_codes_reject_non_builtin_identity	src/middle/bytecode/tests/file.rs	assert_eqx3 matchesx1 assertx1 expectx6	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_generic_yx_std_export_alias_value_is_make_closure	src/middle/ir/tests/alias_fn_value.rs	assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_method_binding_without_signature_reports_diagnostic_instead_of_panicking	src/middle/ir/tests/batch_method_bind.rs	assert_eqx1 assertx1	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_method_binding_bare_lambda_without_signature_reports_diagnostic	src/middle/ir/tests/batch_method_bind.rs	assert_eqx1 assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
