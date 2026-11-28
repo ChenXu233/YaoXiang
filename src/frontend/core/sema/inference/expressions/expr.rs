@@ -128,6 +128,15 @@ impl<'a> ExpressionInferrer<'a> {
         self.import_face?.method_key(written_type, method)
     }
 
+    /// Nominal→方法键：委托导入面的唯一实现；仅由 receiver_method_key 使用。
+    fn method_key_for_nominal(
+        &self,
+        nominal: &crate::frontend::core::types::identity::Nominal,
+        method: &str,
+    ) -> Option<DefPath> {
+        self.import_face?.method_key_for_nominal(nominal, method)
+    }
+
     /// 方法键：**接收者身份优先**（D-6），否则按静态类型名解析（D-5）。
     ///
     /// 为什么需要这一档：跨单元**同名类型**（`a.Temp` / `b.Temp`）的接收者在
@@ -137,7 +146,7 @@ impl<'a> ExpressionInferrer<'a> {
     fn receiver_method_key(
         &self,
         receiver: &crate::ast::Expr,
-        type_name: &str,
+        nominal: &crate::frontend::core::types::identity::Nominal,
         method: &str,
     ) -> Option<DefPath> {
         if let crate::ast::Expr::Var(name, _) = receiver {
@@ -145,7 +154,14 @@ impl<'a> ExpressionInferrer<'a> {
                 return Some(DefPath::method(&identity.module, &identity.name, method));
             }
         }
-        self.method_key(type_name, method)
+        // 身份优先：模块非空时直接用 (module, 定义名) 取路径；module 为空（flat/
+        // 单文件/幻名）必须回落到字符串路径——那里还承担 `is_conflicted` 拒绝面。
+        if !nominal.module().is_empty() {
+            if let Some(key) = self.method_key_for_nominal(nominal, method) {
+                return Some(key);
+            }
+        }
+        self.method_key(nominal.bare(), method)
     }
 
     /// 该身份下的候选签名（与会话内的形参名组同序）
@@ -2439,7 +2455,7 @@ impl<'a> ExpressionInferrer<'a> {
                             .build());
                         }
                         // 方法身份由导入面解析（D-5）：拼字符串不再产生身份，无身份即不查表
-                        if let Some(key) = self.receiver_method_key(obj, sum_name.bare(), field) {
+                        if let Some(key) = self.receiver_method_key(obj, sum_name, field) {
                             if let Some(method_ty) = self.method_bindings.get(&key) {
                                 self.last_method_binding_key = Some(key);
                                 return Ok(method_ty.clone());
@@ -2534,7 +2550,7 @@ impl<'a> ExpressionInferrer<'a> {
                         } else {
                             // 回退方法查找（std.range 协议面）
                             // 方法身份由导入面解析（D-5）：拼字符串不再产生身份
-                            if let Some(key) = self.receiver_method_key(obj, "Range", field) {
+                            if let Some(key) = self.receiver_method_key(obj, name, field) {
                                 if let Some(method_ty) = self.method_bindings.get(&key) {
                                     self.last_method_binding_key = Some(key);
                                     return Ok(method_ty.clone());
@@ -2561,9 +2577,7 @@ impl<'a> ExpressionInferrer<'a> {
                         }
                         // Field not found in struct — try method lookup
                         // 方法身份由导入面解析（D-5）：拼字符串不再产生身份，无身份即不查表
-                        if let Some(key) =
-                            self.receiver_method_key(obj, struct_type.name.bare(), field)
-                        {
+                        if let Some(key) = self.receiver_method_key(obj, &struct_type.name, field) {
                             if let Some(method_ty) = self.method_bindings.get(&key) {
                                 self.last_method_binding_key = Some(key);
                                 return Ok(method_ty.clone());
@@ -2620,7 +2634,7 @@ impl<'a> ExpressionInferrer<'a> {
                                 // Field not found in resolved struct — try method lookup
                                 // 方法身份由导入面解析（D-5）：拼字符串不再产生身份，无身份即不查表
                                 if let Some(key) =
-                                    self.receiver_method_key(obj, struct_type.name.bare(), field)
+                                    self.receiver_method_key(obj, &struct_type.name, field)
                                 {
                                     if let Some(method_ty) = self.method_bindings.get(&key) {
                                         self.last_method_binding_key = Some(key);
@@ -2636,7 +2650,7 @@ impl<'a> ExpressionInferrer<'a> {
                         }
                         // Try method lookup on TypeRef (generic type or forward reference)
                         // 方法身份由导入面解析（D-5）：拼字符串不再产生身份，无身份即不查表
-                        if let Some(key) = self.receiver_method_key(obj, type_name.bare(), field) {
+                        if let Some(key) = self.receiver_method_key(obj, type_name, field) {
                             if let Some(method_ty) = self.method_bindings.get(&key) {
                                 self.last_method_binding_key = Some(key);
                                 return Ok(method_ty.clone());

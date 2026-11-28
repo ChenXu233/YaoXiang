@@ -20,7 +20,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::ast::{Module, StmtKind};
 use crate::frontend::core::sema::passes::dead_code::DeadCodeAnalyzer;
-use crate::frontend::core::types::identity::DefPath;
+use crate::frontend::core::types::identity::{DefPath, Nominal};
 use crate::frontend::module::registry::ModuleRegistry;
 use crate::frontend::module::ExportKind;
 
@@ -165,15 +165,39 @@ impl ImportFace {
                 return None;
             }
             let module = self.namespace_module(prefix)?;
-            return Some(DefPath::method(module, rest, method));
+            return Self::method_key_at(module, rest, method);
         }
         if let Some(origin) = self.type_origin(written_type) {
-            return Some(DefPath::method(&origin.module, &origin.target, method));
+            return Self::method_key_at(&origin.module, &origin.target, method);
         }
         if self.is_conflicted(written_type) {
             return None;
         }
-        Some(DefPath::method("", written_type, method))
+        Self::method_key_at("", written_type, method)
+    }
+
+    /// 由 (模块键, 定义名) 直取方法路径（L3-1b S1）：身份化后的唯一入口。
+    ///
+    /// 模块为空（flat/单文件/幻名）时与裸名路径逐字等价，由调用方决定是否回落；
+    /// 解析实现复用 [`Self::method_key_at`]，不另写一套。
+    pub fn method_key_for_nominal(
+        &self,
+        nominal: &Nominal,
+        method: &str,
+    ) -> Option<DefPath> {
+        Self::method_key_at(nominal.module(), nominal.bare(), method)
+    }
+
+    /// 方法路径的唯一构造点：空定义名/方法名 → None；module 原样透传。
+    fn method_key_at(
+        module: &str,
+        definition: &str,
+        method: &str,
+    ) -> Option<DefPath> {
+        if definition.is_empty() || method.is_empty() {
+            return None;
+        }
+        Some(DefPath::method(module, definition, method))
     }
 
     /// 类型名 → **类型路径**（`{module}.{Type}`）：绑定登记时记类型身份用（D-6）。
@@ -211,5 +235,78 @@ impl ImportFace {
         prefix: &str,
     ) -> Option<&str> {
         self.namespaces.get(prefix).map(String::as_str)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::frontend::core::types::identity::Nominal;
+
+    #[test]
+    fn test_method_key_for_nominal_uses_module_and_definition_name() {
+        // Arrange：有模块归属的身份（a.T）
+        let face = ImportFace::default();
+        let identity = Nominal::item("a", "T").expect("identity must be valid");
+        // Act
+        let key = face.method_key_for_nominal(&identity, "add");
+        // Assert：直接得到 a.T.add，不经过本地名/导入表
+        assert_eq!(
+            key,
+            Some(DefPath::method("a", "T", "add")),
+            "qualified nominal must map to module-qualified method key"
+        );
+    }
+
+    #[test]
+    fn test_method_key_for_nominal_flat_matches_string_path() {
+        // Arrange：无模块归属（flat/幻名同形）
+        let face = ImportFace::default();
+        let identity = Nominal::flat("T").expect("flat identity must be valid");
+        // Act
+        let nominal_key = face.method_key_for_nominal(&identity, "add");
+        let string_key = face.method_key("T", "add");
+        // Assert：flat 的 Nominal 路径与既有裸名路径逐字相同
+        assert_eq!(
+            nominal_key, string_key,
+            "flat nominal must fall back to the bare-name method path"
+        );
+        assert_eq!(
+            nominal_key,
+            Some(DefPath::method("", "T", "add")),
+            "flat nominal key must carry an empty module"
+        );
+    }
+
+    #[test]
+    fn test_method_key_for_nominal_alias_uses_definition_identity() {
+        // Arrange：别名导入 TempB → b.Temp；身份是定义侧 (b, Temp)
+        let mut face = ImportFace::default();
+        face.types.insert(
+            "TempB".to_string(),
+            TypeOrigin {
+                module: "b".to_string(),
+                target: "Temp".to_string(),
+            },
+        );
+        let identity = Nominal::item("b", "Temp").expect("identity must be valid");
+        // Act
+        let nominal_key = face.method_key_for_nominal(&identity, "add");
+        let alias_key = face.method_key("TempB", "add");
+        // Assert：Nominal 入口与别名导入解析同一身份；定义名裸查不是同一事实
+        assert_eq!(
+            nominal_key, alias_key,
+            "nominal path and alias import must resolve to the same definition identity"
+        );
+        assert_eq!(
+            nominal_key,
+            Some(DefPath::method("b", "Temp", "add")),
+            "alias method key must use provider module plus definition name"
+        );
+        assert_ne!(
+            nominal_key,
+            face.method_key("Temp", "add"),
+            "bare definition name in the consumer is flat, not the imported identity"
+        );
     }
 }
