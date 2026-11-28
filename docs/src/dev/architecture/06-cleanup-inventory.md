@@ -113,8 +113,8 @@
 | B5 | `src/frontend/core/typecheck/layers/termination.rs:959` | 策略 2 | 自述为"框架占位" |
 | B6 | `src/frontend/core/parser/pratt/precedence.rs:35-94` + `:98-133` | 96 行 | `Precedence` 枚举 + `PrecedenceContext`。**其唯一的外部引用者是 `pratt/tests/precedence_inline.rs`（95 行 / 6 test）——而该测试文件本身从未被编译**（`pratt/tests/mod.rs` 只声明 `led`/`nud`/`precedence`）。因此二者**必须同时删除**：单独删测试会留下 96 行死代码，单独删枚举会造成测试编译失败 |
 | B7 | `src/frontend/core/parser/statements/declarations.rs:82`、`:120-122`、`:145-167` | 约 120 行 | `is_old_function_syntax` 在 `:719` 被调用、`skip_old_function_syntax` 在 `:725` 被调用——**它们是运行中的旧语法拒绝门禁，不是无引用死代码**。`skip_old_function_syntax`（`:120-122`）函数体只有一行注释 `// 旧语法已移除`，但**该函数被调用后不消费任何 token**——这是一个独立的行为问题（拒绝路径是否正确推进解析位置），不是死代码。**处置是随 05-frontend-paradigm.md 一并审查行为（决议 D27：随文法迁移自然删除），而非当作死代码直接删** |
-| B8 | `Instruction::TailCall`（`src/middle/core/ir.rs`） | — | 全仓只有 match、无构造点。`bytecode.rs:2156` 的"无生成点（死路径）"注释**准确**（`translator.rs:530`/`1109` 的编码分支存在但不可达） |
-| B9 | `Switch` opcode | — | `backends/common/opcode.rs` 已定义、有变体、有 `opcode()`/`size()` 臂、有解码臂，**但全仓零构造点**。解释器 `ops/control.rs:90` 有活跃实现。**已被测试显式登记为已知死路径**：`tests/bytecode.rs:1035-1040` 的 `WHITELIST: &[&str] = &["SWITCH"]`（差集非空即失败） |
+| B8 | `Instruction::TailCall`（`src/middle/core/ir.rs`） | — | **已删除（6753bbe，P10 S6.1）**。全仓只有 match、无构造点。`bytecode.rs:2156` 的"无生成点（死路径）"注释**准确**（`translator.rs:530`/`1109` 的编码分支存在但不可达） |
+| B9 | `Switch` opcode | — | **已完成（7e.1 `92b3229` 回收 opcode 值并删变体）**。`backends/common/opcode.rs` 已定义、有变体、有 `opcode()`/`size()` 臂、有解码臂，**但全仓零构造点**。解释器 `ops/control.rs:90` 有活跃实现。**已被测试显式登记为已知死路径**：`tests/bytecode.rs:1035-1040` 的 `WHITELIST: &[&str] = &["SWITCH"]`（差集非空即失败） |
 | B10 | `UnaryOp::Not`（bytecode 一元逻辑非） | — | **已修（WBS 3.20.29，2026-11-14，issue #562 关闭）**。原缺陷 = `opcode()` 编码忽略 `op` 字段（Not 与 Neg 同发 `I64_NEG`），解码器也只构造 `Neg`——编码/解码往返把逻辑非改写为取负（`.42` 直跑时 `!x` 变 `-x`；解释器内存路径的 Neg-on-Bool 补偿臂反而兜对答案，故缺陷面 = 编码保真而非现行错答案）。修法 = 新增专用指令码 `I64_NOT`（0x2C）：`opcode()` 按 `op` 字段分码 + 解码新臂还原 `Not` + translator `Not` 臂换发 + `opcode_name` 登记；执行器既有 `Not` 执行臂自然接通；旧 `.42` 的 `I64_NEG` 解码行为不变。判据链见任务 3.20.29 的提交信息 |
 | B11 | `#[allow(dead_code)]` 4 处 | — | `ownership.rs:36` `ParamOwnership` / `emitter/text.rs:237` `hint_prefix`（这两处是真实死代码）；`proof/smt/z3_ffi.rs:104` `Z3_solver_get_reason_unknown`（extern 绑定的保守豁免，**合理保留**）；`std/tests/stdlib_docs.rs:250` `docs_path_for`（测试辅助） |
 | B12 | `src/frontend/core/parser/ast.rs:37-43` `Expr::FnDef` | — | **生产零构造**（唯一构造点是 `parser/tests/ast.rs:828` 测试手工造节点），但有 **12 处生产消费 + 2 处穷举臂**（完整清单见 03-type-unification.md §2.6）：`spawn/placement.rs:122`、`spawn/analysis.rs:912`、`formatter/handlers/expr.rs:43`、`frontend/module/orchestrator.rs:1492`、`ir_gen.rs:4325/5097`、`checker.rs:1642`、`semantic_tokens.rs:1416`、`inference/expressions.rs:3374`、`inference/existential.rs:55`、`passes/dead_code.rs:305`、`layers/ownership.rs:1207`、`layers/termination.rs:752`，另有 `ast.rs:1026` `Expr::span()`、`pratt/mod.rs:47` `expr_end_line`。函数定义实际走 `Expr::Lambda`(`nud.rs:425-429`) + `StmtKind::Assign`(`declarations.rs:462-479`)。删除归 P6（03 §5.5 的 16 项改动清单） |
@@ -184,7 +184,7 @@ C1-C3 描述的跨文件分析能力**是真的存在**的，只是路径完全�
 | 行（旧） | 丢弃内容 | 复核结论 |
 | --- | --- | --- |
 | `2312` | `upvalue_count: 0` | **真丢失**：已随 v5 落盘（7e.1） |
-| `2315` | `exception_handlers: Vec::new()` | **误报**：字段无生产者、无消费者，语言层无 throw/try/catch（RFC-030/036）⇒ 死字段，不落盘；删除归 P10 S6 |
+| `2315` | `exception_handlers: Vec::new()` | **误报**：字段无生产者、无消费者，语言层无 throw/try/catch（RFC-030/036）⇒ 死字段，不落盘；**已删除（6753bbe，P10 S6.1）** |
 | `2341` | `globals: Vec::new()` | **真丢失**：已随 v5 落盘（7e.3），载体统一为 `MonoType`（7e.4） |
 
 判据：没有生产者的空表不是丢失的数据，是死路径（与 D32 同一判据）。`.42` 的 `VERSION` 从 4 升到 5 一次覆盖两处真丢失（决议 D52）。此处列出仅为避免被误当作「死代码」清理掉。
@@ -199,8 +199,8 @@ C1-C3 描述的跨文件分析能力**是真的存在**的，只是路径完全�
 | F4 | `src/frontend/core/typecheck/layers/README.md` | **已处置（4.4.1）**：README 现描述的是 `checker.rs::check_module_impl` 的实际调用序（精化走查 `predicate` → `termination` → `ownership` → 类型约束求解），括号内行号按现树取、定位以函数名/驱动点为锚；不再声明「下层失败上层不跑」（实际无 short-circuit）；`equivalence` 按其真实身份描述为「共享类型比较工具 + 仅测试使用的证明入口」。本行只作已处置登记，不再指向旧行范围 |
 | F5 | `docs/src/rfc/index.md` | `:79` 把 RFC-026a 放在"已接受RFC"表格里但状态列写"审核中RFC"；`:48-49` 的"审核中RFC"小节只列 032 和 027a，漏 026a。与 `TRACKING.md` 的 3 条 review 不一致 |
 | F6 | `tools/cargo-dist/`（`dist.exe` 21,108,736 字节）与 `benches/shootout/out/`（8 个二进制） | **均未被 git 追踪**（`git ls-files` 返回空），被 `.gitignore` 排除。**不是问题**，仅记录以免后续审计误判为"提交了二进制" |
-| F7 | `tools/code-tables/src/lib.rs:66-78` | `extract_code_from_entry_line` 是**行首前缀匹配器**（`trim_start().strip_prefix("(\"")` 取到下一个引号），依赖 `("E1001", ...)` 元组语法，**不是 parser**。它的架构（`parse` + `validate` + build.rs 门禁 + `--fix` 治愈）值得复用到 opcode 表，但**提取器需按 opcode 形态重写（约 30 行）**。归属 06-cleanup-inventory.md 的后续工作或独立 RFC |
-| F8 | `src/backends/common/opcode.rs` 的门禁缺口 | 83 个常量、0 重复、范围 `0x00..0xE2`（span 227，**144 个空洞**）。同一份 opcode 事实被表达 **5 处**：`BytecodeInstr::opcode()`(`bytecode.rs:558-646`)/ `size()`(`649-803`)/ `opcode::opcode_name()`(`opcode.rs:120-206`)/ 解码 match(`bytecode.rs:978-2302`)/ 48 个 `translate_*`(`translator.rs:676-1577`)。**编译器只强制其中 2 处**（`backends/.../executor/debug.rs:194` 分派表 + 各 `ops/*.rs` 族函数的穷尽 match），`opcode()` / `size()` / 解码臂 / 编码器漏一处**只有跑 `.42` 产物才炸**。`size()` 表(649-803)的注释自述与实际编码不符（`bytecode.rs:2181-2182`），且**无系统性对拍测试**（现有 size 测试只覆盖 Nop/Mov/Borrow/Release 4 个）。运算符语义在此也走第三套平行枚举（`BinaryOp`/`UnaryOp`/`CompareOp`，`bytecode.rs:70/97/106`，`Rem`/`Xor`/`Sar` 又一套命名），随 opcode 生成期门禁一并收口。词表目标位置为 `middle/bytecode/opcode.rs`（随字节码域合并迁移，消除 L3→L4 反向，见 01） |
+| F7 | `tools/code-tables/src/lib.rs:66-78` | **已落地（a2e570c，P10 S6.2）**。`extract_code_from_entry_line` 是**行首前缀匹配器**（`trim_start().strip_prefix("(\"")` 取到下一个引号），依赖 `("E1001", ...)` 元组语法，**不是 parser**。它的架构（`parse` + `validate` + build.rs 门禁 + `--fix` 治愈）值得复用到 opcode 表，但**提取器需按 opcode 形态重写（约 30 行）**。归属 06-cleanup-inventory.md 的后续工作或独立 RFC |
+| F8 | `src/backends/common/opcode.rs` 的门禁缺口 | **已落地（a2e570c，P10 S6.2）**。80 个常量、0 重复、范围 `0x00..0xE2`（span 227，**144 个空洞**）。同一份 opcode 事实曾被表达 **5 处**（2026-11-28 收敛为 `OPCODE_INFO` 单表）：`BytecodeInstr::opcode()`(`bytecode.rs:558-646`)/ `size()`(`649-803`)/ `opcode::opcode_name()`(`opcode.rs:120-206`)/ 解码 match(`bytecode.rs:978-2302`)/ 48 个 `translate_*`(`translator.rs:676-1577`)。**编译器只强制其中 2 处**（`backends/.../executor/debug.rs:194` 分派表 + 各 `ops/*.rs` 族函数的穷尽 match），`opcode()` / `size()` / 解码臂 / 编码器漏一处**只有跑 `.42` 产物才炸**。`size()` 表(649-803)的注释自述与实际编码不符（`bytecode.rs:2181-2182`），且**无系统性对拍测试**（现已补 80 项满覆盖对拍）。运算符语义在此也走第三套平行枚举（`BinaryOp`/`UnaryOp`/`CompareOp`，`bytecode.rs:70/97/106`，`Rem`/`Xor`/`Sar` 又一套命名），随 opcode 生成期门禁一并收口。词表目标位置为 `middle/bytecode/opcode.rs`（随字节码域合并迁移，消除 L3→L4 反向，见 01） |
 
 ### F2 判定：`orchestrator.rs` wasm 属性可达性（2026-10-18 判定，不含清理）
 
@@ -357,7 +357,7 @@ $ git grep -rn 'cfg!(target_arch' b5e68b3c9 -- '*.rs' | wc -l
 | **有真实断言的孤儿测试** | **复活，不是删除** | 合计 **1005 行 / 78 个测试**：lexer 629 行 / 55 个 + 藏在活目录里的 311 行 / 16 个（`precedence_inline` / `overload_inline` / `json`）+ `package/template/tests/` 65 行 / 7 个。**复活成本是一行 `mod` 声明，价值是让 CI 重新获得这些覆盖**。删除它们是净损失 |
 | **零调用但语义重要的 `pub` 项** | **降可见性而非删除** | B2（`TypeSystem`）、B4（`check_type_equivalence`）——移到 `pub(crate)` 让编译器指认，或补实现。**B4 的 `is_subtype` 必须保留** |
 | **产不出值的 opcode / 指令** | **补构造点或删 opcode** | B8（`TailCall`）、B9（`Switch`，opcode 往返测试已以 `WHITELIST=["SWITCH"]` 显式登记）。B10 已按 D33 修复完成（2026-11-14：`opcode()` 区分 `op` 字段 + 专用码 `I64_NOT`，见任务 3.20.29 的提交信息），移出本待办。剩余项三选一，不能维持现状；D32/D33/D34 已裁决，随 `.42` 升版一并处理 |
-| **数据丢失缺陷** | ~~独立 issue~~ **P7 批 e（D52）** | E 节两处真丢失 + 一处误报（`exception_handlers` 为死字段，删除归 P10 S6） |
+| **数据丢失缺陷** | ~~独立 issue~~ **P7 批 e（D52）** | E 节两处真丢失 + 一处误报（`exception_handlers` 为死字段，**已删除（6753bbe，P10 S6.1）**） |
 | **无模块身份但有效** | **改造不删除** | F1（`semantic_tokens.rs`）改 `include!` → 真 `mod`（见 `02`） |
 | **需要决策的** | **列为开放问题** | F2 的 wasm32 清理已登记为 [09](09-execution-wbs.md) §P10 **S7**（wasm32 门控 project-mode 子树，2026-10-18 用户裁决 B；含三条未核实原样保留）；层序修正会暴露新诊断 |
 

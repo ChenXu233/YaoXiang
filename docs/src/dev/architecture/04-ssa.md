@@ -433,10 +433,10 @@ self.release_plan_total = type_result.release_plan.drops.len();
 | 位置（旧行号） | 字段 | 原值 | 复核结论 |
 | --- | --- | --- | --- |
 | `bytecode.rs:2312` | `upvalue_count` | `0` // Not stored in BytecodeFile | **真丢失**：闭包上值槽数经 `.42` 往返归零；已随 v5 落盘（7e.1） |
-| `bytecode.rs:2315` | `exception_handlers` | `Vec::new()` // Not implemented yet | **误报**：字段无生产者、无消费者，语言层无 throw/try/catch（RFC-030 把 `Throw` 记为字节码层预留，RFC-036 否决进程内 catch 边界）⇒ 没有「丢失的数据」，是死字段；不落盘，删除归 P10 S6 |
+| `bytecode.rs:2315` | `exception_handlers` | `Vec::new()` // Not implemented yet | **误报**：字段无生产者、无消费者，语言层无 throw/try/catch（RFC-030 把 `Throw` 记为字节码层预留，RFC-036 否决进程内 catch 边界）⇒ 没有「丢失的数据」，是死字段；不落盘，**已删除（6753bbe，P10 S6.1）** |
 | `bytecode.rs:2341` | `globals` | `Vec::new()` // Not stored in BytecodeFile yet | **真丢失**：全局表（名字 + 类型）经往返归零；已随 v5 落盘（7e.3），载体与函数签名同为 `MonoType`（7e.4） |
 
-**判据（决议 D52）：没有生产者的空表不是丢失的数据，是死路径**——与 D32 同一判据。有生产者而容器不落盘的才是数据丢失，因此 `2312` / `2341` 收进 P7 批 e（7e）；`2315` 不落盘，作为死字段归 P10 S6 的 opcode 死路径清理（`THROW` 单列待裁决）。升版一次覆盖两处真丢失（`VERSION` 4→5，D17）；`.42` 是构建产物，跨版本兼容不是目标。
+**判据（决议 D52）：没有生产者的空表不是丢失的数据，是死路径**——与 D32 同一判据。有生产者而容器不落盘的才是数据丢失，因此 `2312` / `2341` 收进 P7 批 e（7e）；`2315` 不落盘，作为死字段**已随 P10 S6.1 删除（6753bbe）**（`THROW` 单列待裁决）。升版一次覆盖两处真丢失（`VERSION` 4→5，D17）；`.42` 是构建产物，跨版本兼容不是目标。
 
 **7e 同批的第三处格式失真**：`.42` 类型号表不可逆且撞号——`Int(64)` 与 `Float(32)` 同为 `9`、`Float(64)` 读回 `TypeRef("_")`。号表改为可逆无碰撞（7e.4），写侧对未知位宽与编译期 FFI 类型响亮拒绝。
 
