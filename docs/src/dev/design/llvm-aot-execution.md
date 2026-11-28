@@ -10,7 +10,7 @@ description:
 x86-64 上，把一份真实的 YaoXiang 源程序编译成 ELF 可执行文件。在没有 LLVM 和 YaoXiang
 VM 的同类系统上运行它，既能算对结果，也能在出错时指出源码位置。生成一份 LLVM IR 文本不算完成。
 
-**状态：批次 3 已开工（值证据、无 `Phi` CFG 子集与多文件项目入口），批次 4.1（运行时 ABI 首版与 `String` 判等/顺序）、4.2（`Int` 位运算与受检移位）与 4.4（模块级全局）已入库，发布验收未完成。**
+**状态：批次 3 已开工（值证据、无 `Phi` CFG 子集与多文件项目入口），批次 4.1（运行时 ABI 首版与 `String` 判等/顺序）、4.2（`Int` 位运算与受检移位）与 4.4（模块级全局）与 4.5（`Float` 标量）已入库，发布验收未完成。**
 [RFC-018](../../rfc/accepted/018-llvm-aot-compiler.md)
 已接受 LLVM 提前编译（AOT）的方向，并在附录 B 登记构建产物契约；[跟踪议题 #134](https://github.com/ChenXu233/YaoXiang/issues/134)
 是这项工作的入口。首批实现不占用 [RFC-039 施工表](../architecture/09-execution-wbs.md)
@@ -59,8 +59,11 @@ VM 的同类系统上运行它，既能算对结果，也能在出错时指出�
       `>>` 降 `Sar`（发 `ashr`）、`Shr` 归位逻辑右移（发 `lshr`，前端不产出，判据
       `test_native_shr_instruction_uses_logical_shift`）；4.4 已收口：模块级 `Int`/`Bool`/`String`
       全局（声明、module init 写入、函数内读写的同一套类型规则，判据
-      `test_native_global_scalars_match_vm` 与 `test_native_project_global_mutation_matches_vm`）。
-      容器、闭包、资源、FFI 与并作未开始。
+      `test_native_global_scalars_match_vm` 与 `test_native_project_global_mutation_matches_vm`）；
+      4.5 已收口：`Float` 标量（四则/`Neg`/floor 取模/六比较/局部/形参/返回/`Phi`，混型带位置
+      拒绝，判据 `test_native_float_arithmetic_matches_vm`、
+      `test_native_float_nan_and_infinity_match_vm`、
+      `test_native_float_mixed_int_operands_are_rejected`）。容器、闭包、资源、FFI 与并作未开始。
 
   **批次 4 前置（阻塞，2026-11-28 登记）**：
 
@@ -199,7 +202,7 @@ python scripts/dev/testsuite.py plan
 
 **支持集**：
 
-- 单文件脚本或多文件项目；`Int`、`Bool`、`String`、`Void` 标量与直接调用。
+- 单文件脚本或多文件项目；`Int`、`Bool`、`Float`、`String`、`Void` 标量与直接调用。
 - 模块级全局（批次 4.4）：`Int`/`Bool`/`String` 全局在入口块按类型物化（`String` 仍是
   `{ptr, len}` 借用视图，无分配器），module init 按 IR 顺序写入，函数内可读可写、跨函数
   与跨单元可见；初始化顺序与 VM 一致（后一个全局的初始化读得到前一个的值）。模块 init 的
@@ -228,6 +231,13 @@ python scripts/dev/testsuite.py plan
   `test_native_shr_instruction_uses_logical_shift`，均在 O0 与 O2 各跑一遍；
   后端单元判据 `test_native_int_bitwise_operands_are_accepted`、
   `test_native_shift_operands_are_accepted`、`test_native_shift_mixed_operand_is_rejected_with_location`。
+- `Float` 标量（批次 4.5）：`Add`/`Sub`/`Mul`/`Div` 接受两侧同为 `Float`，直接发射
+  `fadd`/`fsub`/`fmul`/`fdiv`；`Neg` 发射 `fneg`；`%` 是**floor 取模**（结果符号随除数），
+  经运行时入口 `__yx_rt_floor_mod_f64` 而不是 LLVM `frem` 的截断语义（`-7.5 % 2.0` 得 `0.5`，
+  `frem` 会得 `-1.5`）；六种比较按 IEEE/Rust 语义对齐 VM：`Eq`/`Lt`/`Le`/`Gt`/`Ge` 用 ordered
+  谓词，`Ne` 必须用**无序** `UNE`（`NaN != NaN` 为真，ordered `ONE` 会判成假）；`Float` 的
+  局部、形参、返回与 `Phi` 汇合都在支持集内。判据 `test_native_float_arithmetic_matches_vm`、
+  `test_native_float_nan_and_infinity_match_vm`；混型 Int×Float 见拒绝边界。
 - 直线指令；无 `Phi` 的分支和循环（`Jmp`、`JmpIf`、`JmpIfNot` 按 `BasicBlock` 发射），判据为
   `test_native_no_phi_branch_executes_both_edges`、`test_native_no_phi_loop_matches_vm`。
 - `Phi` 汇合：生产端 SSA 的 `Phi`
@@ -305,14 +315,20 @@ python scripts/dev/testsuite.py plan
   `source:line:column`；混型比较（`String` 与 `Int` 等）同样带位置拒绝。判据
   `test_native_string_operation_outside_slice_is_rejected`、
   `test_native_string_mixed_comparison_is_rejected_with_location`。
-- 不支持的全局类型（批次 4.4）：`Float`、容器、闭包、资源等仍带位置拒绝、不产生产物，不静默
-  按 `Void` 回落。`Float` 全局在初始化常量处点位（判据
-  `test_native_unsupported_global_type_is_rejected`）；容器全局落在容器构造指令上（判据
+- 混型 Int×Float 算术（批次 4.5）：操作数必须同型。VM 在 typecheck 层把 `Int` 提升成
+  `f64`（RFC-011b 的 widening），但 IR 不落显式 widening 指令，AOT 侧无法从 IR 判出提升点，
+  因此 `Int + Float` 一类带位置拒绝，不猜一种语义（判据
+  `test_native_float_mixed_int_operands_are_rejected`，同一用例核对 VM 侧确实能跑）。
+- 不支持的全局类型（批次 4.4，4.5 收窄）：容器、闭包、资源仍带位置拒绝、不产生产物，不静默
+  按 `Void` 回落。`Float` **全局**仍被拒绝（4.5 只把 `Float` 加进标量支持集，模块级 f64 的
+  物化未验收）：分析层在写入该全局的指令处带位置拒绝，声明的但从未读写的 `Float` 全局在
+  全局播种处按名字拒绝（判据 `test_native_unsupported_global_type_is_rejected`，该用例断言
+  初始化式的 `file:line`）；容器全局落在容器构造指令上（判据
   `test_native_container_global_is_rejected`），该指令的 span 由 lower 留空，诊断位置显示
   `0:0`——这是 lower 侧的 span 缺口，不由本层补造。
 - 槽位缺指针（批次 4.3 收口：补齐证据 + 非 `Void` 硬失败）：`Void` 是唯一没有 LLVM 形态的
   标量（后端单元判据 `test_only_void_scalar_has_no_llvm_form`），分析层只放行 `Void`/`Int`/
-  `Bool`/`String`，另外三种槽位都在入口块拿到 alloca、全局槽位由 `declare_globals` 物化——
+  `Bool`/`Float`/`String`，另外四种槽位都在入口块拿到 alloca、全局槽位由 `declare_globals` 物化——
   因此「槽位缺指针」只可能是 `Void`。`Void` 槽位的读取按**类型**物化为 `Void`，与
   `Const(ConstValue::Void)` 同一规则，不依赖缺指针兜底（集成判据
   `test_native_void_slot_reads_are_explicit`；已声明 `Int` 全局的读取判据
@@ -499,17 +515,24 @@ python scripts/dev/testsuite.py plan
 - 未来的 owned 字符串在 `ptr` 之前放堆头（引用计数、种类、长度），值形状仍是 `{ ptr, len }`——新增分配不改变任何函数签名。
 - 用户可见的长度有两套口径，不得混用：`StringLength` 指令对 `String` 是字节数（对容器是元素数）；`std.string.len` 与内建 `len` 对 `String` 是码点数。选择由调用方按语义决定，ABI 层不统一。
 
-### 比较入口（批次 4.1 已实现）
+### 比较与浮点入口（批次 4.1 / 4.5 已实现）
 
-| 入口              | 签名                      | 语义                               |
-| ----------------- | ------------------------- | ---------------------------------- |
-| `__yx_rt_str_eq`  | `i64(i8*, i64, i8*, i64)` | 长度相同且逐字节相等返回 1，否则 0 |
-| `__yx_rt_str_cmp` | `i64(i8*, i64, i8*, i64)` | 按 UTF-8 字节字典序返回 -1 / 0 / 1 |
+| 入口                    | 签名                      | 语义                                              |
+| ----------------------- | ------------------------- | ------------------------------------------------- |
+| `__yx_rt_str_eq`        | `i64(i8*, i64, i8*, i64)` | 长度相同且逐字节相等返回 1，否则 0                |
+| `__yx_rt_str_cmp`       | `i64(i8*, i64, i8*, i64)` | 按 UTF-8 字节字典序返回 -1 / 0 / 1                |
+| `__yx_rt_floor_mod_f64` | `f64(f64, f64)`           | floor 取模：符号随除数（`fmod` + 符号修正）       |
 
-- 六个比较算子都落到这两个入口：`Eq`/`Ne` 用 `__yx_rt_str_eq` 的结果与 0 比较，`Lt`/`Le`/`Gt`/`Ge` 用 `__yx_rt_str_cmp` 的结果与 0 比较。
+- `String` 的六个比较算子都落到这两个入口：`Eq`/`Ne` 用 `__yx_rt_str_eq` 的结果与 0 比较，
+  `Lt`/`Le`/`Gt`/`Ge` 用 `__yx_rt_str_cmp` 的结果与 0 比较。
 - 语义是**内容**比较：比较只读 `{ptr, len}` 指向的字节，不看地址。
 - 静态字面量落在可合并的 `.rodata.str1.1` 段（`SHF_MERGE | SHF_STRINGS`），由**链接器**把内容相同的字面量合并成同一地址：O0 的对象文件里仍是各自独立的一份（`yx.string.N` 各占不同偏移），O2 的 IR 优化会先折叠掉一部分，两种优化级最终都只剩一个地址。因此「内容相等而指针不等」在批次 4.1 没有可观察用例；拥有所有权的字符串切片才会产生两个内容相同、地址不同的值，届时该性质由用例直接观察。
-- `Int` 与 `Bool` 的比较仍由 LLVM `icmp` 直接发射，不经过运行时。
+- `Int` 与 `Bool` 的比较仍由 LLVM `icmp` 直接发射，不经过运行时；`Float` 比较用 `fcmp`，
+  `Ne` 取无序 `UNE`，其余取 ordered 谓词，以便 `NaN` 与任何值（含自身）比较都「不等于」、
+  四种序比较全假——与 VM 的 Rust `f64` 比较逐项一致。
+- `__yx_rt_floor_mod_f64` 用 `fmod` 实现，构建期由系统 C 工具链编译并**显式链接 `-lm`**：
+  不依赖目标环境的默认库组合。`NaN` 输入与除数为 0 时返回 `NaN`，与 VM 的
+  `crate::util::arith::floor_mod_f64` 同结果。
 - VM 侧 `exec_compare` 的 `String` 分支是 Rust `str` 比较（字节序），本节的入口与之同结果。
 
 ### 错误 ABI（现状）

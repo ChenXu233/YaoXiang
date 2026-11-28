@@ -27,6 +27,7 @@ pub(super) enum ScalarType {
     Void,
     Int,
     Bool,
+    Float,
     String,
 }
 
@@ -36,12 +37,15 @@ impl ScalarType {
             MonoType::Never | MonoType::Void => Ok(Self::Void),
             MonoType::Bool => Ok(Self::Bool),
             MonoType::Int(64) => Ok(Self::Int),
+            MonoType::Float(64) => Ok(Self::Float),
             MonoType::Generic { name, .. } if name == "String" => Ok(Self::String),
             MonoType::Refined { base, .. }
             | MonoType::Literal {
                 base_type: base, ..
             } => Self::from_mono(base),
-            other => bail!("native AOT supports only Int, Bool, String and Void; got {other:?}"),
+            other => {
+                bail!("native AOT supports only Int, Bool, Float, String and Void; got {other:?}")
+            }
         }
     }
 }
@@ -262,10 +266,20 @@ pub(super) fn analyze_module(
         analysis.functions.insert(function.name.clone(), body);
     }
     for global in &module.globals {
+        let ty = ScalarType::from_mono(&global.ty)?;
+        // 声明了但从未被 init 读写的 Float 全局也要拒绝：全局边界只开到
+        // Int/Bool/String，Float 留到后续切片（模块级全局的 f64 物化未验收）。
+        if ty == ScalarType::Float {
+            bail!(
+                "native AOT does not support Float module-level global {:?} (slot {}); the global boundary covers Int, Bool and String",
+                global.name,
+                global.index
+            );
+        }
         if let std::collections::hash_map::Entry::Vacant(entry) =
             analysis.globals.entry(global.index)
         {
-            entry.insert(ScalarType::from_mono(&global.ty)?);
+            entry.insert(ty);
         }
     }
     Ok(analysis)
@@ -662,6 +676,13 @@ fn analyze_stream(
                     Ok(())
                 }
                 Operand::Global(slot) => {
+                    // Float 模块级全局不在本片支持集（批次 4.4 的全局边界只开到
+                    // Int/Bool/String）：带位置拒绝，不静默按 f64 物化。
+                    if ty == ScalarType::Float {
+                        return Err(unsupported(format!(
+                            "Float module-level global slot {slot} is outside the AOT support set"
+                        )));
+                    }
                     if let Some(old) = globals.insert(*slot, ty) {
                         if old != ty {
                             return Err(unsupported(format!(
@@ -687,16 +708,34 @@ fn analyze_stream(
             | Instruction::Mul { dst, lhs, rhs, .. }
             | Instruction::Div { dst, lhs, rhs, .. }
             | Instruction::Mod { dst, lhs, rhs, .. } => {
-                require_type(read(lhs, &result)?, ScalarType::Int, "integer lhs")
-                    .map_err(|e| unsupported(e.to_string()))?;
-                require_type(read(rhs, &result)?, ScalarType::Int, "integer rhs")
-                    .map_err(|e| unsupported(e.to_string()))?;
-                write(dst, ScalarType::Int, &mut result, globals)?;
+                // 同一对操作数必须同型：Int×Int 走受检整数路径，Float×Float 走
+                // IEEE 浮点路径（`%` 是 floor 取模，与 VM 同语义）。混型不猜——
+                // typecheck 层把 Int 提升成 f64 但不落显式 widening 指令，AOT
+                // 侧不能从 IR 判出提升点，因此带位置拒绝。
+                let left = read(lhs, &result)?;
+                let right = read(rhs, &result)?;
+                let ty = match (left, right) {
+                    (ScalarType::Int, ScalarType::Int) => ScalarType::Int,
+                    (ScalarType::Float, ScalarType::Float) => ScalarType::Float,
+                    _ => {
+                        return Err(unsupported(format!(
+                            "arithmetic requires two Int or two Float operands, got {left:?} and {right:?}; mixed Int/Float carries no widening instruction in IR"
+                        )));
+                    }
+                };
+                write(dst, ty, &mut result, globals)?;
             }
             Instruction::Neg { dst, src, .. } => {
-                require_type(read(src, &result)?, ScalarType::Int, "integer operand")
-                    .map_err(|e| unsupported(e.to_string()))?;
-                write(dst, ScalarType::Int, &mut result, globals)?;
+                let operand = read(src, &result)?;
+                let ty = match operand {
+                    ScalarType::Int | ScalarType::Float => operand,
+                    other => {
+                        return Err(unsupported(format!(
+                            "negation requires an Int or Float operand, got {other:?}"
+                        )));
+                    }
+                };
+                write(dst, ty, &mut result, globals)?;
             }
             Instruction::Not { dst, src, .. } => {
                 require_type(read(src, &result)?, ScalarType::Bool, "boolean operand")
@@ -711,11 +750,11 @@ fn analyze_stream(
                 if left != right
                     || !matches!(
                         left,
-                        ScalarType::Int | ScalarType::Bool | ScalarType::String
+                        ScalarType::Int | ScalarType::Bool | ScalarType::Float | ScalarType::String
                     )
                 {
                     return Err(unsupported(format!(
-                        "equality requires two Int, two Bool or two String operands, got {left:?} and {right:?}"
+                        "equality requires two operands of the same scalar type (Int, Bool, Float or String), got {left:?} and {right:?}"
                     )));
                 }
                 write(dst, ScalarType::Bool, &mut result, globals)?;
@@ -728,9 +767,14 @@ fn analyze_stream(
                 let right = read(rhs, &result)?;
                 // 顺序比较接受 Int×Int 与 String×String（UTF-8 字节字典序，
                 // 对合法 UTF-8 与码点序一致）；混型带位置拒绝。
-                if left != right || !matches!(left, ScalarType::Int | ScalarType::String) {
+                if left != right
+                    || !matches!(
+                        left,
+                        ScalarType::Int | ScalarType::Float | ScalarType::String
+                    )
+                {
                     return Err(unsupported(format!(
-                        "ordering requires two Int or two String operands, got {left:?} and {right:?}"
+                        "ordering requires two Int, two Float or two String operands, got {left:?} and {right:?}"
                     )));
                 }
                 write(dst, ScalarType::Bool, &mut result, globals)?;
@@ -930,6 +974,7 @@ fn operand_type(
         Operand::Const(ConstValue::Void) => Ok(ScalarType::Void),
         Operand::Const(ConstValue::Bool(_)) => Ok(ScalarType::Bool),
         Operand::Const(ConstValue::Int(_)) => Ok(ScalarType::Int),
+        Operand::Const(ConstValue::Float(_)) => Ok(ScalarType::Float),
         Operand::Const(ConstValue::String(_)) => Ok(ScalarType::String),
         Operand::Local(slot) => function
             .locals

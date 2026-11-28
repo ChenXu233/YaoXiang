@@ -15,7 +15,7 @@ use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType
 use inkwell::values::{
     BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, PhiValue, PointerValue,
 };
-use inkwell::{AddressSpace, IntPredicate};
+use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 
 use crate::middle::ir::ir::{
     BasicBlock, ConstValue, FunctionBody, FunctionIR, Instruction, ModuleIR, Operand,
@@ -67,6 +67,8 @@ struct RuntimeFunctions<'ctx> {
     str_cmp: FunctionValue<'ctx>,
     /// `void(location)`：位移量越界的失败入口（E6007 + 位置，noreturn）。
     shift_overflow: FunctionValue<'ctx>,
+    /// `f64(f64, f64)`：floor 取模（符号随除数），与 VM 的 `floor_mod_f64` 同语义。
+    floor_mod_f64: FunctionValue<'ctx>,
 }
 
 pub(super) struct Emitter<'ctx> {
@@ -299,6 +301,9 @@ impl<'ctx> Emitter<'ctx> {
                     }
                     Some(BasicTypeEnum::StructType(struct_type)) => {
                         llvm(self.builder.build_phi(struct_type, &name))?
+                    }
+                    Some(BasicTypeEnum::FloatType(float_type)) => {
+                        llvm(self.builder.build_phi(float_type, &name))?
                     }
                     Some(_) => bail!("Phi ValueId({}) has no supported LLVM type", id.0),
                     // Void 汇合值没有 LLVM 形态：读取方一律得到 Void，不建节点。
@@ -542,48 +547,103 @@ impl<'ctx> Emitter<'ctx> {
                 rhs,
                 span,
             } => {
-                let left = self
-                    .read(&locals, values, lhs, analysis)?
-                    .repr
-                    .unwrap()
-                    .into_int_value();
-                let right = self
-                    .read(&locals, values, rhs, analysis)?
-                    .repr
-                    .unwrap()
-                    .into_int_value();
-                let runtime = match instruction {
-                    Instruction::Add { .. } => self.runtime.add,
-                    Instruction::Sub { .. } => self.runtime.sub,
-                    Instruction::Mul { .. } => self.runtime.mul,
-                    Instruction::Div { .. } => self.runtime.div,
-                    Instruction::Mod { .. } => self.runtime.rem,
-                    _ => unreachable!(),
-                };
-                let mut args = vec![left.into(), right.into()];
-                args.extend(self.location_args(*span)?);
-                let call = llvm(self.builder.build_call(runtime, &args, "checked"))?;
-                let value = Value {
-                    ty: ScalarType::Int,
-                    repr: call.try_as_basic_value().basic(),
+                let left = self.read(&locals, values, lhs, analysis)?;
+                let right = self.read(&locals, values, rhs, analysis)?;
+                let value = if left.ty == ScalarType::Float && right.ty == ScalarType::Float {
+                    let lhs = left
+                        .repr
+                        .ok_or_else(|| anyhow!("float operand has no LLVM value"))?
+                        .into_float_value();
+                    let rhs = right
+                        .repr
+                        .ok_or_else(|| anyhow!("float operand has no LLVM value"))?
+                        .into_float_value();
+                    let repr = match instruction {
+                        Instruction::Add { .. } => {
+                            llvm(self.builder.build_float_add(lhs, rhs, "fadd"))?
+                        }
+                        Instruction::Sub { .. } => {
+                            llvm(self.builder.build_float_sub(lhs, rhs, "fsub"))?
+                        }
+                        Instruction::Mul { .. } => {
+                            llvm(self.builder.build_float_mul(lhs, rhs, "fmul"))?
+                        }
+                        Instruction::Div { .. } => {
+                            llvm(self.builder.build_float_div(lhs, rhs, "fdiv"))?
+                        }
+                        // `%` 是 VM 的 floor 取模（符号随除数），不是 LLVM `frem` 的
+                        // 截断语义（`-7.5 % 2.0` VM 得 0.5、frem 得 -1.5）——走运行时。
+                        Instruction::Mod { .. } => {
+                            let call = llvm(self.builder.build_call(
+                                self.runtime.floor_mod_f64,
+                                &[lhs.into(), rhs.into()],
+                                "floor_mod",
+                            ))?;
+                            call.try_as_basic_value()
+                                .basic()
+                                .ok_or_else(|| anyhow!("floor mod runtime returned no value"))?
+                                .into_float_value()
+                        }
+                        _ => unreachable!(),
+                    };
+                    Value {
+                        ty: ScalarType::Float,
+                        repr: Some(repr.into()),
+                    }
+                } else {
+                    let left = left
+                        .repr
+                        .ok_or_else(|| anyhow!("integer operand has no LLVM value"))?
+                        .into_int_value();
+                    let right = right
+                        .repr
+                        .ok_or_else(|| anyhow!("integer operand has no LLVM value"))?
+                        .into_int_value();
+                    let runtime = match instruction {
+                        Instruction::Add { .. } => self.runtime.add,
+                        Instruction::Sub { .. } => self.runtime.sub,
+                        Instruction::Mul { .. } => self.runtime.mul,
+                        Instruction::Div { .. } => self.runtime.div,
+                        Instruction::Mod { .. } => self.runtime.rem,
+                        _ => unreachable!(),
+                    };
+                    let mut args = vec![left.into(), right.into()];
+                    args.extend(self.location_args(*span)?);
+                    let call = llvm(self.builder.build_call(runtime, &args, "checked"))?;
+                    Value {
+                        ty: ScalarType::Int,
+                        repr: call.try_as_basic_value().basic(),
+                    }
                 };
                 self.write(&mut *locals, values, dst, value, analysis)?;
             }
             Instruction::Neg { dst, src, span } => {
-                let value = self
-                    .read(&locals, values, src, analysis)?
-                    .repr
-                    .unwrap()
-                    .into_int_value();
-                let mut args = vec![value.into()];
-                args.extend(self.location_args(*span)?);
-                let call = llvm(
-                    self.builder
-                        .build_call(self.runtime.neg, &args, "checked_neg"),
-                )?;
-                let result = Value {
-                    ty: ScalarType::Int,
-                    repr: call.try_as_basic_value().basic(),
+                let operand = self.read(&locals, values, src, analysis)?;
+                let result = if operand.ty == ScalarType::Float {
+                    let value = operand
+                        .repr
+                        .ok_or_else(|| anyhow!("float operand has no LLVM value"))?
+                        .into_float_value();
+                    Value {
+                        ty: ScalarType::Float,
+                        repr: Some(llvm(self.builder.build_float_neg(value, "fneg"))?.into()),
+                    }
+                } else {
+                    let value = operand
+                        .repr
+                        .ok_or_else(|| anyhow!("integer operand has no LLVM value"))?
+                        .into_int_value();
+                    let mut args = vec![value.into()];
+                    args.extend(self.location_args(*span)?);
+                    let call = llvm(self.builder.build_call(
+                        self.runtime.neg,
+                        &args,
+                        "checked_neg",
+                    ))?;
+                    Value {
+                        ty: ScalarType::Int,
+                        repr: call.try_as_basic_value().basic(),
+                    }
                 };
                 self.write(&mut *locals, values, dst, result, analysis)?;
             }
@@ -647,6 +707,32 @@ impl<'ctx> Emitter<'ctx> {
                         self.context.i64_type().const_zero(),
                         "str.compare.result",
                     ))?
+                } else if left.ty == ScalarType::Float {
+                    let left = left
+                        .repr
+                        .ok_or_else(|| anyhow!("float operand has no LLVM value"))?
+                        .into_float_value();
+                    let right = right
+                        .repr
+                        .ok_or_else(|| anyhow!("float operand has no LLVM value"))?
+                        .into_float_value();
+                    // 谓词按 IEEE 语义逐项对齐 VM（Rust f64 比较）：NaN 与任何值
+                    // 比较都「不等于」，且 `<`/`<=`/`>`/`>=` 全假。因此 `Ne` 必须用
+                    // **无序** UNE（ordered ONE 会把 `NaN != NaN` 判成假），其余四个
+                    // 用 ordered 谓词即可。
+                    let predicate = match instruction {
+                        Instruction::Eq { .. } => FloatPredicate::OEQ,
+                        Instruction::Ne { .. } => FloatPredicate::UNE,
+                        Instruction::Lt { .. } => FloatPredicate::OLT,
+                        Instruction::Le { .. } => FloatPredicate::OLE,
+                        Instruction::Gt { .. } => FloatPredicate::OGT,
+                        Instruction::Ge { .. } => FloatPredicate::OGE,
+                        _ => unreachable!(),
+                    };
+                    llvm(
+                        self.builder
+                            .build_float_compare(predicate, left, right, "fcompare"),
+                    )?
                 } else {
                     let left = left
                         .repr
@@ -1019,6 +1105,10 @@ impl<'ctx> Emitter<'ctx> {
                     repr: Some(self.context.i64_type().const_int(bits, true).into()),
                 })
             }
+            Operand::Const(ConstValue::Float(value)) => Ok(Value {
+                ty: ScalarType::Float,
+                repr: Some(self.context.f64_type().const_float(*value).into()),
+            }),
             Operand::Const(ConstValue::String(value)) => self.string_value(value),
             Operand::Local(slot) | Operand::Arg(slot) => {
                 let Some(slot) = locals.get(slot).copied() else {
@@ -1259,6 +1349,7 @@ impl<'ctx> Emitter<'ctx> {
             ScalarType::Void => None,
             ScalarType::Int => Some(self.context.i64_type().get_undef().into()),
             ScalarType::Bool => Some(self.context.bool_type().get_undef().into()),
+            ScalarType::Float => Some(self.context.f64_type().get_undef().into()),
             ScalarType::String => Some(string_type(self.context).get_undef().into()),
         }
     }
@@ -1329,6 +1420,7 @@ pub(super) fn llvm_type(
         ScalarType::Void => None,
         ScalarType::Int => Some(context.i64_type().into()),
         ScalarType::Bool => Some(context.bool_type().into()),
+        ScalarType::Float => Some(context.f64_type().into()),
         ScalarType::String => Some(string_type(context).into()),
     }
 }
@@ -1405,6 +1497,13 @@ fn declare_runtime<'ctx>(
             .fn_type(&[location[0], location[1], location[2], location[3]], false),
         None,
     );
+    // 浮点 floor 取模：`f64(f64, f64)`，与 VM 的 `floor_mod_f64` 同一实现语义。
+    let f64_ty = context.f64_type();
+    let floor_mod_f64 = module.add_function(
+        "__yx_rt_floor_mod_f64",
+        f64_ty.fn_type(&[f64_ty.into(), f64_ty.into()], false),
+        None,
+    );
     // 字符串比较：两个 `{ptr, len}` 按值展开成四个标量参数，返回 i64。
     let string_compare = [ptr_ty.into(), i64_ty.into(), ptr_ty.into(), i64_ty.into()];
     let str_eq = module.add_function(
@@ -1428,6 +1527,7 @@ fn declare_runtime<'ctx>(
         str_eq,
         str_cmp,
         shift_overflow,
+        floor_mod_f64,
     }
 }
 

@@ -1,6 +1,7 @@
 // AOT-1 最小原生运行时。此文件在每次原生构建时由系统 C 编译器编译，
 // 最终产物只引用这里导出的 C ABI 与目标系统 C 基础库，不引用 Rust/VM/LLVM。
 #include <inttypes.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -123,6 +124,20 @@ void __yx_rt_assert(
 __attribute__((noreturn)) void __yx_rt_shift_overflow(YX_LOCATION_ARGS) {
     static const char message[] = "integer overflow in shift amount";
     yx_fail(6007, message, sizeof(message) - 1, YX_LOCATION);
+}
+
+// ── 浮点 floor 取模（批次 4.5）────────────────────────────────────
+//
+// 与 VM 的 `crate::util::arith::floor_mod_f64` 逐行同语义：结果符号随除数
+// （`-7.5 % 2.0 == 0.5`、`7.5 % -2.0 == -0.5`），**不是** C 的 `fmod` 截断语义。
+// 除数为 0 或任一操作数为 NaN 时返回 NaN（与 Rust 的 `a % b` + 符号修正一致）。
+
+double __yx_rt_floor_mod_f64(double lhs, double rhs) {
+    const double remainder = fmod(lhs, rhs);
+    if (remainder != 0.0 && ((remainder < 0.0) != (rhs < 0.0))) {
+        return remainder + rhs;
+    }
+    return remainder;
 }
 
 // ── 字符串（批次 4.1）──────────────────────────────────────────────

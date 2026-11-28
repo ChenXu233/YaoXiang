@@ -1601,16 +1601,23 @@ mod enabled {
 
     #[test]
     fn test_native_unsupported_value_type_is_rejected() {
-        // Arrange
-        let module =
-            simple_value_module(yaoxiang::frontend::core::sema::MonoType::Float(64), false);
+        // Arrange：容器类型仍在支持集外（Float 自批次 4.5 起已是标量支持集成员，
+        // 不能再当「不支持类型」的样例）。
+        let module = simple_value_module(
+            yaoxiang::frontend::core::sema::MonoType::Generic {
+                name: yaoxiang::frontend::core::types::identity::Nominal::flat("List")
+                    .expect("List is a valid bare type name"),
+                args: vec![yaoxiang::frontend::core::sema::MonoType::Int(64)],
+            },
+            false,
+        );
 
         // Act
         let detail = compile_error(&module);
 
         // Assert
         assert!(
-            detail.contains("ValueId(0)") && detail.contains("Float(64)"),
+            detail.contains("ValueId(0)") && detail.contains("List"),
             "unsupported value diagnostic must name id/type: {detail}"
         );
     }
@@ -2464,6 +2471,128 @@ mod enabled {
         assert!(
             !executable.exists(),
             "rejected build must not write a native artifact"
+        );
+    }
+
+    #[test]
+    fn test_native_float_arithmetic_matches_vm() {
+        // Arrange：四则、Neg、floor 取模（四个符号组合）、Float 局部/形参/返回与 Phi。
+        let source = concat!(
+            "use std.assert\n",
+            "add: (a: Float, b: Float) -> Float = (a, b) => a + b\n",
+            "sub: (a: Float, b: Float) -> Float = (a, b) => a - b\n",
+            "mul: (a: Float, b: Float) -> Float = (a, b) => a * b\n",
+            "div: (a: Float, b: Float) -> Float = (a, b) => a / b\n",
+            "rem: (a: Float, b: Float) -> Float = (a, b) => a % b\n",
+            "neg: (a: Float) -> Float = (a) => -a\n",
+            "pick: (flag: Bool, a: Float, b: Float) -> Float = (flag, a, b) => { if flag { a } else { b } }\n",
+            "scaled: (x: Float) -> Float = (x) => { y = x * 2.0; y + 0.5 }\n",
+            "main: () -> Void = {\n",
+            "    assert.assert(add(1.5, 2.25) == 3.75, \"fadd\")\n",
+            "    assert.assert(sub(1.5, 2.25) == -0.75, \"fsub\")\n",
+            "    assert.assert(mul(1.5, 2.0) == 3.0, \"fmul\")\n",
+            "    assert.assert(div(7.0, 2.0) == 3.5, \"fdiv\")\n",
+            "    assert.assert(neg(2.5) == -2.5, \"fneg\")\n",
+            "    assert.assert(rem(7.5, 2.0) == 1.5, \"floor mod positive\")\n",
+            "    assert.assert(rem(-7.5, 2.0) == 0.5, \"floor mod negative dividend\")\n",
+            "    assert.assert(rem(7.5, -2.0) == -0.5, \"floor mod negative divisor\")\n",
+            "    assert.assert(rem(-7.5, -2.0) == -1.5, \"floor mod both negative\")\n",
+            "    assert.assert(scaled(1.25) == 3.0, \"float local\")\n",
+            "    assert.assert(pick(true, 1.0, 2.0) == 1.0 and pick(false, 1.0, 2.0) == 2.0, \"float phi\")\n",
+            "}\n",
+            "main()\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "float_arith");
+
+        // Assert
+        // assert_native_matches_vm 已断言 VM 与 O0/O2 的退出码与 stdout 一致。
+    }
+
+    #[test]
+    fn test_native_float_nan_and_infinity_match_vm() {
+        // Arrange：NaN 与 ±Inf 的六种比较。VM 用 Rust f64 比较，NaN 与自身「不等于」
+        // 且四种序比较全假——AOT 的谓词必须逐项对齐（Ne 用无序 UNE）。
+        let source = concat!(
+            "use std.assert\n",
+            "eq: (a: Float, b: Float) -> Bool = (a, b) => a == b\n",
+            "ne: (a: Float, b: Float) -> Bool = (a, b) => a != b\n",
+            "lt: (a: Float, b: Float) -> Bool = (a, b) => a < b\n",
+            "le: (a: Float, b: Float) -> Bool = (a, b) => a <= b\n",
+            "gt: (a: Float, b: Float) -> Bool = (a, b) => a > b\n",
+            "ge: (a: Float, b: Float) -> Bool = (a, b) => a >= b\n",
+            "nan: () -> Float = () => 0.0 / 0.0\n",
+            "inf: () -> Float = () => 1.0 / 0.0\n",
+            "main: () -> Void = {\n",
+            "    n = nan()\n",
+            "    i = inf()\n",
+            "    assert.assert(ne(n, n), \"NaN != NaN\")\n",
+            "    assert.assert(!eq(n, n), \"not (NaN == NaN)\")\n",
+            "    assert.assert(!lt(n, 1.0) and !le(n, 1.0) and !gt(n, 1.0) and !ge(n, 1.0), \"NaN ordered comparisons are false\")\n",
+            "    assert.assert(eq(i, i) and ge(i, i) and le(i, i), \"inf == inf\")\n",
+            "    assert.assert(gt(i, 1000000.0) and lt(-i, 0.0), \"infinity ordering\")\n",
+            "    assert.assert(eq(1.0, 1.0) and le(1.0, 1.0) and ge(1.0, 1.0) and !lt(1.0, 1.0), \"finite comparisons\")\n",
+            "}\n",
+            "main()\n",
+        );
+
+        // Act
+        assert_native_matches_vm(source, "float_nan_inf");
+
+        // Assert
+        // assert_native_matches_vm 已断言 VM 与 O0/O2 的退出码与 stdout 一致。
+    }
+
+    #[test]
+    fn test_native_float_mixed_int_operands_are_rejected() {
+        // Arrange：Int×Float 混合算术——VM 在 typecheck 层把 Int 提升成 f64，但 IR 不落
+        // 显式 widening 指令，AOT 侧无法判出提升点，因此带位置拒绝而不是猜一种语义。
+        let dir = TempDir::new().expect("mixed float tempdir");
+        let source = dir.path().join("mixed_float.yx");
+        let executable = dir.path().join("mixed_float");
+        std::fs::write(
+            &source,
+            concat!(
+                "use std.assert\n",
+                "main: () -> Void = {\n",
+                "    a = 1\n",
+                "    b = 2.5\n",
+                "    assert.assert(a + b == 3.5, \"mixed arithmetic\")\n",
+                "}\n",
+                "main()\n",
+            ),
+        )
+        .expect("write mixed float fixture");
+
+        // Act
+        let error = build_native_with_options(&source, &executable, false, false)
+            .expect_err("mixed Int/Float arithmetic must be rejected at AOT build time");
+
+        // Assert
+        let detail = format!("{error:#}");
+        assert!(
+            detail.contains("mixed Int/Float"),
+            "rejection must name the mixed operand boundary: {detail}"
+        );
+        assert!(
+            detail.contains(&format!("{}:5:", source.display())),
+            "rejection must carry the arithmetic position: {detail}"
+        );
+        assert!(
+            !executable.exists(),
+            "rejected build must not write a native artifact"
+        );
+        let vm = Command::new(test_yx_bin())
+            .arg("run")
+            .arg(&source)
+            .output()
+            .expect("run VM mixed float fixture");
+        assert_eq!(
+            vm.status.code(),
+            Some(0),
+            "VM widens Int/Float, so the fixture must run there: {}",
+            String::from_utf8_lossy(&vm.stderr)
         );
     }
 

@@ -54,6 +54,9 @@ pub(super) fn link_executable(
         Command::new(linker)
             .arg(object)
             .arg(&runtime_o)
+            // 运行时用到的数学函数（批次 4.5 的 `fmod`）在 libm 里：显式链接，
+            // 不依赖目标环境的默认库组合。
+            .arg("-lm")
             .arg("-o")
             .arg(&temporary_path),
         linker,
