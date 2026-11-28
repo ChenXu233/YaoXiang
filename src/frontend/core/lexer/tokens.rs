@@ -179,8 +179,10 @@ pub enum FStringTokenSegment {
     /// base 是 expr 起始字符（trim 后）在**源文件**中的绝对位置——插值子词法
     /// 以它为词法起点，子 token 的 Span 直接落回源文件（#574 / WBS 8.2.3：
     /// 修前子词法从插值文本 0/1/1 起扫，插值内诊断 line=1、col 相对插值文本）。
-    /// 锚点在扫描期由 f-string 扫描器记录（转义解码只发生在文本段，raw 相对
-    /// 偏移与源偏移会错位，不能事后从 raw 反推）。
+    /// 锚点在扫描期由 f-string 扫描器记录（raw 相对偏移与源偏移会错位——文本
+    /// 段转义在词法期解码，三引号形态甚至对插值内的 `\` 也解码而无花括号深度
+    /// 闸——不能事后从 raw 反推；三引号 + 插值内转义的病态子集上 base 组合
+    /// 不精确，见 `literals.rs` scan_triple_quoted 文注）。
     Interpolation {
         expr: String,
         format_spec: Option<String>,

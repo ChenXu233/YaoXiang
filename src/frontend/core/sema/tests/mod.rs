@@ -21,6 +21,7 @@ mod checker;
 mod const_param;
 mod environment;
 mod fn_annotation_binding;
+mod fstring_diagnostic_span;
 mod gamma_assume_effect;
 mod gamma_binding_facts;
 mod gamma_equality_bridge;

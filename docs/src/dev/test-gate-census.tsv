@@ -900,6 +900,7 @@ test_const_generic_param_takes_no_impl_head_slot	src/frontend/core/sema/tests/fn
 test_fn_annotation_conflict_sandbox_does_not_leak_into_solver	src/frontend/core/sema/tests/fn_annotation_binding.rs	assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_fn_annotation_conflict_sandbox_still_reports_real_error	src/frontend/core/sema/tests/fn_annotation_binding.rs	assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_fn_annotation_param_conflict_keeps_declared_type_for_callers	src/frontend/core/sema/tests/fn_annotation_binding.rs	assertx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_multiline_fstring_interpolation_diagnostic_keeps_code_sequence_and_absolute_line	src/frontend/core/sema/tests/fstring_diagnostic_span.rs	assertx2 expectx2 helperx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_assert_call_injects_predicate_into_gamma	src/frontend/core/sema/tests/gamma_assume_effect.rs	assert_eqx2 assertx3 is_okx1 unwrapx1 helperx3	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_assert_call_without_gamma_does_not_inject	src/frontend/core/sema/tests/gamma_assume_effect.rs	assertx1 is_okx1 helperx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_equalities_resolved_accepts_fact_under_same_binding	src/frontend/core/sema/tests/gamma_binding_facts.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核

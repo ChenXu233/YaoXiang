@@ -56,7 +56,7 @@ impl<'a> Lexer<'a> {
     /// Span 以 base 为原点直接落回源文件绝对位置（#574 / WBS 8.2.3）。嵌套
     /// f-string 天然可组合——内层插值的锚点取自外层子词法已含 base 的
     /// `position()`。整文件词法走 [`Self::new`]（base = 文件起点）。
-    pub fn with_base(
+    pub(crate) fn with_base(
         source: &'a str,
         base: Position,
     ) -> Self {

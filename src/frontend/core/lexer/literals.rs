@@ -691,6 +691,10 @@ impl TripleQuoted {
 /// （[`FStringAnchor`]，#574）：`advance` 已消费 `{`，`lexer.position()` 恰是
 /// 紧随其后的源文件绝对位置。多行 f-string 的插值内容同样原样收集（花括号
 /// 序列保留、无括号深度跟踪），切段端按「`{` 且下一字符不是 `{`」查锚点。
+/// **已知边界**：本扫描器对任意 `\` 解码（`decode_escape` 无花括号深度闸），
+/// 插值内含转义序列时解码使 expr 缓冲与源文本错位，锚点后的 base 推进在该
+/// 子集上不精确——单行形态（`scan_fstring`）无此问题（转义只在文本段解码）；
+/// 登记形态（8.2.3 四类）均不含此情形。
 fn scan_triple_quoted(
     lexer: &mut super::tokenizer::Lexer<'_>,
     kind: TripleQuoted,
@@ -925,9 +929,13 @@ type FStringAnchor = (usize, Position);
 
 /// 从「紧随插值开括号」的绝对位置走到 trim 后表达式首字符。
 ///
-/// 插值内容与源文本逐字对应（转义只在文本段解码，见 scan_fstring /
-/// scan_triple_quoted 的插值收集路径），故 expr 缓冲的前导空白可按字符
-/// 逐一推进位置：换行使 line 前进、column 归一，其余空白 column 前进。
+/// 前导空白推进的前提是 expr 缓冲的前缀与源文本逐字对应：**单行** f-string
+/// 的转义只在文本段解码（插值收集路径原样拷贝，见 `scan_fstring`），该前提
+/// 成立；**三引号** f-string 的扫描器对任意 `\` 解码、无花括号深度闸（见
+/// [`scan_triple_quoted`] 文注），插值内含转义序列时 expr 缓冲与源文本错位，
+/// 本函数的推进在该病态子集上不精确——登记形态（8.2.3 四类）均不含此情形。
+/// 前导空白本身逐字符推进：换行使 line 前进、column 归一，其余空白 column
+/// 前进。
 fn position_after_leading_whitespace(
     start: Position,
     leading: &str,
