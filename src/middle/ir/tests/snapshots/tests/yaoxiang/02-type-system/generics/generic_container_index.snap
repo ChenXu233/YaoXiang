@@ -58,30 +58,39 @@ module
     Load v2 <- %0
     Load v3 <- int(0)
     Call %1 <- string("Box.index") [v2, v3] (def=d1)
+    Drop v2
     Load v6 <- %1
     Load v7 <- int(42)
     Eq v5 <- v6, v7
     Load v8 <- string("generic container index, T = Int")
     Call v4 <- string("std.assert.assert") [v5, v8] (def=d2)
+    Drop v8
     Load v9 <- string("hi")
     Load v10 <- int(1)
     Call %2 <- string("Box") [v9, v10] (def=d0)
+    Drop v9
     Load v11 <- %2
     Load v12 <- int(0)
     Call %3 <- string("Box.index") [v11, v12] (def=d1)
+    Drop v11
     Load v15 <- %3
     Load v16 <- string("hi")
     Eq v14 <- v15, v16
+    Drop v15
+    Drop v16
     Load v17 <- string("same template binds T = String")
     Call v13 <- string("std.assert.assert") [v14, v17] (def=d2)
+    Drop v17
     Load v18 <- %0
     Call %4 <- string("Box.get") [v18] (def=d3)
+    Drop v18
     Drop %0
     Load v21 <- %4
     Load v22 <- int(42)
     Eq v20 <- v21, v22
     Load v23 <- string("generic curried method call")
     Call v19 <- string("std.assert.assert") [v20, v23] (def=d2)
+    Drop v23
     Drop %0
     Drop %4
     Drop %2

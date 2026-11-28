@@ -26,6 +26,7 @@ module
     Load v1 <- %0
     Load v2 <- %1
     StoreField v1.1 <- v2 (type=None, name=Some("label"))
+    Drop v2
     Ret
   fn Counter.value(Ref { mutable: false, inner: TypeRef("Counter") }) -> Int(64)
     locals_total=3
@@ -66,31 +67,40 @@ module
     Load v0 <- int(10)
     Load v1 <- string("a")
     Call %0 <- string("Counter") [v0, v1] (def=d0)
+    Drop v1
     Load v3 <- %0
     Load v4 <- int(5)
     Call v2 <- string("Counter.bump") [v3, v4] (def=d1)
+    Drop v3
     Drop %0
     Load v9 <- %0
     Call v7 <- string("Counter.value") [v9] (def=d2)
+    Drop v9
     Load v8 <- int(15)
     Eq v6 <- v7, v8
     Load v10 <- string("bump(5) should make value 15")
     Call v5 <- string("std.assert.assert") [v6, v10] (def=d3)
+    Drop v10
     Drop %0
     Load v12 <- %0
     Load v13 <- int(1)
     Call v11 <- string("Counter.bump") [v12, v13] (def=d1)
+    Drop v12
     Drop %0
     Load v15 <- %0
     Load v16 <- string("b")
     Call v14 <- string("Counter.rename") [v15, v16] (def=d4)
+    Drop v15
+    Drop v16
     Drop %0
     Load v21 <- %0
     Call v19 <- string("Counter.value") [v21] (def=d2)
+    Drop v21
     Load v20 <- int(16)
     Eq v18 <- v19, v20
     Load v22 <- string("second bump(1) should make value 16")
     Call v17 <- string("std.assert.assert") [v18, v22] (def=d3)
+    Drop v22
     Drop %0
     Ret v17
   init (locals=2)

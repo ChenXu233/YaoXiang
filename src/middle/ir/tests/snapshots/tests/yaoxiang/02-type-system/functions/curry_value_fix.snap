@@ -48,10 +48,12 @@ module
     Load v5 <- int(3)
     Load v6 <- %0
     CallDyn v3 <- v6 [v5]
+    Drop v6
     Load v4 <- int(8)
     Eq v2 <- v3, v4
     Load v7 <- string("make_adder(5)(3) == 8")
     Call v1 <- string("std.assert.assert") [v2, v7] (def=d3)
+    Drop v7
     AllocArray v8 size=int(4), elem=int(1)
     Load v9 <- int(1)
     Load v10 <- int(0)
@@ -68,12 +70,16 @@ module
     Load v18 <- int(5)
     Call v17 <- string("gt") [v18] (def=d4)
     Call %1 <- string("std.list.filter") [v8, v17] (def=d5)
+    Drop v8
+    Drop v17
     Load v23 <- %1
     Call v21 <- string("std.list.len") [v23] (def=d6)
+    Drop v23
     Load v22 <- int(2)
     Eq v20 <- v21, v22
     Load v24 <- string("gt(5) 谓词 filter 保留 6,8")
     Call v19 <- string("std.assert.assert") [v20, v24] (def=d3)
+    Drop v24
     Drop %0
     Drop %1
     Ret v19

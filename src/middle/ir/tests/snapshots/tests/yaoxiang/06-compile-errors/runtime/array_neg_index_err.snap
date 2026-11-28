@@ -28,6 +28,7 @@ module
     Load v9 <- int(1)
     Neg v8 <- v9
     LoadIndex %1 <- v7[v8]
+    Drop v7
     Drop %0
     Drop %1
     Ret

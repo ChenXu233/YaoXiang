@@ -60,22 +60,27 @@ module
     Load v6 <- %0
     Load v7 <- %1
     Call %3 <- string("sum_nodes") [v6, v7] (def=d1)
+    Drop v6
+    Drop v7
     Drop %0
     Drop %1
     Load v8 <- %3
     Load v10 <- %2
     LoadField v9 <- v10.0
+    Drop v10
     Add %3 <- v8, v9
     Load v13 <- %3
     Load v14 <- int(60)
     Eq v12 <- v13, v14
     Load v15 <- string("total should be 60")
     Call v11 <- string("std.assert.assert") [v12, v15] (def=d2)
+    Drop v15
     Load v17 <- %3
     Call v16 <- string("std.io.println") [v17] (def=d3)
     Load v19 <- bool(true)
     Load v20 <- string("all passed")
     Call v18 <- string("std.assert.assert") [v19, v20] (def=d2)
+    Drop v20
     Drop %0
     Drop %1
     Drop %2

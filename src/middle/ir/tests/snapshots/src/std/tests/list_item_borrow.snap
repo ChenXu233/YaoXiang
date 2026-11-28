@@ -47,52 +47,72 @@ module
     Load v0 <- string("a")
     Load v1 <- int(0)
     StoreIndex %0[v1] <- v0
+    Drop v0
     Load v2 <- string("b")
     Load v3 <- int(1)
     StoreIndex %0[v3] <- v2
+    Drop v2
     Load v4 <- string("c")
     Load v5 <- int(2)
     StoreIndex %0[v5] <- v4
+    Drop v4
     Load %1 <- string("b")
     Load v8 <- %0
     Load v9 <- %1
     Call v7 <- string("std.list.contains") [v8, v9] (def=d0)
+    Drop v8
+    Drop v9
     Load v10 <- string("contains str item")
     Call v6 <- string("std.assert.assert") [v7, v10] (def=d1)
+    Drop v10
     Drop %1
     Drop %0
     Load v13 <- %1
     Load v14 <- string("b")
     Eq v12 <- v13, v14
+    Drop v13
+    Drop v14
     Load v15 <- string("str item survives contains")
     Call v11 <- string("std.assert.assert") [v12, v15] (def=d1)
+    Drop v15
     Load v20 <- %0
     Load v21 <- %1
     Call v18 <- string("std.list.find_index") [v20, v21] (def=d2)
+    Drop v20
+    Drop v21
     Load v19 <- int(1)
     Eq v17 <- v18, v19
     Load v22 <- string("find_index str item")
     Call v16 <- string("std.assert.assert") [v17, v22] (def=d1)
+    Drop v22
     Drop %1
     Drop %0
     Load v25 <- %1
     Load v26 <- string("b")
     Eq v24 <- v25, v26
+    Drop v25
+    Drop v26
     Load v27 <- string("str item survives find_index")
     Call v23 <- string("std.assert.assert") [v24, v27] (def=d1)
+    Drop v27
     Load v30 <- %0
     Load v31 <- %1
     Call v29 <- string("std.list.contains") [v30, v31] (def=d0)
+    Drop v30
+    Drop v31
     Load v32 <- string("xs reusable across calls")
     Call v28 <- string("std.assert.assert") [v29, v32] (def=d1)
+    Drop v32
     Drop %1
     Drop %0
     Load v37 <- %0
     Call v35 <- string("std.list.len") [v37] (def=d3)
+    Drop v37
     Load v36 <- int(3)
     Eq v34 <- v35, v36
     Load v38 <- string("xs len intact")
     Call v33 <- string("std.assert.assert") [v34, v38] (def=d1)
+    Drop v38
     Drop %1
     Drop %0
     Ret v33

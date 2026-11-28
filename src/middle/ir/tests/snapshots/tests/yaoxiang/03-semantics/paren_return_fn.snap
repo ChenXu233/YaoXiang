@@ -27,6 +27,7 @@ module
     Load %0 <- arg%0
     Load v1 <- %0
     CallDyn v0 <- v1 []
+    Drop v1
     Ret v0
   fn main() -> Void
     slot[0] h : Int(64) @depth1
@@ -71,40 +72,51 @@ module
     Load v4 <- int(5)
     Call v5 <- string("mk") [] (def=d3)
     CallDyn v2 <- v5 [v4]
+    Drop v5
     Load v3 <- int(6)
     Eq v1 <- v2, v3
     Load v6 <- string("mk()(5) should be 6")
     Call v0 <- string("std.assert.assert") [v1, v6] (def=d4)
+    Drop v6
     Call v11 <- string("mk_block") [] (def=d5)
     CallDyn v9 <- v11 []
+    Drop v11
     Load v10 <- int(7)
     Eq v8 <- v9, v10
     Load v12 <- string("mk_block()() should be 7")
     Call v7 <- string("std.assert.assert") [v8, v12] (def=d4)
+    Drop v12
     Load v17 <- int(2)
     Load v19 <- int(1)
     Call v18 <- string("curried") [v19] (def=d6)
     CallDyn v15 <- v18 [v17]
+    Drop v18
     Load v16 <- int(3)
     Eq v14 <- v15, v16
     Load v20 <- string("curried(1)(2) should be 3")
     Call v13 <- string("std.assert.assert") [v14, v20] (def=d4)
+    Drop v20
     MakeClosure v25 <- closure_2 env=[] (def=d7)
     Call v23 <- string("apply") [v25] (def=d8)
+    Drop v25
     Load v24 <- int(42)
     Eq v22 <- v23, v24
     Load v26 <- string("apply should call the thunk")
     Call v21 <- string("std.assert.assert") [v22, v26] (def=d4)
+    Drop v26
     Call %0 <- string("mk") [] (def=d3)
     Load v31 <- int(1)
     Load v32 <- %0
     CallDyn v29 <- v32 [v31]
+    Drop v32
     Load v30 <- int(2)
     Eq v28 <- v29, v30
     Load v33 <- string("stored returned fn should work")
     Call v27 <- string("std.assert.assert") [v28, v33] (def=d4)
+    Drop v33
     Load v35 <- string("paren return fn ok")
     Call v34 <- string("std.io.println") [v35] (def=d9)
+    Drop v35
     Drop %0
     Ret v34
   fn closure_0(Int(64)) -> Int(64)

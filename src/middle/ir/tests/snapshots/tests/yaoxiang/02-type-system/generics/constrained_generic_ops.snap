@@ -50,6 +50,8 @@ module
     Load v1 <- %0
     Load v2 <- %1
     Call v0 <- string("T.add") [v1, v2] (def=_)
+    Drop v1
+    Drop v2
     Ret v0
   fn main() -> Void
     slot[0] i : Int(64) @depth1
@@ -87,6 +89,7 @@ module
     Eq v3 <- v4, v5
     Load v6 <- string("constrained generic over Int")
     Call v2 <- string("std.assert.assert") [v3, v6] (def=d2)
+    Drop v6
     Load v7 <- float(4607182418800017408)
     Load v8 <- float(4611686018427387904)
     Load v9 <- float(4613937818241073152)
@@ -98,12 +101,16 @@ module
     Load v13 <- %1
     Load v14 <- %2
     Call %3 <- string("sum") [v13, v14] (def=d1)
+    Drop v13
+    Drop v14
     Load v19 <- %3
     LoadField v17 <- v19.0
+    Drop v19
     Load v18 <- float(4617315517961601024)
     Eq v16 <- v17, v18
     Load v20 <- string("constrained generic over Vec3")
     Call v15 <- string("std.assert.assert") [v16, v20] (def=d2)
+    Drop v20
     Drop %1
     Drop %2
     Drop %0

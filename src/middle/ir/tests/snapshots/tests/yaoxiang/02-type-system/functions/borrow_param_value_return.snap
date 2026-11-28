@@ -57,13 +57,18 @@ module
     Eq v2 <- v3, v4
     Load v5 <- string("pick(7) should be 7")
     Call v1 <- string("std.assert.assert") [v2, v5] (def=d1)
+    Drop v5
     Load v6 <- string("hi")
     Call %1 <- string("pick_tail") [v6] (def=d2)
+    Drop v6
     Load v9 <- %1
     Load v10 <- string("hi")
     Eq v8 <- v9, v10
+    Drop v9
+    Drop v10
     Load v11 <- string("pick_tail should return the borrowed value")
     Call v7 <- string("std.assert.assert") [v8, v11] (def=d1)
+    Drop v11
     Load v12 <- int(3)
     Call %2 <- string("pick_ret") [v12] (def=d3)
     Load v15 <- %2
@@ -71,6 +76,7 @@ module
     Eq v14 <- v15, v16
     Load v17 <- string("pick_ret(3) should be 3")
     Call v13 <- string("std.assert.assert") [v14, v17] (def=d1)
+    Drop v17
     Drop %0
     Drop %1
     Drop %2

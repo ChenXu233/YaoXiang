@@ -10,6 +10,8 @@ module
     Call v2 <- string("std.dict.new") [] (def=d0)
     Load v3 <- int(5)
     Call v0 <- string("std.net.http_get") [v1, v2, v3] (def=d1)
+    Drop v1
+    Drop v2
     Ret v0
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

@@ -12,9 +12,12 @@ module
     Load v0 <- string("a")
     Load v1 <- int(1)
     NewDict %0 <- keys=[v0] values=[v1]
+    Drop v0
     Load v3 <- %0
     Load v4 <- string("nope")
     LoadIndex %1 <- v3[v4]
+    Drop v3
+    Drop v4
     Drop %0
     Drop %1
     Ret

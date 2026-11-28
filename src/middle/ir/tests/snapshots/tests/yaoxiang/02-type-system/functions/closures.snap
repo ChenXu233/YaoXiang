@@ -94,10 +94,13 @@ module
     Load v10 <- %0
     MakeClosure v11 <- closure_0 env=[] (def=d0)
     Call %1 <- string("std.list.map") [v10, v11] (def=d1)
+    Drop v10
+    Drop v11
     Drop %0
     Load v13 <- bool(true)
     Load v14 <- string("list.map works")
     Call v12 <- string("std.assert.assert") [v13, v14] (def=d2)
+    Drop v14
     AllocArray %2 size=int(5), elem=int(1)
     Load v15 <- int(1)
     Load v16 <- int(0)
@@ -117,10 +120,13 @@ module
     Load v25 <- %2
     MakeClosure v26 <- closure_1 env=[] (def=d3)
     Call %3 <- string("std.list.filter") [v25, v26] (def=d4)
+    Drop v25
+    Drop v26
     Drop %2
     Load v28 <- bool(true)
     Load v29 <- string("list.filter works")
     Call v27 <- string("std.assert.assert") [v28, v29] (def=d2)
+    Drop v29
     AllocArray %4 size=int(5), elem=int(1)
     Load v30 <- int(1)
     Load v31 <- int(0)
@@ -141,12 +147,15 @@ module
     MakeClosure v41 <- closure_2 env=[] (def=d5)
     Load v42 <- int(0)
     Call %5 <- string("std.list.reduce") [v40, v41, v42] (def=d6)
+    Drop v40
+    Drop v41
     Drop %4
     Load v45 <- %5
     Load v46 <- int(15)
     Eq v44 <- v45, v46
     Load v47 <- string("list.reduce sum of 1..5 should be 15")
     Call v43 <- string("std.assert.assert") [v44, v47] (def=d2)
+    Drop v47
     AllocArray %6 size=int(5), elem=int(1)
     Load v48 <- int(1)
     Load v49 <- int(0)
@@ -166,12 +175,17 @@ module
     Load v59 <- %6
     MakeClosure v60 <- closure_3 env=[] (def=d7)
     Call v58 <- string("std.list.filter") [v59, v60] (def=d4)
+    Drop v59
+    Drop v60
+    Drop v58
     MakeClosure v61 <- closure_4 env=[] (def=d8)
     Call %7 <- string("std.list.map") [v58, v61] (def=d1)
+    Drop v61
     Drop %6
     Load v63 <- bool(true)
     Load v64 <- string("chained list.map and list.filter works")
     Call v62 <- string("std.assert.assert") [v63, v64] (def=d2)
+    Drop v64
     Drop %1
     Drop %3
     Drop %0

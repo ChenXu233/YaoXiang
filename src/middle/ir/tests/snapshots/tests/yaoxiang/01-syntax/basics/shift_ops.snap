@@ -58,6 +58,7 @@ module
     Eq v1 <- v2, v3
     Load v6 <- string("左移字面量")
     Call v0 <- string("std.assert.assert") [v1, v6] (def=d0)
+    Drop v6
     Load v11 <- %0
     Load v12 <- int(2)
     Shr v9 <- v11, v12
@@ -65,6 +66,7 @@ module
     Eq v8 <- v9, v10
     Load v13 <- string("右移字面量")
     Call v7 <- string("std.assert.assert") [v8, v13] (def=d0)
+    Drop v13
     Load %1 <- int(3)
     Load v18 <- %0
     Load v19 <- %1
@@ -73,6 +75,7 @@ module
     Eq v15 <- v16, v17
     Load v20 <- string("左移变量")
     Call v14 <- string("std.assert.assert") [v15, v20] (def=d0)
+    Drop v20
     Load v25 <- %0
     Load v26 <- %1
     Shr v23 <- v25, v26
@@ -80,6 +83,7 @@ module
     Eq v22 <- v23, v24
     Load v27 <- string("右移变量")
     Call v21 <- string("std.assert.assert") [v22, v27] (def=d0)
+    Drop v27
     Load v34 <- %0
     Load v35 <- int(2)
     Shr v32 <- v34, v35
@@ -89,6 +93,7 @@ module
     Eq v29 <- v30, v31
     Load v36 <- string("链式移位左结合")
     Call v28 <- string("std.assert.assert") [v29, v36] (def=d0)
+    Drop v36
     Load v41 <- %0
     Load v42 <- int(2)
     Shr v39 <- v41, v42
@@ -96,8 +101,10 @@ module
     Eq v38 <- v39, v40
     Load v43 <- string("移位与比较")
     Call v37 <- string("std.assert.assert") [v38, v43] (def=d0)
+    Drop v43
     Load v45 <- string("SHIFT_OPS_OK")
     Call v44 <- string("std.io.println") [v45] (def=d1)
+    Drop v45
     Drop %0
     Drop %1
     Ret v44

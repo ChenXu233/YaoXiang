@@ -13,9 +13,11 @@ module
     Load v1 <- string("one")
     Load v2 <- bool(true)
     NewTuple %0 <- [v0, v1, v2]
+    Drop v1
     Load v4 <- bool(true)
     Load v5 <- string("tuple created successfully")
     Call v3 <- string("std.assert.assert") [v4, v5] (def=d0)
+    Drop v5
     Drop %0
     Ret v3
   init (locals=0)

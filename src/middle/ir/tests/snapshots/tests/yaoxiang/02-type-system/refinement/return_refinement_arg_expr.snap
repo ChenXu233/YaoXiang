@@ -43,12 +43,14 @@ module
     Eq v1 <- v2, v3
     Load v5 <- string("shifted() == -5")
     Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
+    Drop v5
     Load v10 <- int(3)
     Call v8 <- string("grown") [v10] (def=d2)
     Load v9 <- int(4)
     Eq v7 <- v8, v9
     Load v11 <- string("grown(3) == 4")
     Call v6 <- string("std.assert.assert") [v7, v11] (def=d1)
+    Drop v11
     Ret v6
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

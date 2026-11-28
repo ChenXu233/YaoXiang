@@ -46,18 +46,22 @@ module
     Load v5 <- string("x")
     Load v6 <- bool(true)
     Call v2 <- string("add3") [v4, v5, v6] (def=d0)
+    Drop v5
     Load v3 <- int(7)
     Eq v1 <- v2, v3
     Load v7 <- string("部分交集：第 0 位取声明第 0 位（Int）")
     Call v0 <- string("std.assert.assert") [v1, v7] (def=d1)
+    Drop v7
     Load v12 <- int(9)
     Load v13 <- string("y")
     Load v14 <- bool(false)
     Call v10 <- string("pick2") [v12, v13, v14] (def=d2)
+    Drop v13
     Load v11 <- int(9)
     Eq v9 <- v10, v11
     Load v15 <- string("改名的同一位置形状必须同码")
     Call v8 <- string("std.assert.assert") [v9, v15] (def=d1)
+    Drop v15
     Ret v8
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

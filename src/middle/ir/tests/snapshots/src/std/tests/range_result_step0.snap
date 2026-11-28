@@ -136,60 +136,77 @@ module
     Call %0 <- string("first_of") [v0] (def=d3)
     Load v3 <- %0
     Call v2 <- string("std.result.is_ok") [v3] (def=d4)
+    Drop v3
     Load v4 <- string("step=2 → Ok")
     Call v1 <- string("std.assert.assert") [v2, v4] (def=d5)
+    Drop v4
     Drop %0
     Load v9 <- %0
     Call v7 <- string("std.result.unwrap") [v9] (def=d6)
+    Drop v9
     Load v8 <- int(1)
     Eq v6 <- v7, v8
     Load v10 <- string("step=2 首元素 1")
     Call v5 <- string("std.assert.assert") [v6, v10] (def=d5)
+    Drop v10
     Drop %0
     Load v11 <- int(0)
     Call %1 <- string("first_of") [v11] (def=d3)
     Load v14 <- %1
     Call v13 <- string("std.result.is_err") [v14] (def=d7)
+    Drop v14
     Load v15 <- string("step=0 → Err 传播")
     Call v12 <- string("std.assert.assert") [v13, v15] (def=d5)
+    Drop v15
     Drop %1
     Load v16 <- int(3)
     Call %2 <- string("first_of") [v16] (def=d3)
     Load v21 <- %2
     Call v19 <- string("std.result.unwrap") [v21] (def=d6)
+    Drop v21
     Load v20 <- int(1)
     Eq v18 <- v19, v20
     Load v22 <- string("step=3 首元素 1")
     Call v17 <- string("std.assert.assert") [v18, v22] (def=d5)
+    Drop v22
     Drop %2
     Load v23 <- int(2)
     Load v24 <- int(4)
     Call %3 <- string("contains_low") [v23, v24] (def=d8)
     Load v27 <- %3
     Call v26 <- string("std.result.unwrap") [v27] (def=d6)
+    Drop v27
     Load v28 <- string("step=2 对齐元素 in")
     Call v25 <- string("std.assert.assert") [v26, v28] (def=d5)
+    Drop v28
     Drop %3
     Load v29 <- int(0)
     Load v30 <- int(4)
     Call %4 <- string("contains_low") [v29, v30] (def=d8)
     Load v33 <- %4
     Call v32 <- string("std.result.is_err") [v33] (def=d7)
+    Drop v33
     Load v34 <- string("contains step=0 → Err")
     Call v31 <- string("std.assert.assert") [v32, v34] (def=d5)
+    Drop v34
     Drop %4
     Load v37 <- int(1)
     Load v38 <- int(3)
     Load v39 <- int(1)
     NewRange v36 <- v37, v38, v39
     Call v35 <- string("std.range.iter") [v36] (def=d0)
+    Drop v36
+    Drop v35
     Call %5 <- string("std.result.unwrap") [v35] (def=d6)
     Load v44 <- %5
     Call v42 <- string("std.range.next") [v44] (def=d1)
+    Drop v44
     Load v43 <- int(1)
+    Drop v42
     Eq v41 <- v42, v43
     Load v45 <- string("unwrap 后迭代器可用")
     Call v40 <- string("std.assert.assert") [v41, v45] (def=d5)
+    Drop v45
     Drop %0
     Drop %1
     Drop %2

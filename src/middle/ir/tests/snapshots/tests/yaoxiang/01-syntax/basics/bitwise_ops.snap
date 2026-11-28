@@ -52,6 +52,7 @@ module
     Eq v1 <- v2, v3
     Load v6 <- string("位与")
     Call v0 <- string("std.assert.assert") [v1, v6] (def=d0)
+    Drop v6
     Load v11 <- %0
     Load v12 <- int(2)
     Or v9 <- v11, v12
@@ -59,6 +60,7 @@ module
     Eq v8 <- v9, v10
     Load v13 <- string("位或")
     Call v7 <- string("std.assert.assert") [v8, v13] (def=d0)
+    Drop v13
     Load v18 <- %0
     Load v19 <- int(2)
     Xor v16 <- v18, v19
@@ -66,6 +68,7 @@ module
     Eq v15 <- v16, v17
     Load v20 <- string("位异或")
     Call v14 <- string("std.assert.assert") [v15, v20] (def=d0)
+    Drop v20
     Load v25 <- int(1024)
     Load v27 <- int(2)
     Load v28 <- int(4)
@@ -75,6 +78,7 @@ module
     Eq v22 <- v23, v24
     Load v29 <- string("位与低于加减")
     Call v21 <- string("std.assert.assert") [v22, v29] (def=d0)
+    Drop v29
     Load v36 <- int(16)
     Load v37 <- int(1)
     Shr v34 <- v36, v37
@@ -84,8 +88,10 @@ module
     Eq v31 <- v32, v33
     Load v38 <- string("移位高于位与")
     Call v30 <- string("std.assert.assert") [v31, v38] (def=d0)
+    Drop v38
     Load v40 <- string("BITWISE_OPS_OK")
     Call v39 <- string("std.io.println") [v40] (def=d1)
+    Drop v40
     Drop %0
     Ret v39
   init (locals=0)

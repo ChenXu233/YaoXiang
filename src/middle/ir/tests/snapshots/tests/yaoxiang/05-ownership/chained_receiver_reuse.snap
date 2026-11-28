@@ -38,16 +38,20 @@ module
     Call %0 <- string("Point") [v0, v1] (def=d0)
     Load v3 <- %0
     Call v2 <- string("Point.shift") [v3] (def=d1)
+    Drop v3
     Drop %0
     Load v5 <- %0
     Call v4 <- string("Point.shift") [v5] (def=d1)
+    Drop v5
     Drop %0
     Load v10 <- %0
     LoadField v8 <- v10.0
+    Drop v10
     Load v9 <- int(2)
     Eq v7 <- v8, v9
     Load v11 <- string("sequential chained &mut receiver reuse")
     Call v6 <- string("std.assert.assert") [v7, v11] (def=d2)
+    Drop v11
     Drop %0
     Ret v6
   init (locals=1)

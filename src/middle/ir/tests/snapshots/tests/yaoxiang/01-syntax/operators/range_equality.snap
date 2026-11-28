@@ -127,39 +127,58 @@ module
     Load v11 <- %0
     Load v12 <- %1
     Eq v10 <- v11, v12
+    Drop v11
+    Drop v12
     Load v13 <- string("range structural equality")
     Call v9 <- string("std.assert.assert") [v10, v13] (def=d0)
+    Drop v13
     Load v16 <- %0
     Load v17 <- %2
     Ne v15 <- v16, v17
+    Drop v16
+    Drop v17
     Load v18 <- string("range inequality on end")
     Call v14 <- string("std.assert.assert") [v15, v18] (def=d0)
+    Drop v18
     Load v21 <- %0
     Load v23 <- int(1)
     Load v24 <- int(10)
     Load v25 <- int(2)
     NewRange v22 <- v23, v24, v25
     Ne v20 <- v21, v22
+    Drop v21
+    Drop v22
     Load v26 <- string("range inequality on step")
     Call v19 <- string("std.assert.assert") [v20, v26] (def=d0)
+    Drop v26
     Load v31 <- int(1)
     Load v32 <- string("a")
     NewTuple v29 <- [v31, v32]
+    Drop v32
     Load v33 <- int(1)
     Load v34 <- string("a")
     NewTuple v30 <- [v33, v34]
+    Drop v29
+    Drop v30
+    Drop v34
     Eq v28 <- v29, v30
     Load v35 <- string("tuple equality")
     Call v27 <- string("std.assert.assert") [v28, v35] (def=d0)
+    Drop v35
     Load v40 <- int(1)
     Load v41 <- string("a")
     NewTuple v38 <- [v40, v41]
+    Drop v41
     Load v42 <- int(1)
     Load v43 <- string("b")
     NewTuple v39 <- [v42, v43]
+    Drop v38
+    Drop v39
+    Drop v43
     Ne v37 <- v38, v39
     Load v44 <- string("tuple inequality")
     Call v36 <- string("std.assert.assert") [v37, v44] (def=d0)
+    Drop v44
     AllocArray v47 size=int(2), elem=int(1)
     Load v49 <- int(1)
     Load v50 <- int(0)
@@ -175,8 +194,11 @@ module
     Load v56 <- int(1)
     StoreIndex v48[v56] <- v55
     Eq v46 <- v47, v48
+    Drop v47
+    Drop v48
     Load v57 <- string("list equality")
     Call v45 <- string("std.assert.assert") [v46, v57] (def=d0)
+    Drop v57
     AllocArray v60 size=int(2), elem=int(1)
     Load v62 <- int(1)
     Load v63 <- int(0)
@@ -192,8 +214,11 @@ module
     Load v69 <- int(1)
     StoreIndex v61[v69] <- v68
     Ne v59 <- v60, v61
+    Drop v60
+    Drop v61
     Load v70 <- string("list inequality")
     Call v58 <- string("std.assert.assert") [v59, v70] (def=d0)
+    Drop v70
     AllocArray v73 size=int(2), elem=int(1)
     Load v75 <- int(1)
     Load v76 <- int(0)
@@ -212,33 +237,43 @@ module
     Load v84 <- int(2)
     StoreIndex v74[v84] <- v83
     Ne v72 <- v73, v74
+    Drop v73
+    Drop v74
     Load v85 <- string("list length inequality")
     Call v71 <- string("std.assert.assert") [v72, v85] (def=d0)
+    Drop v85
     AllocArray v88 size=int(2), elem=int(1)
     Load v91 <- int(1)
     Load v92 <- int(2)
     NewTuple v90 <- [v91, v92]
     Load v93 <- int(0)
     StoreIndex v88[v93] <- v90
+    Drop v90
     Load v95 <- int(3)
     Load v96 <- int(4)
     NewTuple v94 <- [v95, v96]
     Load v97 <- int(1)
     StoreIndex v88[v97] <- v94
+    Drop v94
     AllocArray v89 size=int(2), elem=int(1)
     Load v99 <- int(1)
     Load v100 <- int(2)
     NewTuple v98 <- [v99, v100]
     Load v101 <- int(0)
     StoreIndex v89[v101] <- v98
+    Drop v98
     Load v103 <- int(3)
     Load v104 <- int(4)
     NewTuple v102 <- [v103, v104]
+    Drop v88
+    Drop v89
     Load v105 <- int(1)
     StoreIndex v89[v105] <- v102
+    Drop v102
     Eq v87 <- v88, v89
     Load v106 <- string("nested structural equality")
     Call v86 <- string("std.assert.assert") [v87, v106] (def=d0)
+    Drop v106
     Drop %0
     Drop %1
     Drop %2

@@ -40,20 +40,26 @@ module
     Call %0 <- string("Temp") [v0] (def=d0)
     Load v1 <- %0
     Call %1 <- string("Temp.to") [v1] (def=d1)
+    Drop v1
     Drop %0
     Load v2 <- %0
     Call %2 <- string("Temp.to#1") [v2] (def=d2)
+    Drop v2
     Drop %0
     Load v5 <- %1
     Load v6 <- float(4607182418800017408)
     Eq v4 <- v5, v6
     Load v7 <- string("float overload")
     Call v3 <- string("std.assert.assert") [v4, v7] (def=d3)
+    Drop v7
     Load v10 <- %2
     Load v11 <- string("hot")
     Eq v9 <- v10, v11
+    Drop v10
+    Drop v11
     Load v12 <- string("string overload")
     Call v8 <- string("std.assert.assert") [v9, v12] (def=d3)
+    Drop v12
     Drop %0
     Drop %1
     Drop %2

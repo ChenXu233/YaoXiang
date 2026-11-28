@@ -136,33 +136,42 @@ module
     Load v7 <- int(1)
     Load v8 <- int(99)
     StoreIndex v6[v7] <- v8
+    Drop v6
     Load v13 <- %0
     Load v14 <- int(0)
     LoadIndex v11 <- v13[v14]
+    Drop v13
     Load v12 <- int(1)
     Eq v10 <- v11, v12
     Load v15 <- string("Array write leaves other slots intact")
     Call v9 <- string("std.assert.assert") [v10, v15] (def=d0)
+    Drop v15
     Load v20 <- %0
     Load v21 <- int(1)
     LoadIndex v18 <- v20[v21]
+    Drop v20
     Load v19 <- int(99)
     Eq v17 <- v18, v19
     Load v22 <- string("Array index write")
     Call v16 <- string("std.assert.assert") [v17, v22] (def=d0)
+    Drop v22
     Load v27 <- %0
     Load v28 <- int(2)
     LoadIndex v25 <- v27[v28]
+    Drop v27
     Load v26 <- int(3)
     Eq v24 <- v25, v26
     Load v29 <- string("Array write preserves tail")
     Call v23 <- string("std.assert.assert") [v24, v29] (def=d0)
+    Drop v29
     Load v34 <- %0
     StringLength v32 <- v34
+    Drop v34
     Load v33 <- int(3)
     Eq v31 <- v32, v33
     Load v35 <- string("Array length")
     Call v30 <- string("std.assert.assert") [v31, v35] (def=d0)
+    Drop v35
     AllocArray %1 size=int(3), elem=int(1)
     Load v36 <- int(10)
     Load v37 <- int(0)
@@ -175,57 +184,74 @@ module
     StoreIndex %1[v41] <- v40
     Load v46 <- %1
     StringLength v44 <- v46
+    Drop v46
     Load v45 <- int(3)
     Eq v43 <- v44, v45
     Load v47 <- string("Vec length from literal")
     Call v42 <- string("std.assert.assert") [v43, v47] (def=d0)
+    Drop v47
     Load v48 <- %1
     Load v49 <- int(0)
     Load v50 <- int(11)
     StoreIndex v48[v49] <- v50
+    Drop v48
     Load v55 <- %1
     Load v56 <- int(0)
     LoadIndex v53 <- v55[v56]
+    Drop v55
     Load v54 <- int(11)
     Eq v52 <- v53, v54
     Load v57 <- string("Vec index write")
     Call v51 <- string("std.assert.assert") [v52, v57] (def=d0)
+    Drop v57
     Load v58 <- %1
     Load v60 <- %1
     StringLength v59 <- v60
+    Drop v60
     Load v61 <- int(40)
+    Drop v58
     StoreIndex v58[v59] <- v61
     Load v66 <- %1
     StringLength v64 <- v66
+    Drop v66
     Load v65 <- int(4)
     Eq v63 <- v64, v65
     Load v67 <- string("Vec append grows length")
     Call v62 <- string("std.assert.assert") [v63, v67] (def=d0)
+    Drop v67
     Load v72 <- %1
     Load v73 <- int(3)
     LoadIndex v70 <- v72[v73]
+    Drop v72
     Load v71 <- int(40)
     Eq v69 <- v70, v71
     Load v74 <- string("Vec appended value readable")
     Call v68 <- string("std.assert.assert") [v69, v74] (def=d0)
+    Drop v74
     Load v75 <- %1
     Load v77 <- %1
     StringLength v76 <- v77
+    Drop v77
     Load v78 <- int(50)
+    Drop v75
     StoreIndex v75[v76] <- v78
     Load v83 <- %1
     StringLength v81 <- v83
+    Drop v83
     Load v82 <- int(5)
     Eq v80 <- v81, v82
     Load v84 <- string("Vec second append")
     Call v79 <- string("std.assert.assert") [v80, v84] (def=d0)
+    Drop v84
     Load v89 <- %1
     Load v90 <- int(4)
     LoadIndex v87 <- v89[v90]
+    Drop v89
     Load v88 <- int(50)
     Eq v86 <- v87, v88
     Load v91 <- string("Vec second appended value")
     Call v85 <- string("std.assert.assert") [v86, v91] (def=d0)
+    Drop v91
     AllocArray %2 size=int(2), elem=int(1)
     Load v92 <- int(100)
     Load v93 <- int(0)
@@ -237,25 +263,31 @@ module
     Load v97 <- int(1)
     Load v98 <- int(201)
     StoreIndex v96[v97] <- v98
+    Drop v96
     Load v103 <- %2
     Load v104 <- int(1)
     LoadIndex v101 <- v103[v104]
+    Drop v103
     Load v102 <- int(201)
     Eq v100 <- v101, v102
     Load v105 <- string("List index write")
     Call v99 <- string("std.assert.assert") [v100, v105] (def=d0)
+    Drop v105
     Load %3 <- int(2)
     Load v106 <- %2
     Load v107 <- %3
     Load v108 <- int(202)
     StoreIndex v106[v107] <- v108
+    Drop v106
     Load v113 <- %2
     Load v114 <- int(2)
     LoadIndex v111 <- v113[v114]
+    Drop v113
     Load v112 <- int(202)
     Eq v110 <- v111, v112
     Load v115 <- string("List variable index write appends")
     Call v109 <- string("std.assert.assert") [v110, v115] (def=d0)
+    Drop v115
     Drop %0
     Drop %3
     Drop %2

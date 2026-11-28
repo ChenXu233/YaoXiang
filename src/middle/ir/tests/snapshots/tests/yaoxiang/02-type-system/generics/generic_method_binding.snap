@@ -34,6 +34,7 @@ module
     LoadField v2 <- v3.1
     Load v4 <- %1
     StoreIndex v0[v2] <- v4
+    Drop v4
     Load v6 <- %0
     Load v10 <- %0
     LoadField v8 <- v10.1
@@ -171,11 +172,13 @@ module
     Eq v1 <- v2, v3
     Load v4 <- string("generic method reads own field")
     Call v0 <- string("std.assert.assert") [v1, v4] (def=d4)
+    Drop v4
     Call v7 <- string("build_list") [] (def=d7)
     Load v8 <- int(2)
     Eq v6 <- v7, v8
     Load v9 <- string("library-style List built in YaoXiang")
     Call v5 <- string("std.assert.assert") [v6, v9] (def=d4)
+    Drop v9
     Ret v5
   init (locals=2)
     islot[0] self : Int(64) @depth1

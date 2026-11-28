@@ -46,20 +46,29 @@ module
     Call v2 <- string("std.convert.to_string") [v4] (def=d0)
     Load v3 <- string("42")
     Eq v1 <- v2, v3
+    Drop v2
+    Drop v3
     Load v5 <- string("int to_string")
     Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
+    Drop v5
     Load v10 <- bool(true)
     Call v8 <- string("std.convert.to_string") [v10] (def=d0)
     Load v9 <- string("true")
     Eq v7 <- v8, v9
+    Drop v8
+    Drop v9
     Load v11 <- string("bool to_string")
     Call v6 <- string("std.assert.assert") [v7, v11] (def=d1)
+    Drop v11
     Load v16 <- bool(false)
     Call v14 <- string("std.convert.to_string") [v16] (def=d0)
     Load v15 <- string("false")
     Eq v13 <- v14, v15
+    Drop v14
+    Drop v15
     Load v17 <- string("bool false to_string")
     Call v12 <- string("std.assert.assert") [v13, v17] (def=d1)
+    Drop v17
     AllocArray v18 size=int(3), elem=int(1)
     Load v19 <- int(1)
     Load v20 <- int(0)
@@ -71,20 +80,25 @@ module
     Load v24 <- int(2)
     StoreIndex v18[v24] <- v23
     Call %0 <- string("std.convert.to_string") [v18] (def=d0)
+    Drop v18
     Load v29 <- %0
     Call v27 <- string("std.string.len") [v29] (def=d2)
+    Drop v29
     Load v28 <- int(0)
     Gt v26 <- v27, v28
     Load v30 <- string("list to_string non-empty")
     Call v25 <- string("std.assert.assert") [v26, v30] (def=d1)
+    Drop v30
     Drop %0
     Call %1 <- string("std.convert.to_string") [v31] (def=d0)
     Load v36 <- %1
     Call v34 <- string("std.string.len") [v36] (def=d2)
+    Drop v36
     Load v35 <- int(0)
     Gt v33 <- v34, v35
     Load v37 <- string("dict to_string non-empty")
     Call v32 <- string("std.assert.assert") [v33, v37] (def=d1)
+    Drop v37
     Drop %1
     Drop %0
     Ret v32

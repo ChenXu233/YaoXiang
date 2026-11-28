@@ -22,6 +22,7 @@ module
     Eq v1 <- v2, v3
     Load v5 <- string("实现少写形参：缺席位由声明补名，元数按声明")
     Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
+    Drop v5
     Ret v0
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

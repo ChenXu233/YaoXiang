@@ -26,13 +26,17 @@ module
     RcNew %0 <- v0
     Load v1 <- %0
     Call %1 <- string("pass_arc") [v1] (def=d0)
+    Drop v1
     Load v2 <- %1
     Call %2 <- string("std.weak.new") [v2] (def=d1)
+    Drop v2
     Load v3 <- %2
     Call %3 <- string("std.weak.upgrade") [v3] (def=d2)
+    Drop v3
     Load %4 <- %3
     Load v5 <- string("ref shared ok")
     Call v4 <- string("std.io.println") [v5] (def=d3)
+    Drop v5
     Drop %0
     Drop %1
     Drop %4

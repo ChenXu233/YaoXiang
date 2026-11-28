@@ -43,6 +43,7 @@ module
     Eq v1 <- v2, v3
     Load v5 <- string("不可达：无限递归不应返回值")
     Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
+    Drop v5
     Ret v0
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

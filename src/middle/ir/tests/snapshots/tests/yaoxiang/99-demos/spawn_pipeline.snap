@@ -42,31 +42,41 @@ module
     Load v3 <- %1
     Load v4 <- %2
     NewTuple v1 <- [v2, v3, v4]
+    Drop v2
+    Drop v1
+    Drop v4
     Move v0 <- v1
     Load v5 <- int(0)
     LoadIndex %3 <- v0[v5]
     Load v6 <- int(1)
+    Drop v0
     LoadIndex %4 <- v0[v6]
     Load v7 <- int(2)
     LoadIndex %5 <- v0[v7]
     Load v9 <- bool(true)
     Load v10 <- string("name received from spawn")
     Call v8 <- string("std.assert.assert") [v9, v10] (def=d0)
+    Drop v10
     Load v12 <- %3
     Call v11 <- string("std.io.println") [v12] (def=d1)
+    Drop v12
     Load v14 <- bool(true)
     Load v15 <- string("age received from spawn")
     Call v13 <- string("std.assert.assert") [v14, v15] (def=d0)
+    Drop v15
     Load v17 <- %4
     Call v16 <- string("std.io.println") [v17] (def=d1)
     Load v19 <- bool(true)
     Load v20 <- string("city received from spawn")
     Call v18 <- string("std.assert.assert") [v19, v20] (def=d0)
+    Drop v20
     Load v22 <- %5
     Call v21 <- string("std.io.println") [v22] (def=d1)
+    Drop v22
     Load v24 <- bool(true)
     Load v25 <- string("all passed")
     Call v23 <- string("std.assert.assert") [v24, v25] (def=d0)
+    Drop v25
     Ret v23
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

@@ -24,6 +24,7 @@ mod loops;
 mod module_ir;
 mod query;
 mod regalloc;
+mod release;
 mod scope;
 mod stmt;
 mod synth;

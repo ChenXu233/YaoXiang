@@ -50,6 +50,7 @@ module
     Eq v4 <- v5, v6
     Load v7 <- string("h(1, -5) 应返回 1（约束属 a，b 的取值与本约束无关）")
     Call v3 <- string("std.assert.assert") [v4, v7] (def=d1)
+    Drop v7
     Load v8 <- int(1)
     Load v10 <- int(5)
     Neg v9 <- v10
@@ -59,6 +60,7 @@ module
     Eq v12 <- v13, v14
     Load v15 <- string("命名实参同判：a = 1 满足 a > 0")
     Call v11 <- string("std.assert.assert") [v12, v15] (def=d1)
+    Drop v15
     Load v17 <- int(5)
     Neg v16 <- v17
     Load v18 <- int(1)
@@ -68,6 +70,7 @@ module
     Eq v20 <- v21, v22
     Load v23 <- string("乱序命名实参按形参名入槽，判定不受书写序影响")
     Call v19 <- string("std.assert.assert") [v20, v23] (def=d1)
+    Drop v23
     Drop %0
     Drop %1
     Drop %2

@@ -359,365 +359,537 @@ module
     Load %0 <- string("  Hello World  ")
     Load v4 <- %0
     Call v2 <- string("std.string.trim") [v4] (def=d0)
+    Drop v4
     Load v3 <- string("Hello World")
+    Drop v2
+    Drop v3
     Eq v1 <- v2, v3
     Load v5 <- string("trim")
     Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
+    Drop v5
     Drop %0
     Load v10 <- string("abc")
     Call v8 <- string("std.string.upper") [v10] (def=d2)
+    Drop v10
     Load v9 <- string("ABC")
+    Drop v8
+    Drop v9
     Eq v7 <- v8, v9
     Load v11 <- string("upper")
     Call v6 <- string("std.assert.assert") [v7, v11] (def=d1)
+    Drop v11
     Load v16 <- string("ABC")
     Call v14 <- string("std.string.lower") [v16] (def=d3)
+    Drop v16
     Load v15 <- string("abc")
+    Drop v14
+    Drop v15
     Eq v13 <- v14, v15
     Load v17 <- string("lower")
     Call v12 <- string("std.assert.assert") [v13, v17] (def=d1)
+    Drop v17
     Load v22 <- string("a-b-c")
     Load v23 <- string("-")
     Load v24 <- string("+")
     Call v20 <- string("std.string.replace") [v22, v23, v24] (def=d4)
+    Drop v22
+    Drop v23
+    Drop v20
+    Drop v21
+    Drop v24
     Load v21 <- string("a+b+c")
     Eq v19 <- v20, v21
     Load v25 <- string("replace")
     Call v18 <- string("std.assert.assert") [v19, v25] (def=d1)
+    Drop v25
     Load v28 <- string("hello")
     Load v29 <- string("ell")
     Call v27 <- string("std.string.contains") [v28, v29] (def=d5)
+    Drop v28
+    Drop v29
     Load v30 <- string("contains")
     Call v26 <- string("std.assert.assert") [v27, v30] (def=d1)
+    Drop v30
     Load v33 <- string("hello")
     Load v34 <- string("he")
     Call v32 <- string("std.string.starts_with") [v33, v34] (def=d6)
+    Drop v33
+    Drop v34
     Load v35 <- string("starts_with")
     Call v31 <- string("std.assert.assert") [v32, v35] (def=d1)
+    Drop v35
     Load v38 <- string("hello")
     Load v39 <- string("lo")
     Call v37 <- string("std.string.ends_with") [v38, v39] (def=d7)
+    Drop v38
+    Drop v39
     Load v40 <- string("ends_with")
     Call v36 <- string("std.assert.assert") [v37, v40] (def=d1)
+    Drop v40
     Load v45 <- string("hello")
     Load v46 <- string("ll")
     Call v43 <- string("std.string.index_of") [v45, v46] (def=d8)
+    Drop v45
+    Drop v46
     Load v44 <- int(2)
     Eq v42 <- v43, v44
     Load v47 <- string("index_of")
     Call v41 <- string("std.assert.assert") [v42, v47] (def=d1)
+    Drop v47
     Load v52 <- string("hello")
     Load v53 <- int(1)
     Load v54 <- int(4)
     Call v50 <- string("std.string.substring") [v52, v53, v54] (def=d9)
+    Drop v52
     Load v51 <- string("ell")
+    Drop v50
+    Drop v51
     Eq v49 <- v50, v51
     Load v55 <- string("substring")
     Call v48 <- string("std.assert.assert") [v49, v55] (def=d1)
+    Drop v55
     Load v60 <- string("hello")
     Call v58 <- string("std.string.len") [v60] (def=d10)
+    Drop v60
     Load v59 <- int(5)
     Eq v57 <- v58, v59
     Load v61 <- string("len")
     Call v56 <- string("std.assert.assert") [v57, v61] (def=d1)
+    Drop v61
     Load v65 <- string("x")
     Call v64 <- string("std.string.is_empty") [v65] (def=d11)
+    Drop v65
     Not v63 <- v64
     Load v66 <- string("not is_empty")
     Call v62 <- string("std.assert.assert") [v63, v66] (def=d1)
+    Drop v66
     Load v69 <- string("")
     Call v68 <- string("std.string.is_empty") [v69] (def=d11)
+    Drop v69
     Load v70 <- string("is_empty")
     Call v67 <- string("std.assert.assert") [v68, v70] (def=d1)
+    Drop v70
     Load v75 <- string("a")
     Load v76 <- string("b")
     Call v73 <- string("std.string.concat") [v75, v76] (def=d12)
+    Drop v75
+    Drop v76
+    Drop v73
+    Drop v74
     Load v74 <- string("ab")
     Eq v72 <- v73, v74
     Load v77 <- string("concat")
     Call v71 <- string("std.assert.assert") [v72, v77] (def=d1)
+    Drop v77
     Load v82 <- string("ab")
     Load v83 <- int(3)
     Call v80 <- string("std.string.repeat") [v82, v83] (def=d13)
+    Drop v82
     Load v81 <- string("ababab")
+    Drop v80
+    Drop v81
     Eq v79 <- v80, v81
     Load v84 <- string("repeat")
     Call v78 <- string("std.assert.assert") [v79, v84] (def=d1)
+    Drop v84
     Load v89 <- string("abc")
     Call v87 <- string("std.string.reverse") [v89] (def=d14)
+    Drop v89
     Load v88 <- string("cba")
+    Drop v87
+    Drop v88
     Eq v86 <- v87, v88
     Load v90 <- string("reverse")
     Call v85 <- string("std.assert.assert") [v86, v90] (def=d1)
+    Drop v90
     Load v91 <- string("x,y,z")
     Load v92 <- string(",")
     Call %1 <- string("std.string.split") [v91, v92] (def=d15)
+    Drop v91
+    Drop v92
     Load v97 <- %1
     StringLength v95 <- v97
+    Drop v97
     Load v96 <- int(3)
     Eq v94 <- v95, v96
     Load v98 <- string("split len 3")
     Call v93 <- string("std.assert.assert") [v94, v98] (def=d1)
+    Drop v98
     Load v99 <- string("x,y,z")
     Load v100 <- string(",")
     Call %2 <- string("std.string.split") [v99, v100] (def=d15)
+    Drop v99
+    Drop v100
     Load v105 <- %2
     Load v106 <- int(0)
     LoadIndex v103 <- v105[v106]
+    Drop v105
     Load v104 <- string("x")
+    Drop v104
     Eq v102 <- v103, v104
     Load v107 <- string("split[0] == x")
     Call v101 <- string("std.assert.assert") [v102, v107] (def=d1)
+    Drop v107
     Load v108 <- string("ab")
     Call %3 <- string("std.string.chars") [v108] (def=d16)
+    Drop v108
     Load v113 <- %3
     StringLength v111 <- v113
+    Drop v113
     Load v112 <- int(2)
     Eq v110 <- v111, v112
     Load v114 <- string("chars len 2")
     Call v109 <- string("std.assert.assert") [v110, v114] (def=d1)
+    Drop v114
     Load v115 <- string("42")
     Call %4 <- string("std.string.parse_int") [v115] (def=d17)
+    Drop v115
     Load v118 <- %4
     Call v117 <- string("std.result.is_ok") [v118] (def=d18)
+    Drop v118
     Load v119 <- string("parse_int ok")
     Call v116 <- string("std.assert.assert") [v117, v119] (def=d1)
+    Drop v119
     Drop %4
     Load v120 <- string("not_a_number")
     Call %5 <- string("std.string.parse_int") [v120] (def=d17)
+    Drop v120
     Load v123 <- %5
     Call v122 <- string("std.result.is_err") [v123] (def=d19)
+    Drop v123
     Load v124 <- string("parse_int err on invalid")
     Call v121 <- string("std.assert.assert") [v122, v124] (def=d1)
+    Drop v124
     Drop %5
     Load v125 <- string("xxx")
     Call %6 <- string("std.string.parse_float") [v125] (def=d20)
+    Drop v125
     Load v128 <- %6
     Call v127 <- string("std.result.is_err") [v128] (def=d19)
+    Drop v128
     Load v129 <- string("parse_float err on invalid")
     Call v126 <- string("std.assert.assert") [v127, v129] (def=d1)
+    Drop v129
     Drop %6
     Load v134 <- string("A")
     Load v135 <- int(0)
     Call v132 <- string("std.string.char_code") [v134, v135] (def=d21)
+    Drop v134
     Load v133 <- int(65)
     Eq v131 <- v132, v133
     Load v136 <- string("char_code ASCII")
     Call v130 <- string("std.assert.assert") [v131, v136] (def=d1)
+    Drop v136
     Load v141 <- string("é")
     Load v142 <- int(0)
     Call v139 <- string("std.string.char_code") [v141, v142] (def=d21)
+    Drop v141
     Load v140 <- int(233)
     Eq v138 <- v139, v140
     Load v143 <- string("char_code Latin-1")
     Call v137 <- string("std.assert.assert") [v138, v143] (def=d1)
+    Drop v143
     Load v148 <- string("字")
     Load v149 <- int(0)
     Call v146 <- string("std.string.char_code") [v148, v149] (def=d21)
+    Drop v148
     Load v147 <- int(23383)
     Eq v145 <- v146, v147
     Load v150 <- string("char_code CJK")
     Call v144 <- string("std.assert.assert") [v145, v150] (def=d1)
+    Drop v150
     Load v155 <- string("héllo")
     Load v156 <- int(1)
     Call v153 <- string("std.string.char_code") [v155, v156] (def=d21)
+    Drop v155
     Load v154 <- int(233)
     Eq v152 <- v153, v154
     Load v157 <- string("char_code index past multibyte")
     Call v151 <- string("std.assert.assert") [v152, v157] (def=d1)
+    Drop v157
     Load v162 <- string("hi")
     Load v163 <- int(2)
     Call v160 <- string("std.string.char_code") [v162, v163] (def=d21)
+    Drop v162
     Load v164 <- int(1)
     Neg v161 <- v164
     Eq v159 <- v160, v161
     Load v165 <- string("char_code out of range → -1")
     Call v158 <- string("std.assert.assert") [v159, v165] (def=d1)
+    Drop v165
     Load v170 <- string("")
     Load v171 <- int(0)
     Call v168 <- string("std.string.char_code") [v170, v171] (def=d21)
+    Drop v170
     Load v172 <- int(1)
     Neg v169 <- v172
     Eq v167 <- v168, v169
     Load v173 <- string("char_code on empty → -1")
     Call v166 <- string("std.assert.assert") [v167, v173] (def=d1)
+    Drop v173
     Load v178 <- string("héllo")
     Call v176 <- string("std.string.len") [v178] (def=d10)
+    Drop v178
     Load v177 <- int(5)
     Eq v175 <- v176, v177
     Load v179 <- string("len counts code points")
     Call v174 <- string("std.assert.assert") [v175, v179] (def=d1)
+    Drop v179
     Load v184 <- string("中")
     Call v182 <- string("std.string.len") [v184] (def=d10)
+    Drop v184
     Load v183 <- int(1)
     Eq v181 <- v182, v183
     Load v185 <- string("len CJK scalar")
     Call v180 <- string("std.assert.assert") [v181, v185] (def=d1)
+    Drop v185
     Load v190 <- string("héllo")
     Load v191 <- string("é")
     Call v188 <- string("std.string.index_of") [v190, v191] (def=d8)
+    Drop v190
+    Drop v191
     Load v189 <- int(1)
     Eq v187 <- v188, v189
     Load v192 <- string("index_of scalar index")
     Call v186 <- string("std.assert.assert") [v187, v192] (def=d1)
+    Drop v192
     Load v197 <- string("héllo")
     Load v198 <- string("lo")
     Call v195 <- string("std.string.index_of") [v197, v198] (def=d8)
+    Drop v197
+    Drop v198
     Load v196 <- int(3)
     Eq v194 <- v195, v196
     Load v199 <- string("index_of after multibyte")
     Call v193 <- string("std.assert.assert") [v194, v199] (def=d1)
+    Drop v199
     Load v200 <- string("héllo")
     Load v201 <- string("é")
     Call %7 <- string("std.string.index_of") [v200, v201] (def=d8)
+    Drop v200
+    Drop v201
     Load v206 <- string("héllo")
     Load v207 <- %7
     Load v209 <- %7
     Load v210 <- int(1)
     Add v208 <- v209, v210
     Call v204 <- string("std.string.substring") [v206, v207, v208] (def=d9)
+    Drop v206
     Load v205 <- string("é")
+    Drop v204
+    Drop v205
     Eq v203 <- v204, v205
     Load v211 <- string("index_of feeds substring")
     Call v202 <- string("std.assert.assert") [v203, v211] (def=d1)
+    Drop v211
     Load v216 <- string("héllo")
     Load v217 <- %7
     Call v214 <- string("std.string.char_code") [v216, v217] (def=d21)
+    Drop v216
     Load v215 <- int(233)
     Eq v213 <- v214, v215
     Load v218 <- string("index_of feeds char_code")
     Call v212 <- string("std.assert.assert") [v213, v218] (def=d1)
+    Drop v218
     Load v219 <- int(65)
     Call %8 <- string("std.string.from_char_code") [v219] (def=d22)
     Load v222 <- %8
     Call v221 <- string("std.result.is_ok") [v222] (def=d18)
+    Drop v222
     Load v223 <- string("from_char_code ok")
     Call v220 <- string("std.assert.assert") [v221, v223] (def=d1)
+    Drop v223
     Drop %8
     Load v228 <- %8
     Call v226 <- string("std.result.unwrap") [v228] (def=d23)
+    Drop v228
     Load v227 <- string("A")
+    Drop v226
+    Drop v227
     Eq v225 <- v226, v227
     Load v229 <- string("from_char_code roundtrip ASCII")
     Call v224 <- string("std.assert.assert") [v225, v229] (def=d1)
+    Drop v229
     Drop %8
     Load v230 <- int(128512)
     Call %9 <- string("std.string.from_char_code") [v230] (def=d22)
     Load v233 <- %9
     Call v232 <- string("std.result.is_ok") [v233] (def=d18)
+    Drop v233
     Load v234 <- string("from_char_code astral ok")
     Call v231 <- string("std.assert.assert") [v232, v234] (def=d1)
+    Drop v234
     Drop %9
     Load v240 <- %9
     Call v239 <- string("std.result.unwrap") [v240] (def=d23)
+    Drop v240
     Load v241 <- int(0)
+    Drop v239
     Call v237 <- string("std.string.char_code") [v239, v241] (def=d21)
     Load v238 <- int(128512)
     Eq v236 <- v237, v238
     Load v242 <- string("astral roundtrip")
     Call v235 <- string("std.assert.assert") [v236, v242] (def=d1)
+    Drop v242
     Drop %9
     Load v247 <- int(1)
     Neg v246 <- v247
     Call v245 <- string("std.string.from_char_code") [v246] (def=d22)
     Call v244 <- string("std.result.is_err") [v245] (def=d19)
+    Drop v245
     Load v248 <- string("negative codepoint err")
     Call v243 <- string("std.assert.assert") [v244, v248] (def=d1)
+    Drop v248
     Load v252 <- int(55296)
     Call v251 <- string("std.string.from_char_code") [v252] (def=d22)
     Call v250 <- string("std.result.is_err") [v251] (def=d19)
+    Drop v251
     Load v253 <- string("surrogate half err")
     Call v249 <- string("std.assert.assert") [v250, v253] (def=d1)
+    Drop v253
     Load v257 <- int(1114112)
     Call v256 <- string("std.string.from_char_code") [v257] (def=d22)
     Call v255 <- string("std.result.is_err") [v256] (def=d19)
+    Drop v256
     Load v258 <- string("beyond max err")
     Call v254 <- string("std.assert.assert") [v255, v258] (def=d1)
+    Drop v258
     Load v263 <- string("Hello {}")
     Load v264 <- string("world")
     Call v261 <- string("std.string.format") [v263, v264] (def=d24)
+    Drop v263
+    Drop v264
+    Drop v261
+    Drop v262
     Load v262 <- string("Hello world")
     Eq v260 <- v261, v262
     Load v265 <- string("format basic")
     Call v259 <- string("std.assert.assert") [v260, v265] (def=d1)
+    Drop v265
     Load v270 <- string("{0}+{1}={0}")
     Load v271 <- int(1)
     Load v272 <- int(2)
     Call v268 <- string("std.string.format") [v270, v271, v272] (def=d24)
+    Drop v270
     Load v269 <- string("1+2=1")
+    Drop v268
+    Drop v269
     Eq v267 <- v268, v269
     Load v273 <- string("format indexed reuse")
     Call v266 <- string("std.assert.assert") [v267, v273] (def=d1)
+    Drop v273
     Load v278 <- string("{{}}")
     Call v276 <- string("std.string.format") [v278] (def=d24)
+    Drop v278
     Load v277 <- string("{}")
+    Drop v276
+    Drop v277
     Eq v275 <- v276, v277
     Load v279 <- string("format brace escape")
     Call v274 <- string("std.assert.assert") [v275, v279] (def=d1)
+    Drop v279
     Load v284 <- string("a}}b")
     Call v282 <- string("std.string.format") [v284] (def=d24)
+    Drop v284
     Load v283 <- string("a}b")
+    Drop v282
+    Drop v283
     Eq v281 <- v282, v283
     Load v285 <- string("format lone close brace literal")
     Call v280 <- string("std.assert.assert") [v281, v285] (def=d1)
+    Drop v285
     Load v290 <- string("{0:.2f}")
     Load v291 <- float(4614256650576692846)
     Call v288 <- string("std.string.format") [v290, v291] (def=d24)
+    Drop v290
     Load v289 <- string("3.14")
+    Drop v288
+    Drop v289
     Eq v287 <- v288, v289
     Load v292 <- string("format .2f")
     Call v286 <- string("std.assert.assert") [v287, v292] (def=d1)
+    Drop v292
     Load v297 <- string("[{0:5d}]")
     Load v299 <- int(5)
     Neg v298 <- v299
     Call v295 <- string("std.string.format") [v297, v298] (def=d24)
+    Drop v297
     Load v296 <- string("[   -5]")
+    Drop v295
+    Drop v296
     Eq v294 <- v295, v296
     Load v300 <- string("format width align")
     Call v293 <- string("std.assert.assert") [v294, v300] (def=d1)
+    Drop v300
     Load v305 <- string("{0:05d}")
     Load v307 <- int(5)
     Neg v306 <- v307
     Call v303 <- string("std.string.format") [v305, v306] (def=d24)
+    Drop v305
     Load v304 <- string("-0005")
+    Drop v303
+    Drop v304
     Eq v302 <- v303, v304
     Load v308 <- string("format zero flag")
     Call v301 <- string("std.assert.assert") [v302, v308] (def=d1)
+    Drop v308
     Load v313 <- string("{0:x}|{0:#x}|{0:b}|{0:o}")
     Load v314 <- int(255)
     Call v311 <- string("std.string.format") [v313, v314] (def=d24)
+    Drop v313
     Load v312 <- string("ff|0xff|11111111|377")
+    Drop v311
+    Drop v312
     Eq v310 <- v311, v312
     Load v315 <- string("format radix presentations")
     Call v309 <- string("std.assert.assert") [v310, v315] (def=d1)
+    Drop v315
     Load v320 <- string("{0:e}")
     Load v321 <- float(4614256650576692846)
     Call v318 <- string("std.string.format") [v320, v321] (def=d24)
+    Drop v320
     Load v319 <- string("3.141590e+00")
+    Drop v318
+    Drop v319
     Eq v317 <- v318, v319
     Load v322 <- string("format scientific")
     Call v316 <- string("std.assert.assert") [v317, v322] (def=d1)
+    Drop v322
     Load v327 <- string("{0:%}")
     Load v328 <- float(4598175219545276416)
     Call v325 <- string("std.string.format") [v327, v328] (def=d24)
+    Drop v327
     Load v326 <- string("25.000000%")
+    Drop v325
+    Drop v326
     Eq v324 <- v325, v326
     Load v329 <- string("format percent")
     Call v323 <- string("std.assert.assert") [v324, v329] (def=d1)
+    Drop v329
     Load v334 <- string("{0:.3}")
     Load v335 <- string("hello")
     Call v332 <- string("std.string.format") [v334, v335] (def=d24)
+    Drop v334
+    Drop v335
+    Drop v332
+    Drop v333
     Load v333 <- string("hel")
     Eq v331 <- v332, v333
     Load v336 <- string("format string precision")
     Call v330 <- string("std.assert.assert") [v331, v336] (def=d1)
+    Drop v336
     Load v341 <- string("{0:^7}")
     Load v342 <- string("hi")
     Call v339 <- string("std.string.format") [v341, v342] (def=d24)
+    Drop v341
+    Drop v342
+    Drop v339
+    Drop v340
     Load v340 <- string("  hi   ")
     Eq v338 <- v339, v340
     Load v343 <- string("format center align")
     Call v337 <- string("std.assert.assert") [v338, v343] (def=d1)
+    Drop v343
     Drop %3
     Drop %6
     Drop %5

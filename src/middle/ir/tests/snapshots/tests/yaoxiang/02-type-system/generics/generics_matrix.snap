@@ -128,31 +128,43 @@ module
     Load v0 <- int(1)
     Load v1 <- string("one")
     Call %0 <- string("Entry") [v0, v1] (def=d0)
+    Drop v1
     Load v6 <- %0
     LoadField v4 <- v6.0
+    Drop v6
     Load v5 <- int(1)
     Eq v3 <- v4, v5
     Load v7 <- string("Entry(Int, String).key == 1")
     Call v2 <- string("std.assert.assert") [v3, v7] (def=d1)
+    Drop v7
     Load v12 <- %0
     LoadField v10 <- v12.1
+    Drop v12
     Load v11 <- string("one")
+    Drop v11
     Eq v9 <- v10, v11
     Load v13 <- string("Entry(Int, String).value == one")
     Call v8 <- string("std.assert.assert") [v9, v13] (def=d1)
+    Drop v13
     Load v14 <- string("flag")
     Load v15 <- bool(true)
     Call %1 <- string("Entry") [v14, v15] (def=d0)
+    Drop v14
     Load v20 <- %1
     LoadField v18 <- v20.0
+    Drop v20
     Load v19 <- string("flag")
+    Drop v19
     Eq v17 <- v18, v19
     Load v21 <- string("Entry(String, Bool).key")
     Call v16 <- string("std.assert.assert") [v17, v21] (def=d1)
+    Drop v21
     Load v24 <- %1
     LoadField v23 <- v24.1
+    Drop v24
     Load v25 <- string("Entry(String, Bool).value == true")
     Call v22 <- string("std.assert.assert") [v23, v25] (def=d1)
+    Drop v25
     AllocArray v26 size=int(3), elem=int(1)
     Load v27 <- int(1)
     Load v28 <- int(0)
@@ -164,29 +176,37 @@ module
     Load v32 <- int(2)
     StoreIndex v26[v32] <- v31
     Call %2 <- string("Box") [v26] (def=d2)
+    Drop v26
     Load v33 <- %2
     LoadField %3 <- v33.0
+    Drop v33
     Load v38 <- %3
     StringLength v36 <- v38
+    Drop v38
     Load v37 <- int(3)
     Eq v35 <- v36, v37
     Load v39 <- string("Box(Vec(Int)).inner len == 3")
     Call v34 <- string("std.assert.assert") [v35, v39] (def=d1)
+    Drop v39
     Load v44 <- %3
     Load v45 <- int(0)
     LoadIndex v42 <- v44[v45]
+    Drop v44
     Load v43 <- int(1)
     Eq v41 <- v42, v43
     Load v46 <- string("Box.inner first == 1")
     Call v40 <- string("std.assert.assert") [v41, v46] (def=d1)
+    Drop v46
     MakeClosure v47 <- closure_0 env=[] (def=d3)
     Load v48 <- int(5)
     Call %4 <- string("twice") [v47, v48] (def=d4)
+    Drop v47
     Load v51 <- %4
     Load v52 <- int(7)
     Eq v50 <- v51, v52
     Load v53 <- string("twice(x => x + 1, 5) == 7")
     Call v49 <- string("std.assert.assert") [v50, v53] (def=d1)
+    Drop v53
     AllocArray %5 size=int(2), elem=int(1)
     Load v54 <- int(9)
     Load v55 <- int(0)
@@ -196,28 +216,37 @@ module
     StoreIndex %5[v57] <- v56
     Load v58 <- %5
     Call %6 <- string("identity") [v58] (def=d5)
+    Drop v58
     Load v63 <- %6
     StringLength v61 <- v63
+    Drop v63
     Load v62 <- int(2)
     Eq v60 <- v61, v62
     Load v64 <- string("identity([9, 8]) len == 2")
     Call v59 <- string("std.assert.assert") [v60, v64] (def=d1)
+    Drop v64
     Load v69 <- int(1)
     Call v67 <- string("identity") [v69] (def=d5)
     Load v68 <- int(1)
     Eq v66 <- v67, v68
     Load v70 <- string("identity Int")
     Call v65 <- string("std.assert.assert") [v66, v70] (def=d1)
+    Drop v70
     Load v75 <- string("s")
     Call v73 <- string("identity") [v75] (def=d5)
+    Drop v75
     Load v74 <- string("s")
+    Drop v73
+    Drop v74
     Eq v72 <- v73, v74
     Load v76 <- string("identity String")
     Call v71 <- string("std.assert.assert") [v72, v76] (def=d1)
+    Drop v76
     Load v79 <- bool(true)
     Call v78 <- string("identity") [v79] (def=d5)
     Load v80 <- string("identity Bool")
     Call v77 <- string("std.assert.assert") [v78, v80] (def=d1)
+    Drop v80
     Drop %2
     Drop %0
     Drop %1
@@ -236,6 +265,7 @@ module
     Load v2 <- %0
     Load v3 <- int(1)
     Add v1 <- v2, v3
+    Drop v2
     Ret v1
   init (locals=0)
     Call %0 <- string("main") [] (def=d6)

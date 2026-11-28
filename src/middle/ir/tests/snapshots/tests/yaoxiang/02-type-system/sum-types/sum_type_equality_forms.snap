@@ -39,23 +39,32 @@ module
     Load v3 <- void
     CreateVariant v1 <- Color::1 v3
     Eq %0 <- v0, v1
+    Drop v0
+    Drop v1
     Load v5 <- %0
     Load v6 <- string("构造器直产两侧相等")
     Call v4 <- string("std.assert.assert") [v5, v6] (def=d0)
+    Drop v6
     Call v7 <- string("mk") [] (def=d1)
     Load v9 <- void
     CreateVariant v8 <- Color::1 v9
     Eq %1 <- v7, v8
+    Drop v7
+    Drop v8
     Load v11 <- %1
     Load v12 <- string("带注解返回与构造器直产必须同判（旧实现误报 E1101）")
     Call v10 <- string("std.assert.assert") [v11, v12] (def=d0)
+    Drop v12
     Call v13 <- string("mk") [] (def=d1)
     Load v15 <- void
     CreateVariant v14 <- Color::0 v15
     Ne %2 <- v13, v14
+    Drop v13
+    Drop v14
     Load v17 <- %2
     Load v18 <- string("不同变体不相等")
     Call v16 <- string("std.assert.assert") [v17, v18] (def=d0)
+    Drop v18
     Drop %2
     Drop %0
     Drop %1

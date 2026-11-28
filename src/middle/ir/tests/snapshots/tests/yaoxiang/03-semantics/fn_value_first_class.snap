@@ -36,8 +36,10 @@ module
     Load v2 <- %1
     Load v3 <- %0
     CallDyn v1 <- v3 [v2]
+    Drop v3
     Load v4 <- %0
     CallDyn v0 <- v4 [v1]
+    Drop v4
     Ret v0
   fn main() -> Void
     locals_total=3
@@ -83,12 +85,14 @@ module
     Eq v1 <- v2, v3
     Load v5 <- string("double(5) should be 10")
     Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
+    Drop v5
     Load v10 <- int(7)
     Call v8 <- string("identity") [v10] (def=d2)
     Load v9 <- int(7)
     Eq v7 <- v8, v9
     Load v11 <- string("generic identity should work")
     Call v6 <- string("std.assert.assert") [v7, v11] (def=d1)
+    Drop v11
     Load v17 <- int(3)
     Call v16 <- string("identity") [v17] (def=d2)
     Call v14 <- string("double") [v16] (def=d0)
@@ -96,22 +100,28 @@ module
     Eq v13 <- v14, v15
     Load v18 <- string("generic + plain in one file")
     Call v12 <- string("std.assert.assert") [v13, v18] (def=d1)
+    Drop v18
     MakeClosure v23 <- double env=[] (def=d0)
     Load v24 <- int(3)
     Call v21 <- string("apply_twice") [v23, v24] (def=d3)
+    Drop v23
     Load v22 <- int(12)
     Eq v20 <- v21, v22
     Load v25 <- string("passing fn name as arg should work")
     Call v19 <- string("std.assert.assert") [v20, v25] (def=d1)
+    Drop v25
     MakeClosure v30 <- closure_0 env=[] (def=d4)
     Load v31 <- int(5)
     Call v28 <- string("apply_twice") [v30, v31] (def=d3)
+    Drop v30
     Load v29 <- int(7)
     Eq v27 <- v28, v29
     Load v32 <- string("inline lambda arg")
     Call v26 <- string("std.assert.assert") [v27, v32] (def=d1)
+    Drop v32
     Load v34 <- string("fn value first class ok")
     Call v33 <- string("std.io.println") [v34] (def=d5)
+    Drop v34
     Ret v33
   fn closure_0(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth2

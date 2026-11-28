@@ -155,42 +155,54 @@ module
     Load v10 <- %0
     MakeClosure v11 <- closure_0 env=[] (def=d0)
     Call %1 <- string("std.list.map") [v10, v11] (def=d1)
+    Drop v10
+    Drop v11
     Drop %0
     Load v16 <- %1
     Load v17 <- int(0)
     LoadIndex v14 <- v16[v17]
+    Drop v16
     Load v15 <- int(2)
     Eq v13 <- v14, v15
     Load v18 <- string("doubled[0]")
     Call v12 <- string("std.assert.assert") [v13, v18] (def=d2)
+    Drop v18
     Load v23 <- %1
     Load v24 <- int(1)
     LoadIndex v21 <- v23[v24]
+    Drop v23
     Load v22 <- int(4)
     Eq v20 <- v21, v22
     Load v25 <- string("doubled[1]")
     Call v19 <- string("std.assert.assert") [v20, v25] (def=d2)
+    Drop v25
     Load v30 <- %1
     Load v31 <- int(2)
     LoadIndex v28 <- v30[v31]
+    Drop v30
     Load v29 <- int(6)
     Eq v27 <- v28, v29
     Load v32 <- string("doubled[2]")
     Call v26 <- string("std.assert.assert") [v27, v32] (def=d2)
+    Drop v32
     Load v37 <- %1
     Load v38 <- int(3)
     LoadIndex v35 <- v37[v38]
+    Drop v37
     Load v36 <- int(8)
     Eq v34 <- v35, v36
     Load v39 <- string("doubled[3]")
     Call v33 <- string("std.assert.assert") [v34, v39] (def=d2)
+    Drop v39
     Load v44 <- %1
     Load v45 <- int(4)
     LoadIndex v42 <- v44[v45]
+    Drop v44
     Load v43 <- int(10)
     Eq v41 <- v42, v43
     Load v46 <- string("doubled[4]")
     Call v40 <- string("std.assert.assert") [v41, v46] (def=d2)
+    Drop v46
     AllocArray %2 size=int(5), elem=int(1)
     Load v47 <- int(1)
     Load v48 <- int(0)
@@ -210,21 +222,27 @@ module
     Load v57 <- %2
     MakeClosure v58 <- closure_1 env=[] (def=d3)
     Call %3 <- string("std.list.filter") [v57, v58] (def=d4)
+    Drop v57
+    Drop v58
     Drop %2
     Load v63 <- %3
     Load v64 <- int(0)
     LoadIndex v61 <- v63[v64]
+    Drop v63
     Load v62 <- int(2)
     Eq v60 <- v61, v62
     Load v65 <- string("evens[0]")
     Call v59 <- string("std.assert.assert") [v60, v65] (def=d2)
+    Drop v65
     Load v70 <- %3
     Load v71 <- int(1)
     LoadIndex v68 <- v70[v71]
+    Drop v70
     Load v69 <- int(4)
     Eq v67 <- v68, v69
     Load v72 <- string("evens[1]")
     Call v66 <- string("std.assert.assert") [v67, v72] (def=d2)
+    Drop v72
     AllocArray %4 size=int(5), elem=int(1)
     Load v73 <- int(1)
     Load v74 <- int(0)
@@ -245,12 +263,15 @@ module
     MakeClosure v84 <- closure_2 env=[] (def=d5)
     Load v85 <- int(0)
     Call %5 <- string("std.list.reduce") [v83, v84, v85] (def=d6)
+    Drop v83
+    Drop v84
     Drop %4
     Load v88 <- %5
     Load v89 <- int(15)
     Eq v87 <- v88, v89
     Load v90 <- string("reduce total == 15")
     Call v86 <- string("std.assert.assert") [v87, v90] (def=d2)
+    Drop v90
     AllocArray %6 size=int(5), elem=int(1)
     Load v91 <- int(1)
     Load v92 <- int(0)
@@ -270,30 +291,40 @@ module
     Load v102 <- %6
     MakeClosure v103 <- closure_3 env=[] (def=d7)
     Call v101 <- string("std.list.filter") [v102, v103] (def=d4)
+    Drop v102
+    Drop v103
+    Drop v101
     MakeClosure v104 <- closure_4 env=[] (def=d8)
     Call %7 <- string("std.list.map") [v101, v104] (def=d1)
+    Drop v104
     Drop %6
     Load v109 <- %7
     Load v110 <- int(0)
     LoadIndex v107 <- v109[v110]
+    Drop v109
     Load v108 <- int(30)
     Eq v106 <- v107, v108
     Load v111 <- string("chain[0]")
     Call v105 <- string("std.assert.assert") [v106, v111] (def=d2)
+    Drop v111
     Load v116 <- %7
     Load v117 <- int(1)
     LoadIndex v114 <- v116[v117]
+    Drop v116
     Load v115 <- int(40)
     Eq v113 <- v114, v115
     Load v118 <- string("chain[1]")
     Call v112 <- string("std.assert.assert") [v113, v118] (def=d2)
+    Drop v118
     Load v123 <- %7
     Load v124 <- int(2)
     LoadIndex v121 <- v123[v124]
+    Drop v123
     Load v122 <- int(50)
     Eq v120 <- v121, v122
     Load v125 <- string("chain[2]")
     Call v119 <- string("std.assert.assert") [v120, v125] (def=d2)
+    Drop v125
     Drop %1
     Drop %3
     Drop %0

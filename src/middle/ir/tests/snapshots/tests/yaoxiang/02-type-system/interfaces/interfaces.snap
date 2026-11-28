@@ -50,23 +50,31 @@ module
     Load v3 <- %0
     Load v4 <- string("screen")
     Call v2 <- string("Point.draw") [v3, v4] (def=d1)
+    Drop v3
+    Drop v4
     Drop %0
     Load v5 <- %0
     Call %1 <- string("Point.serialize") [v5] (def=d2)
+    Drop v5
     Drop %0
     Load v8 <- %1
     Load v9 <- string("point")
     Eq v7 <- v8, v9
+    Drop v8
+    Drop v9
     Load v10 <- string("Point.serialize() should return \"point\"")
     Call v6 <- string("std.assert.assert") [v7, v10] (def=d3)
+    Drop v10
     Load v11 <- %0
     Call %2 <- string("Point.get_x") [v11] (def=d4)
+    Drop v11
     Drop %0
     Load v14 <- %2
     Load v15 <- float(4607182418800017408)
     Eq v13 <- v14, v15
     Load v16 <- string("Point.get_x() should return 1.0")
     Call v12 <- string("std.assert.assert") [v13, v16] (def=d3)
+    Drop v16
     Drop %0
     Drop %1
     Drop %2

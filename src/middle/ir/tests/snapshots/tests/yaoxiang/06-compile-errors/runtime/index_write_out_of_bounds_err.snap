@@ -36,14 +36,18 @@ module
     Load v7 <- %1
     Load v8 <- int(99)
     StoreIndex v6[v7] <- v8
+    Drop v6
     Load v11 <- %0
     Load v12 <- int(0)
     LoadIndex v10 <- v11[v12]
+    Drop v11
     Load v14 <- %0
     Load v15 <- int(0)
     LoadIndex v13 <- v14[v15]
+    Drop v14
     Call v16 <- string("int.to_string") [v13] (def=d0)
     Call v9 <- string("std.io.print") [v16] (def=d1)
+    Drop v16
     Drop %0
     Drop %1
     Ret v9

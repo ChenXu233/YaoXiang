@@ -92,10 +92,12 @@ module
     AllocArray %0 size=int(0), elem=int(1)
     Load v4 <- %0
     StringLength v2 <- v4
+    Drop v4
     Load v3 <- int(0)
     Eq v1 <- v2, v3
     Load v5 <- string("Vec(Int)() len == 0")
     Call v0 <- string("std.assert.assert") [v1, v5] (def=d0)
+    Drop v5
     AllocArray %1 size=int(3), elem=int(1)
     Load v6 <- int(1)
     Load v7 <- int(0)
@@ -108,10 +110,12 @@ module
     StoreIndex %1[v11] <- v10
     Load v16 <- %1
     StringLength v14 <- v16
+    Drop v16
     Load v15 <- int(3)
     Eq v13 <- v14, v15
     Load v17 <- string("Vec(Int)(1,2,3) len == 3")
     Call v12 <- string("std.assert.assert") [v13, v17] (def=d0)
+    Drop v17
     Load v20 <- %1
     AllocArray v21 size=int(3), elem=int(1)
     Load v22 <- int(1)
@@ -124,17 +128,22 @@ module
     Load v27 <- int(2)
     StoreIndex v21[v27] <- v26
     Eq v19 <- v20, v21
+    Drop v20
+    Drop v21
     Load v28 <- string("element ctor positions (1,2,3)")
     Call v18 <- string("std.assert.assert") [v19, v28] (def=d0)
+    Drop v28
     Load v29 <- int(8)
     AllocArray %2 size=int(0), elem=int(1)
     StoreField %2.0 <- v29 (type=None, name=Some("length"))
     Load v34 <- %2
     StringLength v32 <- v34
+    Drop v34
     Load v33 <- int(8)
     Eq v31 <- v32, v33
     Load v35 <- string("Vec(Int)(len=8) len == 8")
     Call v30 <- string("std.assert.assert") [v31, v35] (def=d0)
+    Drop v35
     Load %3 <- int(3)
     Load v37 <- %3
     Load v38 <- int(2)
@@ -143,10 +152,12 @@ module
     StoreField %4.0 <- v36 (type=None, name=Some("length"))
     Load v43 <- %4
     StringLength v41 <- v43
+    Drop v43
     Load v42 <- int(6)
     Eq v40 <- v41, v42
     Load v44 <- string("Vec(Int)(len=n*2) len == 6")
     Call v39 <- string("std.assert.assert") [v40, v44] (def=d0)
+    Drop v44
     AllocArray %5 size=int(2), elem=int(1)
     Load v45 <- int(1)
     Load v46 <- int(0)
@@ -156,10 +167,12 @@ module
     StoreIndex %5[v48] <- v47
     Load v53 <- %5
     StringLength v51 <- v53
+    Drop v53
     Load v52 <- int(2)
     Eq v50 <- v51, v52
     Load v54 <- string("Vec(Int) = [1,2] len == 2")
     Call v49 <- string("std.assert.assert") [v50, v54] (def=d0)
+    Drop v54
     AllocArray %6 size=int(2), elem=int(1)
     Load v55 <- int(1)
     Load v56 <- int(0)
@@ -170,14 +183,18 @@ module
     Load v59 <- %6
     Load v61 <- %6
     StringLength v60 <- v61
+    Drop v61
     Load v62 <- int(9)
+    Drop v59
     StoreIndex v59[v60] <- v62
     Load v67 <- %6
     StringLength v65 <- v67
+    Drop v67
     Load v66 <- int(3)
     Eq v64 <- v65, v66
     Load v68 <- string("grown len == 3")
     Call v63 <- string("std.assert.assert") [v64, v68] (def=d0)
+    Drop v68
     Load v71 <- %6
     AllocArray v72 size=int(3), elem=int(1)
     Load v73 <- int(1)
@@ -190,8 +207,11 @@ module
     Load v78 <- int(2)
     StoreIndex v72[v78] <- v77
     Eq v70 <- v71, v72
+    Drop v71
+    Drop v72
     Load v79 <- string("append lands at index 2")
     Call v69 <- string("std.assert.assert") [v70, v79] (def=d0)
+    Drop v79
     Drop %5
     Drop %2
     Drop %4

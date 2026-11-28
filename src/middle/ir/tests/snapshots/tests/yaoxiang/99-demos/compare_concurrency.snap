@@ -23,15 +23,19 @@ module
     Spawn %3 <- [] plan(groups=[], deps=[], resources=[])
     Load v1 <- %2
     Move %3 <- v1
+    Drop v1
     Drop %2
     Load v3 <- bool(true)
     Load v4 <- string("spawn with ref completed")
     Call v2 <- string("std.assert.assert") [v3, v4] (def=d0)
+    Drop v4
     Load v6 <- %3
     Call v5 <- string("std.io.println") [v6] (def=d1)
+    Drop v6
     Load v8 <- bool(true)
     Load v9 <- string("all passed")
     Call v7 <- string("std.assert.assert") [v8, v9] (def=d0)
+    Drop v9
     Drop %0
     Drop %3
     Drop %1

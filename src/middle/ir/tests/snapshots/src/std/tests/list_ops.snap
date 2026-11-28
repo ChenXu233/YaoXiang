@@ -190,161 +190,218 @@ module
     value v156: Generic { name: "String", args: [] } @block0
     Call v4 <- string("mk") [] (def=d0)
     Call v2 <- string("std.list.len") [v4] (def=d1)
+    Drop v4
     Load v3 <- int(4)
     Eq v1 <- v2, v3
     Load v5 <- string("len == 4")
     Call v0 <- string("std.assert.assert") [v1, v5] (def=d2)
+    Drop v5
     Call v10 <- string("mk") [] (def=d0)
     Load v11 <- int(1)
     Call v8 <- string("std.list.get") [v10, v11] (def=d3)
+    Drop v10
     Load v9 <- int(2)
     Eq v7 <- v8, v9
     Load v12 <- string("get(1) == 2")
     Call v6 <- string("std.assert.assert") [v7, v12] (def=d2)
+    Drop v12
     Call v17 <- string("mk") [] (def=d0)
     Call v15 <- string("std.list.first") [v17] (def=d4)
+    Drop v17
     Load v16 <- int(1)
     Eq v14 <- v15, v16
     Load v18 <- string("first == 1")
     Call v13 <- string("std.assert.assert") [v14, v18] (def=d2)
+    Drop v18
     Call v23 <- string("mk") [] (def=d0)
     Call v21 <- string("std.list.last") [v23] (def=d5)
+    Drop v23
     Load v22 <- int(4)
     Eq v20 <- v21, v22
     Load v24 <- string("last == 4")
     Call v19 <- string("std.assert.assert") [v20, v24] (def=d2)
+    Drop v24
     Call v27 <- string("mk") [] (def=d0)
     Load v28 <- int(3)
     Call v26 <- string("std.list.contains") [v27, v28] (def=d6)
+    Drop v27
     Load v29 <- string("contains 3")
     Call v25 <- string("std.assert.assert") [v26, v29] (def=d2)
+    Drop v29
     Call v33 <- string("mk") [] (def=d0)
     Load v34 <- int(99)
     Call v32 <- string("std.list.contains") [v33, v34] (def=d6)
+    Drop v33
     Not v31 <- v32
     Load v35 <- string("not contains 99")
     Call v30 <- string("std.assert.assert") [v31, v35] (def=d2)
+    Drop v35
     Call v40 <- string("mk") [] (def=d0)
     Load v41 <- int(3)
     Call v38 <- string("std.list.find_index") [v40, v41] (def=d7)
+    Drop v40
     Load v39 <- int(2)
     Eq v37 <- v38, v39
     Load v42 <- string("find_index 3 == 2")
     Call v36 <- string("std.assert.assert") [v37, v42] (def=d2)
+    Drop v42
     Call v46 <- string("mk") [] (def=d0)
     Call v45 <- string("std.list.is_empty") [v46] (def=d8)
+    Drop v46
     Not v44 <- v45
     Load v47 <- string("not empty")
     Call v43 <- string("std.assert.assert") [v44, v47] (def=d2)
+    Drop v47
     Call v53 <- string("mk") [] (def=d0)
     Call v52 <- string("std.list.reverse") [v53] (def=d9)
+    Drop v53
+    Drop v52
     Call v50 <- string("std.list.first") [v52] (def=d4)
     Load v51 <- int(4)
     Eq v49 <- v50, v51
     Load v54 <- string("reverse first == 4")
     Call v48 <- string("std.assert.assert") [v49, v54] (def=d2)
+    Drop v54
     Call v60 <- string("mk") [] (def=d0)
     Call v61 <- string("mk") [] (def=d0)
     Call v59 <- string("std.list.concat") [v60, v61] (def=d10)
+    Drop v60
+    Drop v59
+    Drop v61
     Call v57 <- string("std.list.len") [v59] (def=d1)
     Load v58 <- int(8)
     Eq v56 <- v57, v58
     Load v62 <- string("concat len == 8")
     Call v55 <- string("std.assert.assert") [v56, v62] (def=d2)
+    Drop v62
     Call v68 <- string("mk") [] (def=d0)
     MakeClosure v69 <- closure_0 env=[] (def=d11)
     Call v67 <- string("std.list.map") [v68, v69] (def=d12)
+    Drop v68
+    Drop v69
+    Drop v67
     Load v70 <- int(0)
     Call v65 <- string("std.list.get") [v67, v70] (def=d3)
     Load v66 <- int(2)
     Eq v64 <- v65, v66
     Load v71 <- string("map [0] == 2")
     Call v63 <- string("std.assert.assert") [v64, v71] (def=d2)
+    Drop v71
     Call v77 <- string("mk") [] (def=d0)
     MakeClosure v78 <- closure_1 env=[] (def=d13)
     Call v76 <- string("std.list.filter") [v77, v78] (def=d14)
+    Drop v77
+    Drop v76
+    Drop v78
     Call v74 <- string("std.list.len") [v76] (def=d1)
     Load v75 <- int(2)
     Eq v73 <- v74, v75
     Load v79 <- string("filter evens len == 2")
     Call v72 <- string("std.assert.assert") [v73, v79] (def=d2)
+    Drop v79
     Call v84 <- string("mk") [] (def=d0)
     MakeClosure v85 <- closure_2 env=[] (def=d15)
     Load v86 <- int(0)
     Call v82 <- string("std.list.reduce") [v84, v85, v86] (def=d16)
+    Drop v84
+    Drop v85
     Load v83 <- int(10)
     Eq v81 <- v82, v83
     Load v87 <- string("reduce sum == 10")
     Call v80 <- string("std.assert.assert") [v81, v87] (def=d2)
+    Drop v87
     Call v93 <- string("mk") [] (def=d0)
     Load v94 <- int(3)
     Call v92 <- string("std.list.push") [v93, v94] (def=d17)
+    Drop v93
+    Drop v92
     Call v90 <- string("std.list.len") [v92] (def=d1)
     Load v91 <- int(5)
     Eq v89 <- v90, v91
     Load v95 <- string("push returns new len 5")
     Call v88 <- string("std.assert.assert") [v89, v95] (def=d2)
+    Drop v95
     Call v101 <- string("mk") [] (def=d0)
     Load v102 <- int(0)
     Call v100 <- string("std.list.prepend") [v101, v102] (def=d18)
+    Drop v101
+    Drop v100
     Call v98 <- string("std.list.len") [v100] (def=d1)
     Load v99 <- int(5)
     Eq v97 <- v98, v99
     Load v103 <- string("prepend returns new len 5")
     Call v96 <- string("std.assert.assert") [v97, v103] (def=d2)
+    Drop v103
     Call v109 <- string("mk") [] (def=d0)
     Load v110 <- int(0)
     Call v108 <- string("std.list.remove_at") [v109, v110] (def=d19)
+    Drop v109
+    Drop v108
     Call v106 <- string("std.list.len") [v108] (def=d1)
     Load v107 <- int(3)
     Eq v105 <- v106, v107
     Load v111 <- string("remove_at drops one")
     Call v104 <- string("std.assert.assert") [v105, v111] (def=d2)
+    Drop v111
     Call v117 <- string("mk") [] (def=d0)
     Load v118 <- int(0)
     Load v119 <- int(9)
     Call v116 <- string("std.list.set") [v117, v118, v119] (def=d20)
+    Drop v117
+    Drop v116
     Call v114 <- string("std.list.len") [v116] (def=d1)
     Load v115 <- int(4)
     Eq v113 <- v114, v115
     Load v120 <- string("set keeps len")
     Call v112 <- string("std.assert.assert") [v113, v120] (def=d2)
+    Drop v120
     Call v126 <- string("mk") [] (def=d0)
     Load v127 <- int(0)
     Load v128 <- int(9)
     Call v125 <- string("std.list.set") [v126, v127, v128] (def=d20)
+    Drop v126
+    Drop v125
     Call v123 <- string("std.list.first") [v125] (def=d4)
     Load v124 <- int(9)
     Eq v122 <- v123, v124
     Load v129 <- string("set writes slot")
     Call v121 <- string("std.assert.assert") [v122, v129] (def=d2)
+    Drop v129
     Load v133 <- void
     Call v132 <- string("std.list.empty") [v133] (def=d21)
     Call v131 <- string("std.list.is_empty") [v132] (def=d8)
     Load v134 <- string("empty is empty")
     Call v130 <- string("std.assert.assert") [v131, v134] (def=d2)
+    Drop v134
     Call v140 <- string("mk") [] (def=d0)
     Load v141 <- int(0)
     Load v142 <- int(2)
     Call v139 <- string("std.list.slice") [v140, v141, v142] (def=d22)
+    Drop v140
+    Drop v139
     Call v137 <- string("std.list.len") [v139] (def=d1)
     Load v138 <- int(2)
     Eq v136 <- v137, v138
     Load v143 <- string("slice len == 2")
     Call v135 <- string("std.assert.assert") [v136, v143] (def=d2)
+    Drop v143
     Call v149 <- string("mk") [] (def=d0)
     Call v148 <- string("std.list.pop") [v149] (def=d23)
+    Drop v149
+    Drop v148
     Call v146 <- string("std.list.len") [v148] (def=d1)
     Load v147 <- int(3)
     Eq v145 <- v146, v147
     Load v150 <- string("pop drops last")
     Call v144 <- string("std.assert.assert") [v145, v150] (def=d2)
+    Drop v150
     Load v155 <- void
     Call v154 <- string("std.list.empty") [v155] (def=d21)
     Call v153 <- string("std.list.pop") [v154] (def=d23)
     Call v152 <- string("std.list.is_empty") [v153] (def=d8)
     Load v156 <- string("pop empty stays empty")
     Call v151 <- string("std.assert.assert") [v152, v156] (def=d2)
+    Drop v156
     Ret v151
   fn closure_0(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth2

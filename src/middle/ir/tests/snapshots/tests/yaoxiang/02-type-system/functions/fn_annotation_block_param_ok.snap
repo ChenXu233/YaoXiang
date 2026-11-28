@@ -26,6 +26,7 @@ module
     Eq v1 <- v2, v3
     Load v5 <- string("块体形参由声明驱动（按位）")
     Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
+    Drop v5
     Ret v0
   init (locals=0)
     Call %0 <- string("main") [] (def=d2)

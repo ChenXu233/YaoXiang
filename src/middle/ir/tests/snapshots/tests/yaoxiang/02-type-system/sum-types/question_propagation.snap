@@ -105,44 +105,58 @@ module
     value v31: Generic { name: "String", args: [] } @block0
     Load v0 <- string("21")
     Call %0 <- string("parse_chain") [v0] (def=d2)
+    Drop v0
     Load v3 <- %0
     Call v2 <- string("std.result.is_ok") [v3] (def=d3)
+    Drop v3
     Load v4 <- string("chain ok: is_ok")
     Call v1 <- string("std.assert.assert") [v2, v4] (def=d4)
+    Drop v4
     Drop %0
     Load v9 <- %0
     Call v7 <- string("std.result.unwrap") [v9] (def=d5)
+    Drop v9
     Load v8 <- int(43)
     Eq v6 <- v7, v8
     Load v10 <- string("chain ok: unwrap == 43")
     Call v5 <- string("std.assert.assert") [v6, v10] (def=d4)
+    Drop v10
     Drop %0
     Load v11 <- string("nope")
     Call %1 <- string("parse_chain") [v11] (def=d2)
+    Drop v11
     Load v14 <- %1
     Call v13 <- string("std.result.is_err") [v14] (def=d6)
+    Drop v14
     Load v15 <- string("chain err: is_err")
     Call v12 <- string("std.assert.assert") [v13, v15] (def=d4)
+    Drop v15
     Drop %1
     Load v20 <- %1
     Load v22 <- int(1)
     Neg v21 <- v22
     Call v18 <- string("std.result.unwrap_or") [v20, v21] (def=d7)
+    Drop v20
     Load v23 <- int(1)
     Neg v19 <- v23
     Eq v17 <- v18, v19
     Load v24 <- string("chain err: unwrap_or default")
     Call v16 <- string("std.assert.assert") [v17, v24] (def=d4)
+    Drop v24
     Drop %1
     Load v25 <- string("boom")
     CreateVariant %2 <- Result::1 v25
+    Drop v25
     Load v28 <- %2
     Call v27 <- string("std.result.is_err") [v28] (def=d6)
+    Drop v28
     Load v29 <- string("result.err is_err")
     Call v26 <- string("std.assert.assert") [v27, v29] (def=d4)
+    Drop v29
     Drop %2
     Load v31 <- string("question_propagation_ok")
     Call v30 <- string("std.io.print") [v31] (def=d8)
+    Drop v31
     Drop %2
     Drop %1
     Drop %0

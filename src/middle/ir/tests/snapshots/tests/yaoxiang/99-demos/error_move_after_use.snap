@@ -17,11 +17,13 @@ module
     Load v1 <- bool(true)
     Load v2 <- string("value moved from x to y")
     Call v0 <- string("std.assert.assert") [v1, v2] (def=d0)
+    Drop v2
     Load v4 <- %1
     Call v3 <- string("std.io.println") [v4] (def=d1)
     Load v6 <- bool(true)
     Load v7 <- string("all passed")
     Call v5 <- string("std.assert.assert") [v6, v7] (def=d0)
+    Drop v7
     Drop %0
     Drop %1
     Ret v5

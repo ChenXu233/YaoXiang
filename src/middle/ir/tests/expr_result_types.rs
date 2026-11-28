@@ -19,46 +19,10 @@
 //! 合成调用（for 协议 / 问号解糖）不落表——前者 sema 没有收敛的事实，后者在
 //! AST 里没有调用节点；IR 对它们保持显式未知（不猜、不泄漏 TypeVar）。
 
-use crate::frontend::core::lexer::tokenize;
-use crate::frontend::core::parser::parse;
-use crate::frontend::core::sema::checker::TypeChecker;
-use crate::frontend::core::sema::probe::TypeLevelNamespace;
 use crate::frontend::core::sema::MonoType;
-use crate::frontend::module::registry::ModuleRegistry;
 use crate::middle::ir::ir::{FunctionBody, Instruction, ModuleIR, Operand};
-use crate::middle::lower::AstToIrGenerator;
-use crate::util::diagnostic::Severity;
 
-/// 源码 → 真实生成序列（lex → parse → typecheck → ir_gen）的直驱探针。
-fn compile_ir(source: &str) -> ModuleIR {
-    let tokens = tokenize(source).expect("夹具必须可 tokenize");
-    let parsed = parse(&tokens);
-    assert!(
-        !parsed.has_errors,
-        "夹具必须无语法错误: {:?}",
-        parsed.errors
-    );
-    let mut checker = TypeChecker::new("<call-result-types>");
-    let type_result = checker.check_module(
-        &parsed.module,
-        &TypeLevelNamespace::scan_one(&parsed.module),
-    );
-    let errors: Vec<_> = type_result
-        .diagnostics
-        .iter()
-        .filter(|d| matches!(d.severity, Severity::Error))
-        .collect();
-    assert!(errors.is_empty(), "夹具必须无类型错误: {errors:?}");
-    let mut generator = AstToIrGenerator::new_with_type_result(
-        &type_result,
-        ModuleRegistry::with_std(),
-        None,
-        TypeLevelNamespace::scan_one(&parsed.module),
-    );
-    generator
-        .generate_module_ir(&parsed.module)
-        .expect("夹具必须生成 IR")
-}
+use super::support::compile_ir;
 
 /// 显式未知的类型（IR 的「不知道」是 TypeRef("?")，不是 TypeVar）。
 fn is_explicit_unknown(ty: &MonoType) -> bool {

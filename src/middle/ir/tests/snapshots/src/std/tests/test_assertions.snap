@@ -187,16 +187,20 @@ module
     Call %0 <- string("std.test.assert_eq") [v0, v3] (def=d0)
     Load v6 <- %0
     Call v5 <- string("std.result.is_ok") [v6] (def=d1)
+    Drop v6
     Load v7 <- string("assert_eq equal is Ok")
     Call v4 <- string("std.assert.assert") [v5, v7] (def=d2)
+    Drop v7
     Drop %0
     Load v8 <- int(1)
     Load v9 <- int(2)
     Call %1 <- string("std.test.assert_ne") [v8, v9] (def=d3)
     Load v12 <- %1
     Call v11 <- string("std.result.is_ok") [v12] (def=d1)
+    Drop v12
     Load v13 <- string("assert_ne unequal is Ok")
     Call v10 <- string("std.assert.assert") [v11, v13] (def=d2)
+    Drop v13
     Drop %1
     Load v15 <- int(1)
     Load v16 <- int(2)
@@ -204,15 +208,19 @@ module
     Call %2 <- string("std.test.assert_true") [v14] (def=d4)
     Load v19 <- %2
     Call v18 <- string("std.result.is_ok") [v19] (def=d1)
+    Drop v19
     Load v20 <- string("assert_true is Ok")
     Call v17 <- string("std.assert.assert") [v18, v20] (def=d2)
+    Drop v20
     Drop %2
     Load v21 <- bool(false)
     Call %3 <- string("std.test.assert_false") [v21] (def=d5)
     Load v24 <- %3
     Call v23 <- string("std.result.is_ok") [v24] (def=d1)
+    Drop v24
     Load v25 <- string("assert_false is Ok")
     Call v22 <- string("std.assert.assert") [v23, v25] (def=d2)
+    Drop v25
     Drop %3
     Load v27 <- int(1)
     Load v28 <- int(2)
@@ -220,32 +228,42 @@ module
     Call %4 <- string("std.test.assert_not") [v26] (def=d6)
     Load v31 <- %4
     Call v30 <- string("std.result.is_ok") [v31] (def=d1)
+    Drop v31
     Load v32 <- string("assert_not is Ok")
     Call v29 <- string("std.assert.assert") [v30, v32] (def=d2)
+    Drop v32
     Drop %4
     Load v33 <- int(1)
     Load v34 <- int(2)
     Call %5 <- string("std.test.assert_eq") [v33, v34] (def=d0)
     Load v37 <- %5
     Call v36 <- string("std.result.is_err") [v37] (def=d7)
+    Drop v37
     Load v38 <- string("assert_eq unequal is Err")
     Call v35 <- string("std.assert.assert") [v36, v38] (def=d2)
+    Drop v38
     Drop %5
     Load v39 <- %5
     Call %6 <- string("std.result.unwrap_err") [v39] (def=d8)
+    Drop v39
     Drop %5
     Load v42 <- %6
     Load v43 <- string("Expected 2, got 1")
     Eq v41 <- v42, v43
+    Drop v42
+    Drop v43
     Load v44 <- string("assert_eq diagnostic text")
     Call v40 <- string("std.assert.assert") [v41, v44] (def=d2)
+    Drop v44
     Load v45 <- int(1)
     Load v46 <- int(1)
     Call %7 <- string("std.test.assert_ne") [v45, v46] (def=d3)
     Load v49 <- %7
     Call v48 <- string("std.result.is_err") [v49] (def=d7)
+    Drop v49
     Load v50 <- string("assert_ne equal is Err")
     Call v47 <- string("std.assert.assert") [v48, v50] (def=d2)
+    Drop v50
     Drop %7
     Load v52 <- int(1)
     Load v53 <- int(2)
@@ -253,15 +271,19 @@ module
     Call %8 <- string("std.test.assert_true") [v51] (def=d4)
     Load v56 <- %8
     Call v55 <- string("std.result.is_err") [v56] (def=d7)
+    Drop v56
     Load v57 <- string("assert_true false cond is Err")
     Call v54 <- string("std.assert.assert") [v55, v57] (def=d2)
+    Drop v57
     Drop %8
     Load v58 <- bool(true)
     Call %9 <- string("std.test.assert_false") [v58] (def=d5)
     Load v61 <- %9
     Call v60 <- string("std.result.is_err") [v61] (def=d7)
+    Drop v61
     Load v62 <- string("assert_false true cond is Err")
     Call v59 <- string("std.assert.assert") [v60, v62] (def=d2)
+    Drop v62
     Drop %9
     Load v64 <- int(1)
     Load v65 <- int(1)
@@ -269,71 +291,103 @@ module
     Call %10 <- string("std.test.assert_not") [v63] (def=d6)
     Load v68 <- %10
     Call v67 <- string("std.result.is_err") [v68] (def=d7)
+    Drop v68
     Load v69 <- string("assert_not true cond is Err")
     Call v66 <- string("std.assert.assert") [v67, v69] (def=d2)
+    Drop v69
     Drop %10
     Load v70 <- string("yx")
     Load v71 <- string("yx")
     Call %11 <- string("std.test.assert_eq") [v70, v71] (def=d0)
+    Drop v70
+    Drop v71
     Load v74 <- %11
     Call v73 <- string("std.result.is_ok") [v74] (def=d1)
+    Drop v74
     Load v75 <- string("assert_eq strings Ok")
     Call v72 <- string("std.assert.assert") [v73, v75] (def=d2)
+    Drop v75
     Drop %11
     Load v76 <- string("yx")
     Load v77 <- string("yaoxiang")
     Call %12 <- string("std.test.assert_eq") [v76, v77] (def=d0)
+    Drop v76
+    Drop v77
     Load v80 <- %12
     Call v79 <- string("std.result.is_err") [v80] (def=d7)
+    Drop v80
     Load v81 <- string("assert_eq strings Err")
     Call v78 <- string("std.assert.assert") [v79, v81] (def=d2)
+    Drop v81
     Drop %12
     Load v82 <- string("oops")
     Call %13 <- string("std.string.parse_int") [v82] (def=d9)
+    Drop v82
     Load v83 <- %13
     Call %14 <- string("std.test.assert_err") [v83] (def=d10)
+    Drop v83
     Load v86 <- %14
     Call v85 <- string("std.result.is_ok") [v86] (def=d1)
+    Drop v86
     Load v87 <- string("assert_err on Err is Ok")
     Call v84 <- string("std.assert.assert") [v85, v87] (def=d2)
+    Drop v87
     Drop %14
     Load v88 <- string("42")
     Call %15 <- string("std.string.parse_int") [v88] (def=d9)
+    Drop v88
     Load v89 <- %15
     Call %16 <- string("std.test.assert_err") [v89] (def=d10)
+    Drop v89
     Load v92 <- %16
     Call v91 <- string("std.result.is_err") [v92] (def=d7)
+    Drop v92
     Load v93 <- string("assert_err on Ok is Err")
     Call v90 <- string("std.assert.assert") [v91, v93] (def=d2)
+    Drop v93
     Drop %16
     Load v94 <- string("nope")
     Call %17 <- string("std.string.parse_int") [v94] (def=d9)
+    Drop v94
     Load v95 <- %17
     Load v96 <- string("E6010")
     Call %18 <- string("std.test.assert_err_code") [v95, v96] (def=d11)
+    Drop v95
+    Drop v96
     Load v99 <- %18
     Call v98 <- string("std.result.is_ok") [v99] (def=d1)
+    Drop v99
     Load v100 <- string("assert_err_code match is Ok")
     Call v97 <- string("std.assert.assert") [v98, v100] (def=d2)
+    Drop v100
     Drop %18
     Load v101 <- string("nope")
     Call %19 <- string("std.string.parse_int") [v101] (def=d9)
+    Drop v101
     Load v102 <- %19
     Load v103 <- string("E9999")
     Call %20 <- string("std.test.assert_err_code") [v102, v103] (def=d11)
+    Drop v102
+    Drop v103
     Load v106 <- %20
     Call v105 <- string("std.result.is_err") [v106] (def=d7)
+    Drop v106
     Load v107 <- string("assert_err_code mismatch is Err")
     Call v104 <- string("std.assert.assert") [v105, v107] (def=d2)
+    Drop v107
     Drop %20
     Load v108 <- %20
     Call %21 <- string("std.result.unwrap_err") [v108] (def=d8)
+    Drop v108
     Drop %20
     Load v111 <- %21
     Load v112 <- string("Expected code E9999, got E6010")
     Eq v110 <- v111, v112
+    Drop v111
+    Drop v112
     Load v113 <- string("assert_err_code diagnostic names codes")
     Call v109 <- string("std.assert.assert") [v110, v113] (def=d2)
+    Drop v113
     Load v115 <- float(4591870180066957722)
     Load v116 <- float(4596373779694328218)
     Add v114 <- v115, v116
@@ -342,8 +396,10 @@ module
     Call %22 <- string("std.test.assert_approx_eq") [v114, v117, v118] (def=d12)
     Load v121 <- %22
     Call v120 <- string("std.result.is_ok") [v121] (def=d1)
+    Drop v121
     Load v122 <- string("approx_eq within eps is Ok")
     Call v119 <- string("std.assert.assert") [v120, v122] (def=d2)
+    Drop v122
     Drop %22
     Load v123 <- float(4607182418800017408)
     Load v124 <- float(4607182418800017408)
@@ -351,8 +407,10 @@ module
     Call %23 <- string("std.test.assert_approx_eq") [v123, v124, v125] (def=d12)
     Load v128 <- %23
     Call v127 <- string("std.result.is_ok") [v128] (def=d1)
+    Drop v128
     Load v129 <- string("approx_eq eps=0 degenerates to exact equality")
     Call v126 <- string("std.assert.assert") [v127, v129] (def=d2)
+    Drop v129
     Drop %23
     Load v130 <- float(4607182418800017408)
     Load v131 <- float(4611686018427387904)
@@ -360,17 +418,23 @@ module
     Call %24 <- string("std.test.assert_approx_eq") [v130, v131, v132] (def=d12)
     Load v135 <- %24
     Call v134 <- string("std.result.is_err") [v135] (def=d7)
+    Drop v135
     Load v136 <- string("approx_eq beyond eps is Err")
     Call v133 <- string("std.assert.assert") [v134, v136] (def=d2)
+    Drop v136
     Drop %24
     Load v137 <- %24
     Call %25 <- string("std.result.unwrap_err") [v137] (def=d8)
+    Drop v137
     Drop %24
     Load v140 <- %25
     Load v141 <- string("Expected 2")
     Call v139 <- string("std.string.contains") [v140, v141] (def=d13)
+    Drop v140
+    Drop v141
     Load v142 <- string("approx_eq diagnostic names expected value")
     Call v138 <- string("std.assert.assert") [v139, v142] (def=d2)
+    Drop v142
     Drop %25
     Load v143 <- float(4607182418800017408)
     Load v144 <- float(4611686018427387904)
@@ -379,8 +443,10 @@ module
     Call %26 <- string("std.test.assert_approx_eq") [v143, v144, v145] (def=d12)
     Load v149 <- %26
     Call v148 <- string("std.result.is_err") [v149] (def=d7)
+    Drop v149
     Load v150 <- string("approx_eq negative eps rejected at declaration")
     Call v147 <- string("std.assert.assert") [v148, v150] (def=d2)
+    Drop v150
     Drop %22
     Drop %23
     Drop %24

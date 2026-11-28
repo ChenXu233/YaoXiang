@@ -46,19 +46,28 @@ module
     value v12: Generic { name: "String", args: [] } @block0
     Load v0 <- string("Rex")
     Call %0 <- string("Dog") [v0] (def=d0)
+    Drop v0
     Load v5 <- %0
     Call v3 <- string("Dog.speak") [v5] (def=d1)
+    Drop v5
     Load v4 <- string("Woof")
+    Drop v3
+    Drop v4
     Eq v2 <- v3, v4
     Load v6 <- string("inherited Animal.speak dispatches")
     Call v1 <- string("std.assert.assert") [v2, v6] (def=d2)
+    Drop v6
     Drop %0
     Load v11 <- %0
     Call v9 <- string("Dog.fetch") [v11] (def=d3)
+    Drop v11
     Load v10 <- string("Rex fetches")
+    Drop v9
+    Drop v10
     Eq v8 <- v9, v10
     Load v12 <- string("own Pet.fetch dispatches")
     Call v7 <- string("std.assert.assert") [v8, v12] (def=d2)
+    Drop v12
     Drop %0
     Ret v7
   init (locals=1)

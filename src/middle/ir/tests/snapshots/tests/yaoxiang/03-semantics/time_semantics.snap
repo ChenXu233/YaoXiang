@@ -85,75 +85,114 @@ module
     Ge v1 <- v2, v3
     Load v5 <- string("now() flows into accessors")
     Call v0 <- string("std.assert.assert") [v1, v5] (def=d2)
+    Drop v5
     Load v10 <- %0
     Load v11 <- string("%Y-%m")
     Call v8 <- string("std.time.format_time") [v10, v11] (def=d3)
+    Drop v11
     Load v9 <- string("")
+    Drop v8
+    Drop v9
     Ne v7 <- v8, v9
     Load v12 <- string("now() flows into format_time")
     Call v6 <- string("std.assert.assert") [v7, v12] (def=d2)
+    Drop v12
     Load v13 <- string("%d/%m/%Y")
     Load v14 <- string("15/01/2024")
     Call %1 <- string("std.time.parse_time") [v13, v14] (def=d4)
+    Drop v13
+    Drop v14
     Load v17 <- %1
     Load v18 <- int(1705276800)
     Eq v16 <- v17, v18
     Load v19 <- string("parse_time honors fmt")
     Call v15 <- string("std.assert.assert") [v16, v19] (def=d2)
+    Drop v19
     Load v24 <- %1
     Load v25 <- string("%Y-%m-%d")
     Call v22 <- string("std.time.format_time") [v24, v25] (def=d3)
+    Drop v25
     Load v23 <- string("2024-01-15")
+    Drop v22
+    Drop v23
     Eq v21 <- v22, v23
     Load v26 <- string("roundtrip")
     Call v20 <- string("std.assert.assert") [v21, v26] (def=d2)
+    Drop v26
     Load v27 <- string("%Y-%m-%dT%H:%M:%S")
     Load v28 <- string("2024-01-15T10:30:00")
     Call %2 <- string("std.time.parse_time") [v27, v28] (def=d4)
+    Drop v27
+    Drop v28
     Load v33 <- %2
     Load v34 <- string("%H:%M:%S")
     Call v31 <- string("std.time.format_time") [v33, v34] (def=d3)
+    Drop v34
     Load v32 <- string("10:30:00")
+    Drop v31
+    Drop v32
     Eq v30 <- v31, v32
     Load v35 <- string("ISO with fmt")
     Call v29 <- string("std.assert.assert") [v30, v35] (def=d2)
+    Drop v35
     Load v40 <- int(0)
     Load v41 <- string("%Y-%m-%d")
     Call v38 <- string("std.time.format_time") [v40, v41] (def=d3)
+    Drop v41
     Load v39 <- string("1970-01-01")
+    Drop v38
+    Drop v39
     Eq v37 <- v38, v39
     Load v42 <- string("epoch")
     Call v36 <- string("std.assert.assert") [v37, v42] (def=d2)
+    Drop v42
     Load v47 <- int(951782400)
     Load v48 <- string("%Y-%m-%d")
     Call v45 <- string("std.time.format_time") [v47, v48] (def=d3)
+    Drop v48
     Load v46 <- string("2000-02-29")
+    Drop v45
+    Drop v46
     Eq v44 <- v45, v46
     Load v49 <- string("leap day")
     Call v43 <- string("std.assert.assert") [v44, v49] (def=d2)
+    Drop v49
     Load v54 <- int(1705276800)
     Load v55 <- string("%Y-%m-%d")
     Call v52 <- string("std.time.format_time") [v54, v55] (def=d3)
+    Drop v55
     Load v53 <- string("2024-01-15")
+    Drop v52
+    Drop v53
     Eq v51 <- v52, v53
     Load v56 <- string("2024")
     Call v50 <- string("std.assert.assert") [v51, v56] (def=d2)
+    Drop v56
     Load v61 <- int(1735689600)
     Load v62 <- string("%Y-%m-%d")
     Call v59 <- string("std.time.format_time") [v61, v62] (def=d3)
+    Drop v62
     Load v60 <- string("2025-01-01")
+    Drop v59
+    Drop v60
     Eq v58 <- v59, v60
     Load v63 <- string("2025")
     Call v57 <- string("std.assert.assert") [v58, v63] (def=d2)
+    Drop v63
     Load v68 <- int(1583020800)
     Load v69 <- string("%Y-%m-%d")
     Call v66 <- string("std.time.format_time") [v68, v69] (def=d3)
+    Drop v69
     Load v67 <- string("2020-03-01")
+    Drop v66
+    Drop v67
     Eq v65 <- v66, v67
     Load v70 <- string("2020")
     Call v64 <- string("std.assert.assert") [v65, v70] (def=d2)
+    Drop v70
     Load v72 <- string("time semantics ok")
     Call v71 <- string("std.io.println") [v72] (def=d5)
+    Drop v72
     Drop %0
     Drop %1
     Drop %2

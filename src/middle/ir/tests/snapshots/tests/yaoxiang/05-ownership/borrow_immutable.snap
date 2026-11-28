@@ -19,12 +19,15 @@ module
     Call %0 <- string("Point") [v0, v1] (def=d0)
     Load v2 <- %0
     Move %1 <- v2
+    Drop v2
     Load v3 <- %0
     Move %2 <- v3
+    Drop v3
     Drop %0
     Load v5 <- bool(true)
     Load v6 <- string("&T is Copy — two immutable refs can coexist")
     Call v4 <- string("std.assert.assert") [v5, v6] (def=d1)
+    Drop v6
     Drop %0
     Drop %1
     Drop %2

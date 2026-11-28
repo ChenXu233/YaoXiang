@@ -432,6 +432,10 @@ impl AstToIrGenerator {
             .at(span)
             .build()
         })?;
+        // #591 阶段一：直线函数的值释放事实（`Drop(Value)`）。放在槽位分配之后：
+        // 插入只改块内指令序列，不扰动已算好的活跃区间与槽位。
+        let mut blocks = blocks;
+        self.emit_value_release_drops(&mut blocks, &values);
         Ok(FinalizedCodeBody {
             locals: self.take_cur_locals(allocation.frame_slots),
             values,

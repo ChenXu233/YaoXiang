@@ -57,17 +57,21 @@ module
     Load v10 <- %0
     Load v11 <- int(0)
     LoadIndex v8 <- v10[v11]
+    Drop v10
     Load v9 <- int(10)
     Eq v7 <- v8, v9
     Load v12 <- string("bare literal stays List")
     Call v6 <- string("std.assert.assert") [v7, v12] (def=d0)
+    Drop v12
     Load v17 <- %0
     Load v18 <- int(2)
     LoadIndex v15 <- v17[v18]
+    Drop v17
     Load v16 <- int(30)
     Eq v14 <- v15, v16
     Load v19 <- string("bare literal List index")
     Call v13 <- string("std.assert.assert") [v14, v19] (def=d0)
+    Drop v19
     Load v20 <- int(40)
     Load v21 <- int(50)
     Load v22 <- int(60)
@@ -81,17 +85,21 @@ module
     Load v30 <- %1
     Load v31 <- int(1)
     LoadIndex v28 <- v30[v31]
+    Drop v30
     Load v29 <- int(50)
     Eq v27 <- v28, v29
     Load v32 <- string("annotated literal becomes Array")
     Call v26 <- string("std.assert.assert") [v27, v32] (def=d0)
+    Drop v32
     Load v37 <- %1
     Load v38 <- int(0)
     LoadIndex v35 <- v37[v38]
+    Drop v37
     Load v36 <- int(40)
     Eq v34 <- v35, v36
     Load v39 <- string("Array index read")
     Call v33 <- string("std.assert.assert") [v34, v39] (def=d0)
+    Drop v39
     Drop %0
     Drop %1
     Ret v33

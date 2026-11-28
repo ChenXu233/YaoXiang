@@ -30,6 +30,7 @@ module
     Eq v1 <- v2, v3
     Load v6 <- string("原语赋值复制，两者都可用")
     Call v0 <- string("std.assert.assert") [v1, v6] (def=d0)
+    Drop v6
     Load %2 <- int(7)
     Load v8 <- %2
     Call v7 <- string("std.io.println") [v8] (def=d1)
@@ -40,6 +41,7 @@ module
     Eq v12 <- v13, v14
     Load v15 <- string("原语传参不 move 源")
     Call v11 <- string("std.assert.assert") [v12, v15] (def=d0)
+    Drop v15
     Drop %0
     Drop %1
     Drop %2

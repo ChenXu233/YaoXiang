@@ -79,6 +79,7 @@ module
     value v1: Generic { name: "String", args: [] } @block0
     Load v1 <- string("side effect ok")
     Call v0 <- string("std.io.println") [v1] (def=d0)
+    Drop v1
     Ret v0
   fn main() -> Void
     locals_total=3
@@ -129,6 +130,7 @@ module
     Eq v1 <- v2, v3
     Load v5 <- string("tail_expr_value(21) should be 42")
     Call v0 <- string("std.assert.assert") [v1, v5] (def=d2)
+    Drop v5
     Load v11 <- int(5)
     Neg v10 <- v11
     Call v8 <- string("early_return") [v10] (def=d3)
@@ -136,18 +138,21 @@ module
     Eq v7 <- v8, v9
     Load v12 <- string("early_return(-5) should be 0")
     Call v6 <- string("std.assert.assert") [v7, v12] (def=d2)
+    Drop v12
     Load v17 <- int(7)
     Call v15 <- string("early_return") [v17] (def=d3)
     Load v16 <- int(7)
     Eq v14 <- v15, v16
     Load v18 <- string("early_return(7) should be 7")
     Call v13 <- string("std.assert.assert") [v14, v18] (def=d2)
+    Drop v18
     Load v23 <- int(1)
     Call v21 <- string("block_tail_in_function") [v23] (def=d4)
     Load v22 <- int(4)
     Eq v20 <- v21, v22
     Load v24 <- string("block_tail_in_function(1) should be 4")
     Call v19 <- string("std.assert.assert") [v20, v24] (def=d2)
+    Drop v24
     Load v30 <- int(1)
     Neg v29 <- v30
     Call v27 <- string("explicit_and_tail") [v29] (def=d5)
@@ -156,12 +161,14 @@ module
     Eq v26 <- v27, v28
     Load v32 <- string("explicit_and_tail(-1) should be -1")
     Call v25 <- string("std.assert.assert") [v26, v32] (def=d2)
+    Drop v32
     Load v37 <- int(3)
     Call v35 <- string("explicit_and_tail") [v37] (def=d5)
     Load v36 <- int(30)
     Eq v34 <- v35, v36
     Load v38 <- string("explicit_and_tail(3) should be 30")
     Call v33 <- string("std.assert.assert") [v34, v38] (def=d2)
+    Drop v38
     Call v39 <- string("no_return_has_side_effect") [] (def=d6)
     Ret v39
   init (locals=0)

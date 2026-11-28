@@ -12,6 +12,8 @@ module
     Load v1 <- %1
     Load v2 <- %0
     CallDyn v0 <- v2 [v1]
+    Drop v1
+    Drop v2
     Ret v0
   fn main() -> Void
     slot[0] c : Int(64) @depth1
@@ -39,19 +41,29 @@ module
     Load v2 <- string("multi-arg native fn value ok")
     Load v3 <- %0
     CallDyn v0 <- v3 [v1, v2]
+    Drop v2
+    Drop v3
     Load %1 <- nativefn(std.string.concat)
     Load v4 <- string("a")
     Load v5 <- string("b")
     Load v6 <- %1
     CallDyn %2 <- v6 [v4, v5]
+    Drop v4
+    Drop v5
+    Drop v6
     Load v9 <- %2
     Load v10 <- string("ab")
     Eq v8 <- v9, v10
+    Drop v9
+    Drop v10
     Load v11 <- string("concat via function value returns ab")
     Call v7 <- string("std.assert.assert") [v8, v11] (def=d0)
+    Drop v11
     Load v13 <- nativefn(std.io.println)
     Load v14 <- string("via param")
     Call v12 <- string("apply1") [v13, v14] (def=d1)
+    Drop v13
+    Drop v14
     Drop %0
     Drop %1
     Drop %2

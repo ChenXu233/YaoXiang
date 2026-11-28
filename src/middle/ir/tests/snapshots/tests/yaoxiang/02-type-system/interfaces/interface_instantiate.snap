@@ -43,26 +43,36 @@ module
     value v18: Generic { name: "String", args: [] } @block0
     Load v0 <- string("Rex")
     Call %0 <- string("Dog") [v0] (def=d0)
+    Drop v0
     Load v5 <- %0
     Call v3 <- string("Dog.speak") [v5] (def=d1)
+    Drop v5
     Load v4 <- string("Woof")
+    Drop v3
+    Drop v4
     Eq v2 <- v3, v4
     Load v6 <- string("Animal.speak dispatch returns Woof")
     Call v1 <- string("std.assert.assert") [v2, v6] (def=d2)
+    Drop v6
     Drop %0
     Load v11 <- %0
     Call v9 <- string("Dog.age") [v11] (def=d3)
+    Drop v11
     Load v10 <- int(3)
     Eq v8 <- v9, v10
     Load v12 <- string("Animal.age dispatch returns 3")
     Call v7 <- string("std.assert.assert") [v8, v12] (def=d2)
+    Drop v12
     Drop %0
     Load v17 <- %0
     LoadField v15 <- v17.0
+    Drop v17
     Load v16 <- string("Rex")
+    Drop v16
     Eq v14 <- v15, v16
     Load v18 <- string("own field still accessible")
     Call v13 <- string("std.assert.assert") [v14, v18] (def=d2)
+    Drop v18
     Drop %0
     Ret v13
   init (locals=1)

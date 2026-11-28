@@ -32,9 +32,11 @@ module
     StoreIndex %0[v3] <- v2
     Load v4 <- %0
     Call %1 <- string("std.list.pop") [v4] (def=d1)
+    Drop v4
     Drop %0
     Load v7 <- %1
     StringLength v6 <- v7
+    Drop v7
     Load v8 <- int(1)
     Call v5 <- string("std.test.assert_eq") [v6, v8] (def=d0)
     Drop %1
@@ -57,11 +59,18 @@ module
     Load v3 <- string("always_fails")
     MakeClosure v4 <- closure_0 env=[] (def=d2)
     NewTuple v2 <- [v3, v4]
+    Drop v3
+    Drop v4
+    Drop v2
     Load v5 <- int(0)
     StoreIndex v1[v5] <- v2
     Load v7 <- string("pop_still_runs")
     MakeClosure v8 <- closure_1 env=[] (def=d3)
     NewTuple v6 <- [v7, v8]
+    Drop v1
+    Drop v7
+    Drop v8
+    Drop v6
     Load v9 <- int(1)
     StoreIndex v1[v9] <- v6
     Call v0 <- string("std.test.suite") [v1] (def=d4)

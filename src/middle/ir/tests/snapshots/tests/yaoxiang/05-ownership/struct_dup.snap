@@ -19,8 +19,10 @@ module
     Load %0 <- arg%0
     Load v3 <- %0
     LoadField v1 <- v3.0
+    Drop v3
     Load v4 <- %0
     LoadField v2 <- v4.1
+    Drop v4
     Add v0 <- v1, v2
     Ret v0
   fn passthrough(TypeRef("Point")) -> TypeRef("Point")
@@ -167,43 +169,56 @@ module
     Load %1 <- %0
     Load v6 <- %0
     LoadField v4 <- v6.0
+    Drop v6
     Load v5 <- int(1)
     Eq v3 <- v4, v5
     Load v7 <- string("struct assign is Dup: source still readable")
     Call v2 <- string("std.assert.assert") [v3, v7] (def=d1)
+    Drop v7
     Load v12 <- %1
     LoadField v10 <- v12.1
+    Drop v12
     Load v11 <- int(2)
     Eq v9 <- v10, v11
     Load v13 <- string("copied struct holds the value")
     Call v8 <- string("std.assert.assert") [v9, v13] (def=d1)
+    Drop v13
     Load v14 <- %0
     Call %2 <- string("sum_of") [v14] (def=d2)
+    Drop v14
     Load v17 <- %2
     Load v18 <- int(3)
     Eq v16 <- v17, v18
     Load v19 <- string("by-value param received the struct")
     Call v15 <- string("std.assert.assert") [v16, v19] (def=d1)
+    Drop v19
     Load v24 <- %0
     LoadField v22 <- v24.1
+    Drop v24
     Load v23 <- int(2)
     Eq v21 <- v22, v23
     Load v25 <- string("source alive after by-value param")
     Call v20 <- string("std.assert.assert") [v21, v25] (def=d1)
+    Drop v25
     Load v26 <- %0
     Call %3 <- string("passthrough") [v26] (def=d3)
+    Drop v26
     Load v31 <- %3
     LoadField v29 <- v31.0
+    Drop v31
     Load v30 <- int(1)
     Eq v28 <- v29, v30
     Load v32 <- string("returned struct holds the value")
     Call v27 <- string("std.assert.assert") [v28, v32] (def=d1)
+    Drop v32
     Load v37 <- %0
     LoadField v35 <- v37.0
+    Drop v37
     Load v36 <- int(1)
     Eq v34 <- v35, v36
     Load v38 <- string("source alive after passing and returning")
     Call v33 <- string("std.assert.assert") [v34, v38] (def=d1)
+    Drop v38
     Load v39 <- int(1)
     Load v40 <- int(2)
     Call %4 <- string("Point") [v39, v40] (def=d0)
@@ -213,78 +228,102 @@ module
     Load v43 <- %4
     Load v44 <- %5
     Call %6 <- string("Segment") [v43, v44] (def=d4)
+    Drop v43
+    Drop v44
     Load %7 <- %6
     Load v50 <- %7
     LoadField v49 <- v50.0
+    Drop v50
     LoadField v47 <- v49.0
     Load v48 <- int(1)
     Eq v46 <- v47, v48
     Load v51 <- string("nested struct field copied")
     Call v45 <- string("std.assert.assert") [v46, v51] (def=d1)
+    Drop v51
     Load v57 <- %6
     LoadField v56 <- v57.1
+    Drop v57
     LoadField v54 <- v56.1
     Load v55 <- int(4)
     Eq v53 <- v54, v55
     Load v58 <- string("nested struct source alive")
     Call v52 <- string("std.assert.assert") [v53, v58] (def=d1)
+    Drop v58
     Load v63 <- %4
     LoadField v61 <- v63.1
+    Drop v63
     Load v62 <- int(2)
     Eq v60 <- v61, v62
     Load v64 <- string("nested struct argument not consumed")
     Call v59 <- string("std.assert.assert") [v60, v64] (def=d1)
+    Drop v64
     Load v65 <- string("hi")
     Load v66 <- int(7)
     Call %8 <- string("Named") [v65, v66] (def=d5)
+    Drop v65
     Load %9 <- %8
     Load v71 <- %9
     LoadField v69 <- v71.0
+    Drop v71
     Load v70 <- string("hi")
+    Drop v70
     Eq v68 <- v69, v70
     Load v72 <- string("String field struct copied")
     Call v67 <- string("std.assert.assert") [v68, v72] (def=d1)
+    Drop v72
     Load v77 <- %8
     LoadField v75 <- v77.1
+    Drop v77
     Load v76 <- int(7)
     Eq v74 <- v75, v76
     Load v78 <- string("String field source alive")
     Call v73 <- string("std.assert.assert") [v74, v78] (def=d1)
+    Drop v78
     Load v80 <- %0
     Move v79 <- v80
+    Drop v80
+    Drop v79
     Call %10 <- string("Window") [v79] (def=d6)
     Drop %0
     Load %11 <- %10
     Load v86 <- %11
     LoadField v85 <- v86.0
+    Drop v86
     LoadField v83 <- v85.0
     Load v84 <- int(1)
     Eq v82 <- v83, v84
     Load v87 <- string("token field struct copied")
     Call v81 <- string("std.assert.assert") [v82, v87] (def=d1)
+    Drop v87
     Load v93 <- %10
     LoadField v92 <- v93.0
+    Drop v93
     LoadField v90 <- v92.1
     Load v91 <- int(2)
     Eq v89 <- v90, v91
     Load v94 <- string("token field source alive")
     Call v88 <- string("std.assert.assert") [v89, v94] (def=d1)
+    Drop v94
     Load v95 <- int(1)
     Load v96 <- int(2)
     NewTuple %12 <- [v95, v96]
     Load %13 <- %12
     Load v101 <- %13
     LoadField v99 <- v101.0
+    Drop v101
     Load v100 <- int(1)
     Eq v98 <- v99, v100
     Load v102 <- string("tuple of copyables copied")
     Call v97 <- string("std.assert.assert") [v98, v102] (def=d1)
+    Drop v102
     Load v107 <- %12
     LoadField v105 <- v107.1
+    Drop v107
     Load v106 <- int(2)
     Eq v104 <- v105, v106
     Load v108 <- string("tuple source alive")
     Call v103 <- string("std.assert.assert") [v104, v108] (def=d1)
+    Drop v108
     Drop %4
     Drop %5
     Drop %8

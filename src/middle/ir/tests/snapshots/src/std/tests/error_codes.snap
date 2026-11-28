@@ -129,76 +129,107 @@ module
     Call %0 <- string("mk_range") [v0] (def=d2)
     Load v3 <- %0
     Call v2 <- string("std.result.is_err") [v3] (def=d3)
+    Drop v3
     Load v4 <- string("step=0 → Err")
     Call v1 <- string("std.assert.assert") [v2, v4] (def=d4)
+    Drop v4
     Drop %0
     Load v5 <- %0
     Call %1 <- string("std.result.unwrap_err") [v5] (def=d5)
+    Drop v5
     Drop %0
     Load v10 <- %1
     Call v8 <- string("std.result.code") [v10] (def=d6)
+    Drop v10
     Load v9 <- string("E6009")
+    Drop v8
+    Drop v9
     Eq v7 <- v8, v9
     Load v11 <- string("code == E6009")
     Call v6 <- string("std.assert.assert") [v7, v11] (def=d4)
+    Drop v11
     Drop %1
     Load v17 <- %1
     Call v15 <- string("std.result.message") [v17] (def=d7)
+    Drop v17
     Load v16 <- string("")
+    Drop v15
+    Drop v16
     Eq v14 <- v15, v16
     Not v13 <- v14
     Load v18 <- string("message 非空")
     Call v12 <- string("std.assert.assert") [v13, v18] (def=d4)
+    Drop v18
     Drop %1
     Load v19 <- int(2)
     Call %2 <- string("mk_range") [v19] (def=d2)
     Load v22 <- %2
     Call v21 <- string("std.result.is_ok") [v22] (def=d8)
+    Drop v22
     Load v23 <- string("step=2 → Ok")
     Call v20 <- string("std.assert.assert") [v21, v23] (def=d4)
+    Drop v23
     Drop %2
     Load v24 <- string("oops")
     Call %3 <- string("std.string.parse_int") [v24] (def=d9)
+    Drop v24
     Load v27 <- %3
     Call v26 <- string("std.result.is_err") [v27] (def=d3)
+    Drop v27
     Load v28 <- string("parse_int 失败 → Err")
     Call v25 <- string("std.assert.assert") [v26, v28] (def=d4)
+    Drop v28
     Drop %3
     Load v29 <- %3
     Call %4 <- string("std.result.unwrap_err") [v29] (def=d5)
+    Drop v29
     Drop %3
     Load v34 <- %4
     Call v32 <- string("std.result.code") [v34] (def=d6)
+    Drop v34
     Load v33 <- string("E6010")
+    Drop v32
+    Drop v33
     Eq v31 <- v32, v33
     Load v35 <- string("code == E6010")
     Call v30 <- string("std.assert.assert") [v31, v35] (def=d4)
+    Drop v35
     Drop %4
     Load v36 <- string("42")
     Call %5 <- string("std.string.parse_int") [v36] (def=d9)
+    Drop v36
     Load v41 <- %5
     Call v39 <- string("std.result.unwrap") [v41] (def=d10)
+    Drop v41
     Load v40 <- int(42)
     Eq v38 <- v39, v40
     Load v42 <- string("parse_int 成功 == 42")
     Call v37 <- string("std.assert.assert") [v38, v42] (def=d4)
+    Drop v42
     Drop %5
     Load v43 <- int(0)
     Call %6 <- string("step0") [v43] (def=d11)
     Load v46 <- %6
     Call v45 <- string("std.result.is_err") [v46] (def=d3)
+    Drop v46
     Load v47 <- string("? 传播 → Err")
     Call v44 <- string("std.assert.assert") [v45, v47] (def=d4)
+    Drop v47
     Drop %6
     Load v48 <- %6
     Call %7 <- string("std.result.unwrap_err") [v48] (def=d5)
+    Drop v48
     Drop %6
     Load v53 <- %7
     Call v51 <- string("std.result.code") [v53] (def=d6)
+    Drop v53
     Load v52 <- string("E6009")
+    Drop v51
+    Drop v52
     Eq v50 <- v51, v52
     Load v54 <- string("? 传播携带 E6009")
     Call v49 <- string("std.assert.assert") [v50, v54] (def=d4)
+    Drop v54
     Drop %3
     Drop %1
     Drop %4

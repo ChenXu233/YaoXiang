@@ -41,43 +41,62 @@ module
     Load v0 <- %0
     Load v1 <- string("hello")
     Call %1 <- string("std.fs.write_file") [v0, v1] (def=d0)
+    Drop v0
+    Drop v1
     Drop %0
     Load v3 <- %1
     Load v4 <- string("write_file ok")
     Call v2 <- string("std.assert.assert") [v3, v4] (def=d1)
+    Drop v4
     Load v7 <- %0
     Call v6 <- string("std.fs.exists") [v7] (def=d2)
+    Drop v7
     Load v8 <- string("file exists after write")
     Call v5 <- string("std.assert.assert") [v6, v8] (def=d1)
+    Drop v8
     Drop %0
     Load v13 <- %0
     Call v11 <- string("std.fs.read_file") [v13] (def=d3)
+    Drop v13
     Load v12 <- string("hello")
+    Drop v11
+    Drop v12
     Eq v10 <- v11, v12
     Load v14 <- string("read_file roundtrip")
     Call v9 <- string("std.assert.assert") [v10, v14] (def=d1)
+    Drop v14
     Drop %0
     Load v16 <- %0
     Load v17 <- string(" world")
     Call v15 <- string("std.fs.append_file") [v16, v17] (def=d4)
+    Drop v16
+    Drop v17
     Drop %0
     Load v22 <- %0
     Call v20 <- string("std.fs.read_file") [v22] (def=d3)
+    Drop v22
     Load v21 <- string("hello world")
+    Drop v20
+    Drop v21
     Eq v19 <- v20, v21
     Load v23 <- string("append_file roundtrip")
     Call v18 <- string("std.assert.assert") [v19, v23] (def=d1)
+    Drop v23
     Drop %0
     Load v26 <- %0
     Call v25 <- string("std.fs.remove") [v26] (def=d5)
+    Drop v26
     Load v27 <- string("remove roundtrip file")
     Call v24 <- string("std.assert.assert") [v25, v27] (def=d1)
+    Drop v27
     Drop %0
     Load v31 <- %0
     Call v30 <- string("std.fs.exists") [v31] (def=d2)
+    Drop v31
     Not v29 <- v30
     Load v32 <- string("roundtrip file gone")
     Call v28 <- string("std.assert.assert") [v29, v32] (def=d1)
+    Drop v32
     Drop %1
     Drop %0
     Ret v28
@@ -110,27 +129,37 @@ module
     Load v1 <- %0
     Load v2 <- string("x")
     Call v0 <- string("std.fs.write_file") [v1, v2] (def=d0)
+    Drop v1
+    Drop v2
     Drop %0
     Load v5 <- %0
     Call v4 <- string("std.fs.is_file") [v5] (def=d6)
+    Drop v5
     Load v6 <- string("is_file on file")
     Call v3 <- string("std.assert.assert") [v4, v6] (def=d1)
+    Drop v6
     Drop %0
     Load v10 <- %0
     Call v9 <- string("std.fs.is_dir") [v10] (def=d7)
+    Drop v10
     Not v8 <- v9
     Load v11 <- string("is_dir false on file")
     Call v7 <- string("std.assert.assert") [v8, v11] (def=d1)
+    Drop v11
     Drop %0
     Load v15 <- string("__yx_fs_ops_missing.xyz")
     Call v14 <- string("std.fs.exists") [v15] (def=d2)
+    Drop v15
     Not v13 <- v14
     Load v16 <- string("exists false when absent")
     Call v12 <- string("std.assert.assert") [v13, v16] (def=d1)
+    Drop v16
     Load v19 <- %0
     Call v18 <- string("std.fs.remove") [v19] (def=d5)
+    Drop v19
     Load v20 <- string("pred cleanup")
     Call v17 <- string("std.assert.assert") [v18, v20] (def=d1)
+    Drop v20
     Drop %0
     Ret v17
   fn dirs() -> Void
@@ -442,49 +471,69 @@ module
     Load v1 <- %0
     Load v2 <- string("hello world")
     Call v0 <- string("std.fs.write_file") [v1, v2] (def=d0)
+    Drop v1
+    Drop v2
     Drop %0
     Load v5 <- %0
     Load v6 <- %1
     Call v4 <- string("std.fs.copy") [v5, v6] (def=d19)
+    Drop v5
+    Drop v6
     Load v7 <- string("copy ok")
     Call v3 <- string("std.assert.assert") [v4, v7] (def=d1)
+    Drop v7
     Drop %1
     Drop %0
     Load v12 <- %1
     Call v10 <- string("std.fs.read_file") [v12] (def=d3)
+    Drop v12
     Load v11 <- string("hello world")
+    Drop v10
+    Drop v11
     Eq v9 <- v10, v11
     Load v13 <- string("copy preserves content")
     Call v8 <- string("std.assert.assert") [v9, v13] (def=d1)
+    Drop v13
     Drop %1
     Load %2 <- string("__yx_fs_ops_moved.txt")
     Load v16 <- %1
     Load v17 <- %2
     Call v15 <- string("std.fs.rename") [v16, v17] (def=d20)
+    Drop v16
+    Drop v17
     Load v18 <- string("rename ok")
     Call v14 <- string("std.assert.assert") [v15, v18] (def=d1)
+    Drop v18
     Drop %1
     Drop %2
     Load v21 <- %2
     Call v20 <- string("std.fs.exists") [v21] (def=d2)
+    Drop v21
     Load v22 <- string("rename target exists")
     Call v19 <- string("std.assert.assert") [v20, v22] (def=d1)
+    Drop v22
     Drop %2
     Load v26 <- %1
     Call v25 <- string("std.fs.exists") [v26] (def=d2)
+    Drop v26
     Not v24 <- v25
     Load v27 <- string("rename source gone")
     Call v23 <- string("std.assert.assert") [v24, v27] (def=d1)
+    Drop v27
     Drop %1
     Load v30 <- %0
     Call v29 <- string("std.fs.remove") [v30] (def=d5)
+    Drop v30
     Load v31 <- string("copy_move cleanup src")
     Call v28 <- string("std.assert.assert") [v29, v31] (def=d1)
+    Drop v31
     Drop %0
     Load v34 <- %2
     Call v33 <- string("std.fs.remove") [v34] (def=d5)
+    Drop v34
     Load v35 <- string("copy_move cleanup moved")
     Call v32 <- string("std.assert.assert") [v33, v35] (def=d1)
+    Drop v35
     Drop %1
     Drop %2
     Drop %0
@@ -543,52 +592,74 @@ module
     Load v1 <- %0
     Load v2 <- string("12345")
     Call v0 <- string("std.fs.write_file") [v1, v2] (def=d0)
+    Drop v1
+    Drop v2
     Drop %0
     Load v4 <- %1
     Call v3 <- string("std.fs.mkdir") [v4] (def=d9)
+    Drop v4
     Drop %1
     Load v5 <- %0
     Call %2 <- string("std.fs.stat") [v5] (def=d21)
+    Drop v5
     Drop %0
     Load v6 <- %2
     Load v7 <- string("size")
     LoadIndex %3 <- v6[v7]
+    Drop v6
+    Drop v7
     Load v8 <- %2
     Load v9 <- string("is_file")
     LoadIndex %4 <- v8[v9]
+    Drop v8
+    Drop v9
     Load v10 <- %2
     Load v11 <- string("is_dir")
     LoadIndex %5 <- v10[v11]
+    Drop v10
+    Drop v11
     Load v14 <- %3
     Load v15 <- int(5)
     Eq v13 <- v14, v15
+    Drop v14
     Load v16 <- string("stat size == 5")
     Call v12 <- string("std.assert.assert") [v13, v16] (def=d1)
+    Drop v16
     Load v18 <- %4
     Load v19 <- string("stat is_file")
     Call v17 <- string("std.assert.assert") [v18, v19] (def=d1)
+    Drop v19
     Load v22 <- %5
     Not v21 <- v22
     Load v23 <- string("stat not is_dir")
     Call v20 <- string("std.assert.assert") [v21, v23] (def=d1)
+    Drop v23
     Load v24 <- %1
     Call %6 <- string("std.fs.stat") [v24] (def=d21)
+    Drop v24
     Drop %1
     Load v25 <- %6
     Load v26 <- string("is_dir")
     LoadIndex %7 <- v25[v26]
+    Drop v25
+    Drop v26
     Load v28 <- %7
     Load v29 <- string("stat dir is_dir")
     Call v27 <- string("std.assert.assert") [v28, v29] (def=d1)
+    Drop v29
     Load v32 <- %0
     Call v31 <- string("std.fs.remove") [v32] (def=d5)
+    Drop v32
     Load v33 <- string("meta cleanup file")
     Call v30 <- string("std.assert.assert") [v31, v33] (def=d1)
+    Drop v33
     Drop %0
     Load v36 <- %1
     Call v35 <- string("std.fs.rmdir") [v36] (def=d8)
+    Drop v36
     Load v37 <- string("meta cleanup dir")
     Call v34 <- string("std.assert.assert") [v35, v37] (def=d1)
+    Drop v37
     Drop %1
     Drop %7
     Drop %6
@@ -639,46 +710,64 @@ module
     value v32: Generic { name: "String", args: [] } @block0
     Load v0 <- string("yx_fs_ops_")
     Call %0 <- string("std.fs.mkdtemp") [v0] (def=d22)
+    Drop v0
     Load v3 <- %0
     Call v2 <- string("std.fs.is_dir") [v3] (def=d7)
+    Drop v3
     Load v4 <- string("mkdtemp creates dir")
     Call v1 <- string("std.assert.assert") [v2, v4] (def=d1)
+    Drop v4
     Drop %0
     Load v5 <- string("yx_fs_ops_")
     Call %1 <- string("std.fs.tmpfile") [v5] (def=d23)
+    Drop v5
     Load v8 <- %1
     Call v7 <- string("std.fs.is_file") [v8] (def=d6)
+    Drop v8
     Load v9 <- string("tmpfile creates file")
     Call v6 <- string("std.assert.assert") [v7, v9] (def=d1)
+    Drop v9
     Drop %1
     Load v11 <- %1
     Load v12 <- string("scratch")
     Call v10 <- string("std.fs.write_file") [v11, v12] (def=d0)
+    Drop v11
+    Drop v12
     Drop %1
     Load v17 <- %1
     Call v15 <- string("std.fs.read_file") [v17] (def=d3)
+    Drop v17
     Load v16 <- string("scratch")
+    Drop v15
+    Drop v16
     Eq v14 <- v15, v16
     Load v18 <- string("tmpfile writable")
     Call v13 <- string("std.assert.assert") [v14, v18] (def=d1)
+    Drop v18
     Drop %1
     Call %2 <- string("std.fs.temp_dir") [] (def=d24)
     Load v23 <- %2
     Call v21 <- string("std.string.len") [v23] (def=d25)
+    Drop v23
     Load v22 <- int(0)
     Gt v20 <- v21, v22
     Load v24 <- string("temp_dir non-empty")
     Call v19 <- string("std.assert.assert") [v20, v24] (def=d1)
+    Drop v24
     Drop %2
     Load v27 <- %1
     Call v26 <- string("std.fs.remove") [v27] (def=d5)
+    Drop v27
     Load v28 <- string("remove temp file")
     Call v25 <- string("std.assert.assert") [v26, v28] (def=d1)
+    Drop v28
     Drop %1
     Load v31 <- %0
     Call v30 <- string("std.fs.rmdir") [v31] (def=d8)
+    Drop v31
     Load v32 <- string("rmdir temp dir")
     Call v29 <- string("std.assert.assert") [v30, v32] (def=d1)
+    Drop v32
     Drop %2
     Drop %0
     Drop %1
@@ -737,54 +826,86 @@ module
     value v47: Generic { name: "String", args: [] } @block0
     Load v4 <- string("dir/file.txt")
     Call v2 <- string("std.fs.path_basename") [v4] (def=d26)
+    Drop v4
     Load v3 <- string("file.txt")
+    Drop v2
+    Drop v3
     Eq v1 <- v2, v3
     Load v5 <- string("path_basename")
     Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
+    Drop v5
     Load v10 <- string("/")
     Call v8 <- string("std.fs.path_basename") [v10] (def=d26)
+    Drop v10
     Load v9 <- string("")
+    Drop v8
+    Drop v9
     Eq v7 <- v8, v9
     Load v11 <- string("path_basename no component")
     Call v6 <- string("std.assert.assert") [v7, v11] (def=d1)
+    Drop v11
     Load v16 <- string("dir/file.txt")
     Call v14 <- string("std.fs.path_dirname") [v16] (def=d27)
+    Drop v16
     Load v15 <- string("dir")
+    Drop v14
+    Drop v15
     Eq v13 <- v14, v15
     Load v17 <- string("path_dirname")
     Call v12 <- string("std.assert.assert") [v13, v17] (def=d1)
+    Drop v17
     Load v22 <- string("a.txt")
     Call v20 <- string("std.fs.path_dirname") [v22] (def=d27)
+    Drop v22
     Load v21 <- string("")
+    Drop v20
+    Drop v21
     Eq v19 <- v20, v21
     Load v23 <- string("path_dirname bare name")
     Call v18 <- string("std.assert.assert") [v19, v23] (def=d1)
+    Drop v23
     Load v28 <- string("a.tar.gz")
     Call v26 <- string("std.fs.path_extension") [v28] (def=d28)
+    Drop v28
     Load v27 <- string("gz")
+    Drop v26
+    Drop v27
     Eq v25 <- v26, v27
     Load v29 <- string("path_extension last")
     Call v24 <- string("std.assert.assert") [v25, v29] (def=d1)
+    Drop v29
     Load v34 <- string("noext")
     Call v32 <- string("std.fs.path_extension") [v34] (def=d28)
+    Drop v34
     Load v33 <- string("")
+    Drop v32
+    Drop v33
     Eq v31 <- v32, v33
     Load v35 <- string("path_extension none")
     Call v30 <- string("std.assert.assert") [v31, v35] (def=d1)
+    Drop v35
     Load v36 <- string("dir")
     Load v37 <- string("name.txt")
     Call %0 <- string("std.fs.path_join") [v36, v37] (def=d11)
+    Drop v36
+    Drop v37
     Load v40 <- %0
     Load v41 <- string("name.txt")
     Call v39 <- string("std.string.ends_with") [v40, v41] (def=d29)
+    Drop v40
+    Drop v41
     Load v42 <- string("path_join keeps rel")
     Call v38 <- string("std.assert.assert") [v39, v42] (def=d1)
+    Drop v42
     Drop %0
     Load v45 <- %0
     Load v46 <- string("dir")
     Call v44 <- string("std.string.starts_with") [v45, v46] (def=d30)
+    Drop v45
+    Drop v46
     Load v47 <- string("path_join keeps base")
     Call v43 <- string("std.assert.assert") [v44, v47] (def=d1)
+    Drop v47
     Drop %0
     Ret v43
   fn main() -> Void
@@ -814,6 +935,7 @@ module
     value v2: Generic { name: "String", args: [] } @block0
     Load v2 <- %0
     Call v1 <- string("std.fs.path_basename") [v2] (def=d26)
+    Drop v2
     Ret v1
   init (locals=0)
     Call %0 <- string("main") [] (def=d38)

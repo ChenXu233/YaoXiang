@@ -27,12 +27,14 @@ module
     Call %0 <- string("Point") [v0, v1] (def=d0)
     Load v2 <- %0
     Call %1 <- string("Point.get_x") [v2] (def=d1)
+    Drop v2
     Drop %0
     Load v5 <- %1
     Load v6 <- float(4613937818241073152)
     Eq v4 <- v5, v6
     Load v7 <- string("get_x should be 3.0")
     Call v3 <- string("std.assert.assert") [v4, v7] (def=d2)
+    Drop v7
     Drop %0
     Drop %1
     Ret v3

@@ -24,6 +24,7 @@ module
     Load v1 <- %1
     Load v2 <- %0
     CallDyn v0 <- v2 [v1]
+    Drop v2
     Ret v0
   fn main() -> Void
     slot[0] h : Int(64) @depth1
@@ -74,44 +75,54 @@ module
     Load v4 <- int(5)
     Load v5 <- %0
     CallDyn v2 <- v5 [v4]
+    Drop v5
     Load v3 <- int(10)
     Eq v1 <- v2, v3
     Load v6 <- string("alias call")
     Call v0 <- string("std.assert.assert") [v1, v6] (def=d1)
+    Drop v6
     Load v11 <- int(6)
     Call v9 <- string("double") [v11] (def=d0)
     Load v10 <- int(12)
     Eq v8 <- v9, v10
     Load v12 <- string("direct call after alias")
     Call v7 <- string("std.assert.assert") [v8, v12] (def=d1)
+    Drop v12
     MakeClosure v17 <- double env=[] (def=d0)
     Load v18 <- int(3)
     Call v15 <- string("apply") [v17, v18] (def=d2)
+    Drop v17
     Load v16 <- int(6)
     Eq v14 <- v15, v16
     Load v19 <- string("passed as argument")
     Call v13 <- string("std.assert.assert") [v14, v19] (def=d1)
+    Drop v19
     Load v24 <- int(7)
     Call v22 <- string("double") [v24] (def=d0)
     Load v23 <- int(14)
     Eq v21 <- v22, v23
     Load v25 <- string("direct call after passing")
     Call v20 <- string("std.assert.assert") [v21, v25] (def=d1)
+    Drop v25
     MakeClosure %1 <- double env=[] (def=d0)
     MakeClosure %2 <- double env=[] (def=d0)
     Load v32 <- int(1)
     Load v33 <- %1
     CallDyn v30 <- v33 [v32]
+    Drop v33
     Load v34 <- int(2)
     Load v35 <- %2
     CallDyn v31 <- v35 [v34]
+    Drop v35
     Add v28 <- v30, v31
     Load v29 <- int(6)
     Eq v27 <- v28, v29
     Load v36 <- string("two aliases reuse same function")
     Call v26 <- string("std.assert.assert") [v27, v36] (def=d1)
+    Drop v36
     Load v38 <- string("fn value reuse ok")
     Call v37 <- string("std.io.println") [v38] (def=d3)
+    Drop v38
     Drop %1
     Drop %2
     Drop %0

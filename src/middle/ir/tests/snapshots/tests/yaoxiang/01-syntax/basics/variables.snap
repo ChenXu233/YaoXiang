@@ -36,20 +36,26 @@ module
     Eq v1 <- v2, v3
     Load v4 <- string("x == 42")
     Call v0 <- string("std.assert.assert") [v1, v4] (def=d0)
+    Drop v4
     Load %1 <- string("YaoXiang")
     Load v7 <- %1
     Load v8 <- string("YaoXiang")
     Eq v6 <- v7, v8
+    Drop v7
+    Drop v8
     Load v9 <- string("name == YaoXiang")
     Call v5 <- string("std.assert.assert") [v6, v9] (def=d0)
+    Drop v9
     Load %2 <- bool(true)
     Load v11 <- %2
     Load v12 <- string("flag is true")
     Call v10 <- string("std.assert.assert") [v11, v12] (def=d0)
+    Drop v12
     Load %3 <- float(4614253070214989087)
     Load v14 <- bool(true)
     Load v15 <- string("pi assigned")
     Call v13 <- string("std.assert.assert") [v14, v15] (def=d0)
+    Drop v15
     Load %4 <- int(0)
     Load v16 <- %4
     Load v17 <- int(1)
@@ -59,6 +65,7 @@ module
     Eq v19 <- v20, v21
     Load v22 <- string("counter == 1")
     Call v18 <- string("std.assert.assert") [v19, v22] (def=d0)
+    Drop v22
     Drop %4
     Drop %2
     Drop %1

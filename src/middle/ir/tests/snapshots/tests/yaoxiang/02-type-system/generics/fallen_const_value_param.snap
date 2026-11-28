@@ -24,6 +24,7 @@ module
     Eq v2 <- v3, v4
     Load v5 <- string("g(99) should return 42")
     Call v1 <- string("std.assert.assert") [v2, v5] (def=d1)
+    Drop v5
     Drop %0
     Ret v1
   init (locals=0)

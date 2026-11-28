@@ -16,6 +16,7 @@ module
     Load v3 <- bool(true)
     Load v4 <- string("Point struct created successfully")
     Call v2 <- string("std.assert.assert") [v3, v4] (def=d1)
+    Drop v4
     Drop %0
     Ret v2
   init (locals=0)

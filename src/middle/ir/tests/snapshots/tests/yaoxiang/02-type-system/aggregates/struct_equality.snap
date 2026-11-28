@@ -112,21 +112,30 @@ module
     Load v6 <- %0
     Load v7 <- %1
     Eq v5 <- v6, v7
+    Drop v6
+    Drop v7
     Load v8 <- string("Point(1,2) == Point(1,2)")
     Call v4 <- string("std.assert.assert") [v5, v8] (def=d1)
+    Drop v8
     Load v9 <- float(4607182418800017408)
     Load v10 <- float(4613937818241073152)
     Call %2 <- string("Point") [v9, v10] (def=d0)
     Load v13 <- %0
     Load v14 <- %2
     Ne v12 <- v13, v14
+    Drop v13
+    Drop v14
     Load v15 <- string("Point(1,2) != Point(1,3)")
     Call v11 <- string("std.assert.assert") [v12, v15] (def=d1)
+    Drop v15
     Load v18 <- %0
     Load v19 <- %0
     Eq v17 <- v18, v19
+    Drop v18
+    Drop v19
     Load v20 <- string("identity equal")
     Call v16 <- string("std.assert.assert") [v17, v20] (def=d1)
+    Drop v20
     Load v22 <- float(0)
     Load v23 <- float(0)
     Call v21 <- string("Point") [v22, v23] (def=d0)
@@ -134,6 +143,8 @@ module
     Load v26 <- float(4607182418800017408)
     Call v24 <- string("Point") [v25, v26] (def=d0)
     Call %3 <- string("Line") [v21, v24] (def=d2)
+    Drop v21
+    Drop v24
     Load v28 <- float(0)
     Load v29 <- float(0)
     Call v27 <- string("Point") [v28, v29] (def=d0)
@@ -141,11 +152,16 @@ module
     Load v32 <- float(4607182418800017408)
     Call v30 <- string("Point") [v31, v32] (def=d0)
     Call %4 <- string("Line") [v27, v30] (def=d2)
+    Drop v27
+    Drop v30
     Load v35 <- %3
     Load v36 <- %4
     Eq v34 <- v35, v36
+    Drop v35
+    Drop v36
     Load v37 <- string("nested struct equality")
     Call v33 <- string("std.assert.assert") [v34, v37] (def=d1)
+    Drop v37
     Load v38 <- float(4607182418800017408)
     Load v39 <- float(4611686018427387904)
     Load v40 <- float(4613937818241073152)
@@ -157,35 +173,46 @@ module
     Load v46 <- %5
     Load v47 <- %6
     Call v45 <- string("Vec3.equal") [v46, v47] (def=d4)
+    Drop v46
+    Drop v47
     Load v48 <- string("explicit equal override compares x only")
     Call v44 <- string("std.assert.assert") [v45, v48] (def=d1)
+    Drop v48
     AllocArray %7 size=int(2), elem=int(1)
     Load v50 <- float(4607182418800017408)
     Load v51 <- float(4611686018427387904)
     Call v49 <- string("Point") [v50, v51] (def=d0)
     Load v52 <- int(0)
     StoreIndex %7[v52] <- v49
+    Drop v49
     Load v54 <- float(4613937818241073152)
     Load v55 <- float(4616189618054758400)
     Call v53 <- string("Point") [v54, v55] (def=d0)
     Load v56 <- int(1)
     StoreIndex %7[v56] <- v53
+    Drop v53
     Load v59 <- %7
     Load v61 <- float(4613937818241073152)
     Load v62 <- float(4616189618054758400)
     Call v60 <- string("Point") [v61, v62] (def=d0)
     Call v58 <- string("std.list.contains") [v59, v60] (def=d5)
+    Drop v59
+    Drop v60
     Load v63 <- string("contains finds struct")
     Call v57 <- string("std.assert.assert") [v58, v63] (def=d1)
+    Drop v63
     Drop %7
     Load v67 <- %7
     Load v69 <- float(4621256167635550208)
     Load v70 <- float(4621256167635550208)
     Call v68 <- string("Point") [v69, v70] (def=d0)
     Call v66 <- string("std.list.contains") [v67, v68] (def=d5)
+    Drop v67
+    Drop v68
     Not v65 <- v66
     Load v71 <- string("contains rejects missing")
     Call v64 <- string("std.assert.assert") [v65, v71] (def=d1)
+    Drop v71
     Drop %0
     Drop %1
     Drop %2

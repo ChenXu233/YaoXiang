@@ -15,9 +15,12 @@ module
     Load v2 <- string("b")
     Load v3 <- int(2)
     NewDict %0 <- keys=[v0, v2] values=[v1, v3]
+    Drop v0
+    Drop v2
     Load v5 <- bool(true)
     Load v6 <- string("dict literal created successfully")
     Call v4 <- string("std.assert.assert") [v5, v6] (def=d0)
+    Drop v6
     Drop %0
     Ret v4
   init (locals=0)

@@ -47,23 +47,28 @@ module
     Eq v1 <- v2, v3
     Load v4 <- string("顶层块值应为 42")
     Call v0 <- string("std.assert.assert") [v1, v4] (def=d0)
+    Drop v4
     Load v7 <- @1
     Load v8 <- int(10)
     Eq v6 <- v7, v8
     Load v9 <- string("块内中间语句作用域应正确")
     Call v5 <- string("std.assert.assert") [v6, v9] (def=d0)
+    Drop v9
     Load v12 <- @2
     Load v13 <- int(42)
     Eq v11 <- v12, v13
     Load v14 <- string("顶层调用初始化应运行时求值")
     Call v10 <- string("std.assert.assert") [v11, v14] (def=d0)
+    Drop v14
     Load v17 <- @3
     Load v18 <- int(3)
     Eq v16 <- v17, v18
     Load v19 <- string("常量折叠路径不应回归")
     Call v15 <- string("std.assert.assert") [v16, v19] (def=d0)
+    Drop v19
     Load v21 <- string("top_level_binding ok")
     Call v20 <- string("std.io.println") [v21] (def=d1)
+    Drop v21
     Ret v20
   init (locals=3)
     islot[2] inner : Int(64) @depth1

@@ -39,17 +39,21 @@ module
     Call %0 <- string("Point") [v0, v1] (def=d0)
     Load v2 <- %0
     Call %1 <- string("PointView") [v2] (def=d1)
+    Drop v2
     Load v3 <- %1
     Call %2 <- string("get_x") [v3] (def=d2)
+    Drop v3
     Drop %1
     Load v5 <- bool(true)
     Load v6 <- string("x value from view")
     Call v4 <- string("std.assert.assert") [v5, v6] (def=d3)
+    Drop v6
     Load v8 <- %2
     Call v7 <- string("std.io.println") [v8] (def=d4)
     Load v10 <- bool(true)
     Load v11 <- string("all passed")
     Call v9 <- string("std.assert.assert") [v10, v11] (def=d3)
+    Drop v11
     Drop %0
     Drop %1
     Drop %2

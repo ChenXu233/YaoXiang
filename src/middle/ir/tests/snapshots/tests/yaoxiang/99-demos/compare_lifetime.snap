@@ -29,20 +29,25 @@ module
     Call %0 <- string("Point") [v0, v1] (def=d0)
     Load v2 <- %0
     Move %1 <- v2
+    Drop v2
     Load v3 <- %0
     Load v4 <- %1
     Call %2 <- string("Window") [v3, v4] (def=d1)
+    Drop v3
     Drop %0
     Load v6 <- bool(true)
     Load v7 <- string("view x accessed")
     Call v5 <- string("std.assert.assert") [v6, v7] (def=d2)
+    Drop v7
     Load v11 <- %2
     LoadField v10 <- v11.1
+    Drop v11
     LoadField v9 <- v10.0
     Call v8 <- string("std.io.println") [v9] (def=d3)
     Load v13 <- bool(true)
     Load v14 <- string("all passed")
     Call v12 <- string("std.assert.assert") [v13, v14] (def=d2)
+    Drop v14
     Drop %0
     Drop %1
     Drop %2

@@ -66,41 +66,49 @@ module
     Load v2 <- int(42)
     Call v1 <- string("f") [v2] (def=d2)
     CallDyn %2 <- v1 [v0]
+    Drop v1
     Load v3 <- int(42)
     Load v5 <- %0
     Call v4 <- string("f") [v5] (def=d2)
     CallDyn %3 <- v4 [v3]
+    Drop v4
     Load v6 <- int(42)
     Load v9 <- %1
     Load v10 <- int(1)
     Sub v8 <- v9, v10
     Call v7 <- string("f") [v8] (def=d2)
     CallDyn %4 <- v7 [v6]
+    Drop v7
     Load v11 <- int(42)
     Load v13 <- int(3)
     Load v14 <- int(42)
     Call v12 <- string("g") [v13, v14] (def=d3)
     CallDyn %5 <- v12 [v11]
+    Drop v12
     Load v17 <- %2
     Load v18 <- int(42)
     Eq v16 <- v17, v18
     Load v19 <- string("literal evidence should return N")
     Call v15 <- string("std.assert.assert") [v16, v19] (def=d4)
+    Drop v19
     Load v22 <- %3
     Load v23 <- int(42)
     Eq v21 <- v22, v23
     Load v24 <- string("value-env evidence should return N")
     Call v20 <- string("std.assert.assert") [v21, v24] (def=d4)
+    Drop v24
     Load v27 <- %4
     Load v28 <- int(42)
     Eq v26 <- v27, v28
     Load v29 <- string("single-value expression evidence should return N")
     Call v25 <- string("std.assert.assert") [v26, v29] (def=d4)
+    Drop v29
     Load v32 <- %5
     Load v33 <- int(42)
     Eq v31 <- v32, v33
     Load v34 <- string("mixed declaration keeps second-layer q=0 evidence")
     Call v30 <- string("std.assert.assert") [v31, v34] (def=d4)
+    Drop v34
     Drop %2
     Drop %3
     Drop %4

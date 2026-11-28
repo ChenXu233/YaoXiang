@@ -37,33 +37,45 @@ module
     Load v0 <- int(3)
     Load v1 <- string("default")
     Call %0 <- string("Config") [v0, v1] (def=d0)
+    Drop v1
     Load v6 <- %0
     LoadField v4 <- v6.0
+    Drop v6
     Load v5 <- int(3)
     Eq v3 <- v4, v5
     Load v7 <- string("默认值字段应初始化为 3")
     Call v2 <- string("std.assert.assert") [v3, v7] (def=d1)
+    Drop v7
     Load v12 <- %0
     LoadField v10 <- v12.1
+    Drop v12
     Load v11 <- string("default")
+    Drop v11
     Eq v9 <- v10, v11
     Load v13 <- string("默认值字段应初始化为 default")
     Call v8 <- string("std.assert.assert") [v9, v13] (def=d1)
+    Drop v13
     Load v14 <- int(7)
     Load v15 <- string("custom")
     Call %1 <- string("Config") [v14, v15] (def=d0)
+    Drop v15
     Load v20 <- %1
     LoadField v18 <- v20.0
+    Drop v20
     Load v19 <- int(7)
     Eq v17 <- v18, v19
     Load v21 <- string("显式实参应覆盖默认值")
     Call v16 <- string("std.assert.assert") [v17, v21] (def=d1)
+    Drop v21
     Load v26 <- %1
     LoadField v24 <- v26.1
+    Drop v26
     Load v25 <- string("custom")
+    Drop v25
     Eq v23 <- v24, v25
     Load v27 <- string("显式实参应覆盖默认值")
     Call v22 <- string("std.assert.assert") [v23, v27] (def=d1)
+    Drop v27
     Drop %1
     Drop %0
     Ret v22

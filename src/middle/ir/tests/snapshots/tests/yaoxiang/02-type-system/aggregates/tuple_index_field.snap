@@ -104,59 +104,78 @@ module
     NewTuple %0 <- [v0, v1]
     Load v6 <- %0
     LoadField v4 <- v6.0
+    Drop v6
     Load v5 <- int(10)
     Eq v3 <- v4, v5
     Load v7 <- string("t.0 reads first slot")
     Call v2 <- string("std.assert.assert") [v3, v7] (def=d0)
+    Drop v7
     Load v12 <- %0
     LoadField v10 <- v12.1
+    Drop v12
     Load v11 <- int(20)
     Eq v9 <- v10, v11
     Load v13 <- string("t.1 reads second slot")
     Call v8 <- string("std.assert.assert") [v9, v13] (def=d0)
+    Drop v13
     Load v14 <- int(10)
     Load v15 <- int(20)
     NewTuple %1 <- [v14, v15]
     Load v20 <- %1
     Call v18 <- string("first_of") [v20] (def=d1)
+    Drop v20
     Load v19 <- int(10)
     Eq v17 <- v18, v19
     Load v21 <- string("tuple index through function param")
     Call v16 <- string("std.assert.assert") [v17, v21] (def=d0)
+    Drop v21
     Load v22 <- int(10)
     Load v23 <- int(20)
     NewTuple %2 <- [v22, v23]
     Load v28 <- %2
     Call v26 <- string("second_of") [v28] (def=d2)
+    Drop v28
     Load v27 <- int(20)
     Eq v25 <- v26, v27
     Load v29 <- string("second slot through function param")
     Call v24 <- string("std.assert.assert") [v25, v29] (def=d0)
+    Drop v29
     Load v34 <- %0
     LoadField v32 <- v34.1
+    Drop v34
     Load v33 <- int(30)
     Lt v31 <- v32, v33
     Load v35 <- string("operator directly after tuple index")
     Call v30 <- string("std.assert.assert") [v31, v35] (def=d0)
+    Drop v35
     Load v42 <- %0
     LoadField v40 <- v42.0
+    Drop v42
     Load v43 <- %0
     LoadField v41 <- v43.1
+    Drop v43
     Add v38 <- v40, v41
     Load v39 <- int(30)
     Eq v37 <- v38, v39
     Load v44 <- string("tuple indices in arithmetic")
     Call v36 <- string("std.assert.assert") [v37, v44] (def=d0)
+    Drop v44
     Load v45 <- int(1)
     Load v46 <- string("two")
     NewTuple %3 <- [v45, v46]
+    Drop v46
     Load v52 <- %3
     Move v51 <- v52
+    Drop v52
+    Drop v51
     Call v49 <- string("second_by_ref") [v51] (def=d3)
+    Drop v49
+    Drop v50
     Load v50 <- string("two")
     Eq v48 <- v49, v50
     Load v53 <- string("tuple index on ref receiver")
     Call v47 <- string("std.assert.assert") [v48, v53] (def=d0)
+    Drop v53
     Drop %3
     Load %4 <- float(4602678819172646912)
     Load v56 <- %4
@@ -164,6 +183,7 @@ module
     Eq v55 <- v56, v57
     Load v58 <- string("leading-dot float still works")
     Call v54 <- string("std.assert.assert") [v55, v58] (def=d0)
+    Drop v58
     Drop %4
     Drop %3
     Drop %0

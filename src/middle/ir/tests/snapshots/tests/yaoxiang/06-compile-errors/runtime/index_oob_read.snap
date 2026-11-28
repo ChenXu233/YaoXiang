@@ -26,6 +26,7 @@ module
     Load v8 <- %0
     Load v9 <- int(5)
     LoadIndex v7 <- v8[v9]
+    Drop v8
     Call v6 <- string("std.io.println") [v7] (def=d0)
     Drop %0
     Ret v6

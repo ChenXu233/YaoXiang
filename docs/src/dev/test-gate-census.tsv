@@ -1741,6 +1741,8 @@ test_update_ir_snapshots_via_env_guard	src/middle/ir/tests/snapshot.rs	assertx3 
 test_span_stripped_makes_identical_output	src/middle/ir/tests/snapshot.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_normalize_renders_phi_incoming_sorted_by_predecessor	src/middle/ir/tests/snapshot.rs	assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_type_decl_field_quantity_is_none_from_definition	src/middle/ir/tests/type_decl_quantity.rs	assertx2 is_nonex1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
+test_value_drops_follow_last_use_in_straight_line_function	src/middle/ir/tests/value_release.rs	assertx4 expectx3	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_value_drops_absent_for_multi_block_function	src/middle/ir/tests/value_release.rs	assert_eqx1 matchesx1 assertx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_values_production_type_block_and_index	src/middle/ir/tests/values.rs	assert_eqx2 matchesx2 assertx5 is_nonex1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_normalize_renders_values_table_both_shapes	src/middle/ir/tests/values.rs	assertx3	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_jump_target_in_range_passes	src/middle/ir/tests/verify.rs	assertx1 is_okx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
@@ -1855,6 +1857,7 @@ test_function_files_pruned_for_deleted_function	src/middle/passes/dce/tests/mod.
 test_dce_is_idempotent	src/middle/passes/dce/tests/mod.rs	assert_eqx1 assertx1 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_post_mono_dce_removes_mono_retained_originals_and_keeps_instances	src/middle/passes/dce/tests/mod.rs	assertx11 is_okx2 expectx4 helperx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_orphan_shared_layer_without_site_is_dominance_red	src/middle/passes/dce/tests/mod.rs	assertx2 is_errx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_dce_keeps_value_drop_in_live_function_body	src/middle/passes/dce/tests/mod.rs	assert_eqx1 matchesx2 assertx2 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_dce_preserves_values_and_value_slots_of_live_functions	src/middle/passes/dce/tests/mod.rs	assert_eqx5 matchesx1 assertx1 expectx2	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
 test_specialization_key_deduplication	src/middle/passes/mono/tests/instance.rs	assert_eqx1 assert_nex1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_generic_function_id_name_accessor	src/middle/passes/mono/tests/instance.rs	assert_eqx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核

@@ -13,6 +13,8 @@ module
     Load v4 <- int(1)
     Neg v3 <- v4
     StringGetChar v1 <- v2[v3]
+    Drop v2
+    Drop v1
     Call v0 <- string("std.io.println") [v1] (def=d0)
     Drop %0
     Ret v0

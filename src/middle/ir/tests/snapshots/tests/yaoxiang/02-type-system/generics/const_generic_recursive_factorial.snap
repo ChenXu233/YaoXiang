@@ -23,11 +23,13 @@ module
     Load v2 <- int(5)
     Call v1 <- string("factorial") [v2] (def=d1)
     CallDyn %0 <- v1 [v0]
+    Drop v1
     Load v5 <- %0
     Load v6 <- int(120)
     Eq v4 <- v5, v6
     Load v7 <- string("factorial(5)(5) should be 120")
     Call v3 <- string("std.assert.assert") [v4, v7] (def=d2)
+    Drop v7
     Drop %0
     Ret v3
   fn __factorial_l0(TypeRef("N")) -> Int(64)

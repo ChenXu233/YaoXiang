@@ -57,50 +57,67 @@ module
     Call %0 <- string("Pair") [v0, v1] (def=d0)
     Load v6 <- %0
     LoadField v4 <- v6.0
+    Drop v6
     Load v5 <- int(1)
     Eq v3 <- v4, v5
     Load v7 <- string("Pair(1, 2) first == 1")
     Call v2 <- string("std.assert.assert") [v3, v7] (def=d1)
+    Drop v7
     Load v12 <- %0
     LoadField v10 <- v12.1
+    Drop v12
     Load v11 <- int(2)
     Eq v9 <- v10, v11
     Load v13 <- string("Pair(1, 2) second == 2")
     Call v8 <- string("std.assert.assert") [v9, v13] (def=d1)
+    Drop v13
     Load v14 <- string("a")
     Load v15 <- string("b")
     Call %1 <- string("Pair") [v14, v15] (def=d0)
+    Drop v14
+    Drop v15
     Load v20 <- %1
     LoadField v18 <- v20.0
+    Drop v20
     Load v19 <- string("a")
+    Drop v19
     Eq v17 <- v18, v19
     Load v21 <- string("Pair(String)(a, b) first == a")
     Call v16 <- string("std.assert.assert") [v17, v21] (def=d1)
+    Drop v21
     Load v26 <- %1
     LoadField v24 <- v26.1
+    Drop v26
     Load v25 <- string("b")
+    Drop v25
     Eq v23 <- v24, v25
     Load v27 <- string("Pair(String)(a, b) second == b")
     Call v22 <- string("std.assert.assert") [v23, v27] (def=d1)
+    Drop v27
     Load v28 <- int(0)
     Load v29 <- int(0)
     Call %2 <- string("Pair") [v28, v29] (def=d0)
     Load v34 <- %2
     LoadField v32 <- v34.0
+    Drop v34
     Load v33 <- int(0)
     Eq v31 <- v32, v33
     Load v35 <- string("Pair(Int)() first == 0")
     Call v30 <- string("std.assert.assert") [v31, v35] (def=d1)
+    Drop v35
     Load v36 <- %2
     Load v37 <- int(7)
     StoreField v36.0 <- v37 (type=None, name=Some("first"))
+    Drop v36
     Drop %2
     Load v42 <- %2
     LoadField v40 <- v42.0
+    Drop v42
     Load v41 <- int(7)
     Eq v39 <- v40, v41
     Load v43 <- string("Pair(Int)() first = 7 after assign")
     Call v38 <- string("std.assert.assert") [v39, v43] (def=d1)
+    Drop v43
     Drop %2
     Drop %0
     Drop %1

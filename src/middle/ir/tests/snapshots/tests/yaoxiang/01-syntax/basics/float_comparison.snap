@@ -64,58 +64,69 @@ module
     Eq v1 <- v2, v3
     Load v4 <- string("1.0 == 1.0 should be true")
     Call v0 <- string("std.assert.assert") [v1, v4] (def=d0)
+    Drop v4
     Load v7 <- float(4607182418800017408)
     Load v8 <- float(4611686018427387904)
     Ne v6 <- v7, v8
     Load v9 <- string("1.0 != 2.0 should be true")
     Call v5 <- string("std.assert.assert") [v6, v9] (def=d0)
+    Drop v9
     Load v12 <- float(4607182418800017408)
     Load v13 <- float(4611686018427387904)
     Lt v11 <- v12, v13
     Load v14 <- string("1.0 < 2.0 should be true")
     Call v10 <- string("std.assert.assert") [v11, v14] (def=d0)
+    Drop v14
     Load v17 <- float(4607182418800017408)
     Load v18 <- float(4607182418800017408)
     Le v16 <- v17, v18
     Load v19 <- string("1.0 <= 1.0 should be true")
     Call v15 <- string("std.assert.assert") [v16, v19] (def=d0)
+    Drop v19
     Load v22 <- float(4611686018427387904)
     Load v23 <- float(4607182418800017408)
     Gt v21 <- v22, v23
     Load v24 <- string("2.0 > 1.0 should be true")
     Call v20 <- string("std.assert.assert") [v21, v24] (def=d0)
+    Drop v24
     Load v27 <- float(4607182418800017408)
     Load v28 <- float(4607182418800017408)
     Ge v26 <- v27, v28
     Load v29 <- string("1.0 >= 1.0 should be true")
     Call v25 <- string("std.assert.assert") [v26, v29] (def=d0)
+    Drop v29
     Load v32 <- float(0)
     Load v33 <- float(0)
     Eq v31 <- v32, v33
     Load v34 <- string("0.0 == 0.0 should be true")
     Call v30 <- string("std.assert.assert") [v31, v34] (def=d0)
+    Drop v34
     Load v39 <- float(4607182418800017408)
     Neg v37 <- v39
     Load v38 <- float(0)
     Lt v36 <- v37, v38
     Load v40 <- string("-1.0 < 0.0 should be true")
     Call v35 <- string("std.assert.assert") [v36, v40] (def=d0)
+    Drop v40
     Load v45 <- float(4607182418800017408)
     Neg v43 <- v45
     Load v44 <- float(4607182418800017408)
     Ne v42 <- v43, v44
     Load v46 <- string("-1.0 != 1.0 should be true")
     Call v41 <- string("std.assert.assert") [v42, v46] (def=d0)
+    Drop v46
     Load v49 <- float(4614253070214989087)
     Load v50 <- float(4613937818241073152)
     Gt v48 <- v49, v50
     Load v51 <- string("3.14 > 3.0 should be true")
     Call v47 <- string("std.assert.assert") [v48, v51] (def=d0)
+    Drop v51
     Load v54 <- float(4613937818241073152)
     Load v55 <- float(4614253070214989087)
     Lt v53 <- v54, v55
     Load v56 <- string("3.0 < 3.14 should be true")
     Call v52 <- string("std.assert.assert") [v53, v56] (def=d0)
+    Drop v56
     Ret v52
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)

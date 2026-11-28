@@ -70,37 +70,49 @@ module
     Call %1 <- string("check") [v1] (def=d0)
     Load v7 <- %0
     Call v5 <- string("std.result.Result.is_failure") [v7] (def=_)
+    Drop v7
     Load v6 <- bool(false)
     Eq v4 <- v5, v6
     Load v8 <- string("ok is not failure")
     Call v3 <- string("std.assert.assert") [v4, v8] (def=d1)
+    Drop v8
     Load v13 <- %1
     Call v11 <- string("std.result.Result.is_failure") [v13] (def=_)
+    Drop v13
     Load v12 <- bool(true)
     Eq v10 <- v11, v12
     Load v14 <- string("err is failure")
     Call v9 <- string("std.assert.assert") [v10, v14] (def=d1)
+    Drop v14
     Load v15 <- %0
     Call %2 <- string("std.result.Result.success") [v15] (def=_)
+    Drop v15
     Load v18 <- %2
     Load v19 <- int(5)
     Eq v17 <- v18, v19
     Load v20 <- string("success extracts payload")
     Call v16 <- string("std.assert.assert") [v17, v20] (def=d1)
+    Drop v20
     Load v21 <- %1
     Call %3 <- string("std.result.Result.residual") [v21] (def=_)
+    Drop v21
     Load v24 <- %3
     Load v25 <- string("non-positive")
     Eq v23 <- v24, v25
+    Drop v25
     Load v26 <- string("residual extracts error")
     Call v22 <- string("std.assert.assert") [v23, v26] (def=d1)
+    Drop v26
     Load v27 <- %0
     Load v28 <- string("fresh")
     Call %4 <- string("std.result.Result.from_error") [v27, v28] (def=_)
+    Drop v27
+    Drop v28
     Load v31 <- %4
     Call v30 <- string("std.result.Result.is_failure") [v31] (def=_)
     Load v32 <- string("from_error rebuilds as failure")
     Call v29 <- string("std.assert.assert") [v30, v32] (def=d1)
+    Drop v32
     Drop %3
     Drop %1
     Drop %0

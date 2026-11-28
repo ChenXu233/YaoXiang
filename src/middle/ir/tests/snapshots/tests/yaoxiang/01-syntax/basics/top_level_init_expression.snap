@@ -64,36 +64,45 @@ module
     Eq v1 <- v2, v3
     Load v4 <- string("顶层字面量绑定 == 42")
     Call v0 <- string("std.assert.assert") [v1, v4] (def=d0)
+    Drop v4
     Load v7 <- @1
     Load v8 <- int(6)
     Eq v6 <- v7, v8
     Load v9 <- string("顶层算术绑定 == 6（#261）")
     Call v5 <- string("std.assert.assert") [v6, v9] (def=d0)
+    Drop v9
     Load v12 <- @2
     Load v13 <- string("hello, world")
     Eq v11 <- v12, v13
+    Drop v12
+    Drop v13
     Load v14 <- string("顶层字符串拼接 == hello, world")
     Call v10 <- string("std.assert.assert") [v11, v14] (def=d0)
+    Drop v14
     Load v17 <- @3
     Load v18 <- float(4614253070214989087)
     Eq v16 <- v17, v18
     Load v19 <- string("顶层类型标注绑定 == 3.14")
     Call v15 <- string("std.assert.assert") [v16, v19] (def=d0)
+    Drop v19
     Load v22 <- @4
     Load v23 <- int(12)
     Eq v21 <- v22, v23
     Load v24 <- string("跨顶层 binding 引用（T2 运行时初始化）")
     Call v20 <- string("std.assert.assert") [v21, v24] (def=d0)
+    Drop v24
     Load v27 <- @5
     Load v28 <- int(43)
     Eq v26 <- v27, v28
     Load v29 <- string("顶层调用初始化（T2 运行时求值）")
     Call v25 <- string("std.assert.assert") [v26, v29] (def=d0)
+    Drop v29
     Load v32 <- @6
     Load v33 <- int(21)
     Eq v31 <- v32, v33
     Load v34 <- string("前向引用（T3 拓扑排序：fwd_base 先初始化）")
     Call v30 <- string("std.assert.assert") [v31, v34] (def=d0)
+    Drop v34
     Ret v30
   init (locals=0)
     Load %0 <- int(42)

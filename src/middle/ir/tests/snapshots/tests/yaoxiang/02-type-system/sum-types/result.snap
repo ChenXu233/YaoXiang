@@ -57,64 +57,83 @@ module
     value v49: Generic { name: "String", args: [] } @block0
     Load v0 <- string("42")
     Call %0 <- string("std.string.parse_int") [v0] (def=d0)
+    Drop v0
     Load v3 <- %0
     Call v2 <- string("std.result.is_ok") [v3] (def=d1)
+    Drop v3
     Load v4 <- string("ok: is_ok")
     Call v1 <- string("std.assert.assert") [v2, v4] (def=d2)
+    Drop v4
     Drop %0
     Load v8 <- %0
     Call v7 <- string("std.result.is_err") [v8] (def=d3)
+    Drop v8
     Not v6 <- v7
     Load v9 <- string("ok: not is_err")
     Call v5 <- string("std.assert.assert") [v6, v9] (def=d2)
+    Drop v9
     Drop %0
     Load v14 <- %0
     Call v12 <- string("std.result.unwrap") [v14] (def=d4)
+    Drop v14
     Load v13 <- int(42)
     Eq v11 <- v12, v13
     Load v15 <- string("ok: unwrap == 42")
     Call v10 <- string("std.assert.assert") [v11, v15] (def=d2)
+    Drop v15
     Drop %0
     Load v20 <- %0
     Load v22 <- int(1)
     Neg v21 <- v22
     Call v18 <- string("std.result.unwrap_or") [v20, v21] (def=d5)
+    Drop v20
     Load v19 <- int(42)
     Eq v17 <- v18, v19
     Load v23 <- string("ok: unwrap_or == 42")
     Call v16 <- string("std.assert.assert") [v17, v23] (def=d2)
+    Drop v23
     Drop %0
     Load v24 <- string("oops")
     Call %1 <- string("std.string.parse_int") [v24] (def=d0)
+    Drop v24
     Load v27 <- %1
     Call v26 <- string("std.result.is_err") [v27] (def=d3)
+    Drop v27
     Load v28 <- string("err: is_err")
     Call v25 <- string("std.assert.assert") [v26, v28] (def=d2)
+    Drop v28
     Drop %1
     Load v32 <- %1
     Call v31 <- string("std.result.is_ok") [v32] (def=d1)
+    Drop v32
     Not v30 <- v31
     Load v33 <- string("err: not is_ok")
     Call v29 <- string("std.assert.assert") [v30, v33] (def=d2)
+    Drop v33
     Drop %1
     Load v38 <- %1
     Load v40 <- int(1)
     Neg v39 <- v40
     Call v36 <- string("std.result.unwrap_or") [v38, v39] (def=d5)
+    Drop v38
     Load v41 <- int(1)
     Neg v37 <- v41
     Eq v35 <- v36, v37
     Load v42 <- string("err: unwrap_or default")
     Call v34 <- string("std.assert.assert") [v35, v42] (def=d2)
+    Drop v42
     Drop %1
     Load v43 <- string("7")
     Call %2 <- string("std.string.parse_int") [v43] (def=d0)
+    Drop v43
     Load v48 <- %2
     Call v46 <- string("std.result.unwrap") [v48] (def=d4)
+    Drop v48
     Load v47 <- int(7)
     Eq v45 <- v46, v47
     Load v49 <- string("second instance unwrap == 7")
     Call v44 <- string("std.assert.assert") [v45, v49] (def=d2)
+    Drop v49
     Drop %1
     Drop %0
     Drop %2

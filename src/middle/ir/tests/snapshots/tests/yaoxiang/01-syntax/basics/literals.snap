@@ -38,6 +38,7 @@ module
     Eq v1 <- v2, v3
     Load v4 <- string("int 42")
     Call v0 <- string("std.assert.assert") [v1, v4] (def=d0)
+    Drop v4
     Load v9 <- int(7)
     Neg v7 <- v9
     Load v10 <- int(7)
@@ -45,25 +46,34 @@ module
     Eq v6 <- v7, v8
     Load v11 <- string("int -7")
     Call v5 <- string("std.assert.assert") [v6, v11] (def=d0)
+    Drop v11
     Load %0 <- float(4614253070214989087)
     Load v12 <- float(4602678819172646912)
     Neg %1 <- v12
     Load v14 <- bool(true)
     Load v15 <- string("float literals assigned")
     Call v13 <- string("std.assert.assert") [v14, v15] (def=d0)
+    Drop v15
     Load v18 <- string("hello")
     Load v19 <- string("hello")
     Eq v17 <- v18, v19
+    Drop v18
+    Drop v19
     Load v20 <- string("str hello")
     Call v16 <- string("std.assert.assert") [v17, v20] (def=d0)
+    Drop v20
     Load v23 <- string("")
     Load v24 <- string("")
     Eq v22 <- v23, v24
+    Drop v23
+    Drop v24
     Load v25 <- string("str empty")
     Call v21 <- string("std.assert.assert") [v22, v25] (def=d0)
+    Drop v25
     Load v27 <- bool(true)
     Load v28 <- string("bool true")
     Call v26 <- string("std.assert.assert") [v27, v28] (def=d0)
+    Drop v28
     Drop %1
     Drop %0
     Ret v26

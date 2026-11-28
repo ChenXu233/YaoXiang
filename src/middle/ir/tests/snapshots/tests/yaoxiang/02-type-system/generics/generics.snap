@@ -33,13 +33,18 @@ module
     Eq v2 <- v3, v4
     Load v5 <- string("identity(42) should be 42")
     Call v1 <- string("std.assert.assert") [v2, v5] (def=d1)
+    Drop v5
     Load v6 <- string("hello")
     Call %1 <- string("identity") [v6] (def=d0)
+    Drop v6
     Load v9 <- %1
     Load v10 <- string("hello")
     Eq v8 <- v9, v10
+    Drop v9
+    Drop v10
     Load v11 <- string("identity(\"hello\") should be \"hello\"")
     Call v7 <- string("std.assert.assert") [v8, v11] (def=d1)
+    Drop v11
     Drop %1
     Drop %0
     Ret v7

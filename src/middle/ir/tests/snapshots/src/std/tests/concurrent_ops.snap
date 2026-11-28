@@ -22,10 +22,12 @@ module
     Call %0 <- string("std.concurrent.thread_id") [] (def=d2)
     Load v9 <- %0
     Call v7 <- string("std.string.len") [v9] (def=d3)
+    Drop v9
     Load v8 <- int(0)
     Gt v6 <- v7, v8
     Load v10 <- string("thread_id should be non-empty")
     Call v5 <- string("std.assert.assert") [v6, v10] (def=d4)
+    Drop v10
     Drop %0
     Ret v5
   init (locals=0)

@@ -86,18 +86,21 @@ module
     Eq v1 <- v2, v3
     Load v5 <- string("循环值应为末次迭代的尾表达式值 4")
     Call v0 <- string("std.assert.assert") [v1, v5] (def=d1)
+    Drop v5
     Load v10 <- int(1)
     Call v8 <- string("loop") [v10] (def=d0)
     Load v9 <- int(1)
     Eq v7 <- v8, v9
     Load v11 <- string("单次迭代：循环值应为末次迭代的尾表达式值 1")
     Call v6 <- string("std.assert.assert") [v7, v11] (def=d1)
+    Drop v11
     Load v16 <- int(3)
     Call v14 <- string("countdown") [v16] (def=d2)
     Load v15 <- int(30)
     Eq v13 <- v14, v15
     Load v17 <- string("测度与循环值各自独立，值为 3 * 10")
     Call v12 <- string("std.assert.assert") [v13, v17] (def=d1)
+    Drop v17
     Ret v12
   init (locals=0)
     Call %0 <- string("main") [] (def=d3)

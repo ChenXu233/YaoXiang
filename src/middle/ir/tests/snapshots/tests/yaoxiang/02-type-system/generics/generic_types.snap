@@ -43,33 +43,41 @@ module
     Call %0 <- string("Container") [v0] (def=d0)
     Load v5 <- %0
     LoadField v3 <- v5.0
+    Drop v5
     Load v4 <- int(42)
     Eq v2 <- v3, v4
     Load v6 <- string("Container(42).value should be 42")
     Call v1 <- string("std.assert.assert") [v2, v6] (def=d1)
+    Drop v6
     Load v7 <- int(100)
     Call %1 <- string("Container") [v7] (def=d0)
     Load v12 <- %1
     LoadField v10 <- v12.0
+    Drop v12
     Load v11 <- int(100)
     Eq v9 <- v10, v11
     Load v13 <- string("Container(100).value should be 100")
     Call v8 <- string("std.assert.assert") [v9, v13] (def=d1)
+    Drop v13
     Load v14 <- int(7)
     Load v15 <- int(9)
     Call %2 <- string("Pair") [v14, v15] (def=d2)
     Load v20 <- %2
     LoadField v18 <- v20.0
+    Drop v20
     Load v19 <- int(7)
     Eq v17 <- v18, v19
     Load v21 <- string("Pair(7, 9).first should be 7")
     Call v16 <- string("std.assert.assert") [v17, v21] (def=d1)
+    Drop v21
     Load v26 <- %2
     LoadField v24 <- v26.1
+    Drop v26
     Load v25 <- int(9)
     Eq v23 <- v24, v25
     Load v27 <- string("Pair(7, 9).second should be 9")
     Call v22 <- string("std.assert.assert") [v23, v27] (def=d1)
+    Drop v27
     Drop %0
     Drop %1
     Drop %2

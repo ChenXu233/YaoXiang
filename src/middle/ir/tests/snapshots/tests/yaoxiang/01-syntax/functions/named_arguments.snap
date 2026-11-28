@@ -62,6 +62,14 @@ module
     Load v7 <- %0
     Load v8 <- string("|")
     Add v5 <- v7, v8
+    Drop v7
+    Drop v8
+    Drop v5
+    Drop v6
+    Drop v3
+    Drop v4
+    Drop v1
+    Drop v2
     Load v6 <- %1
     Add v3 <- v5, v6
     Load v4 <- string("|")
@@ -146,6 +154,7 @@ module
     Eq v1 <- v2, v3
     Load v6 <- string("named: declaration order")
     Call v0 <- string("std.assert.assert") [v1, v6] (def=d1)
+    Drop v6
     Load v11 <- int(5)
     Load v12 <- int(3)
     Call v9 <- string("add") [v12, v11] (def=d0)
@@ -153,6 +162,7 @@ module
     Eq v8 <- v9, v10
     Load v13 <- string("named: reversed order")
     Call v7 <- string("std.assert.assert") [v8, v13] (def=d1)
+    Drop v13
     Load v18 <- int(3)
     Load v19 <- int(5)
     Call v16 <- string("add") [v18, v19] (def=d0)
@@ -160,6 +170,7 @@ module
     Eq v15 <- v16, v17
     Load v20 <- string("named: mixed positional first")
     Call v14 <- string("std.assert.assert") [v15, v20] (def=d1)
+    Drop v20
     Load v25 <- int(3)
     Load v26 <- int(2)
     Load v27 <- int(1)
@@ -168,6 +179,7 @@ module
     Eq v22 <- v23, v24
     Load v28 <- string("named: three args reversed")
     Call v21 <- string("std.assert.assert") [v22, v28] (def=d1)
+    Drop v28
     Load v33 <- int(1)
     Load v34 <- int(3)
     Load v35 <- int(2)
@@ -176,6 +188,7 @@ module
     Eq v30 <- v31, v32
     Load v36 <- string("named: one positional + two named")
     Call v29 <- string("std.assert.assert") [v30, v36] (def=d1)
+    Drop v36
     AllocArray %0 size=int(2), elem=int(1)
     Load v37 <- int(1)
     Load v38 <- int(0)
@@ -186,12 +199,14 @@ module
     Load v41 <- int(9)
     Load v42 <- %0
     Call %1 <- string("std.list.push") [v42, v41] (def=d3)
+    Drop v42
     Load v47 <- %1
     Call v45 <- string("std.list.len") [v47] (def=d4)
     Load v46 <- int(3)
     Eq v44 <- v45, v46
     Load v48 <- string("named: qualified list.push len")
     Call v43 <- string("std.assert.assert") [v44, v48] (def=d1)
+    Drop v48
     Drop %1
     Load v53 <- %1
     Load v54 <- int(2)
@@ -200,16 +215,23 @@ module
     Eq v50 <- v51, v52
     Load v55 <- string("named: qualified list.push value")
     Call v49 <- string("std.assert.assert") [v50, v55] (def=d1)
+    Drop v55
     Drop %1
     Load v56 <- string("明天下午 3 点开会")
     Load v57 <- string("alice@example.com")
     Load v58 <- string("会议通知")
     Call %2 <- string("send") [v57, v58, v56] (def=d6)
+    Drop v56
+    Drop v57
+    Drop v58
     Load v61 <- %2
     Load v62 <- string("alice@example.com|会议通知|明天下午 3 点开会")
     Eq v60 <- v61, v62
+    Drop v61
+    Drop v62
     Load v63 <- string("named: readable call")
     Call v59 <- string("std.assert.assert") [v60, v63] (def=d1)
+    Drop v63
     Drop %2
     Drop %1
     Drop %0

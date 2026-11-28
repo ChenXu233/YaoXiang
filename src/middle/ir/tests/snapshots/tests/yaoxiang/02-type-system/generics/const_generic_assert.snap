@@ -11,6 +11,7 @@ module
     Load v1 <- bool(true)
     Load v2 <- string("compiled with Assert(Rows > 0) and Assert(Cols > 0)")
     Call v0 <- string("std.assert.assert") [v1, v2] (def=d0)
+    Drop v2
     Ret v0
   init (locals=0)
     Call %0 <- string("main") [] (def=d1)
