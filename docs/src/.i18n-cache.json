@@ -199,7 +199,7 @@
   "src/rfc/deprecated/019-typed-homoiconicity.md:en": "d0fa663d2ac2892b81ab8823f49ac53c",
   "src/guide/modules.md:en": "92b361c0aa0bcc4285d462ccb1109676",
   "src/dev/architecture/01-routing.md:en": "609c2a2a1245dda7018555bbe0152b67",
-  "src/dev/architecture/02-stage-contract.md:en": "7bd25c521a900af07be9e17ff9ac9800",
+  "src/dev/architecture/02-stage-contract.md:en": "b24a971057a1db1428b2587fd5e6046d",
   "src/dev/architecture/06-cleanup-inventory.md:en": "2a422a19616f9b38a6221bce5b5d4665",
   "src/dev/architecture/04-ssa.md:en": "5510a406584354be87fbb8b4a8ea1987",
   "src/dev/architecture/05-frontend-paradigm.md:en": "2efec7edeb587c1a91936fd7971116f5",
@@ -214,6 +214,6 @@
   "src/explanation/index.md:en": "3dc95c6110cb38d3635600268ffe904a",
   "src/rfc/accepted/039-compiler-architecture.md:en": "c85d267178e83b9f7b43478d38da1271",
   "src/rfc/accepted/027a-termination-explicit-measure.md:en": "fe67f308209f9a47a64c5fcf08be3425",
-  "src/dev/test-gate-census.md:en": "6dc31c90ec2f35f1c11826a9f2872549",
+  "src/dev/test-gate-census.md:en": "71bebfed0f28db9ce348a3805767760b",
   "src/dev/design/llvm-aot-execution.md:en": "9f26b93e18d526f916ee0578c7d96b8b"
 }
