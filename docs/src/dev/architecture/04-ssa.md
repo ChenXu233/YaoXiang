@@ -709,7 +709,7 @@ self.release_plan_total = type_result.release_plan.drops.len();
 - `src/middle/core/bytecode.rs:127-554` — `BytecodeInstr` 66 变体
 - `src/middle/core/bytecode.rs:558` / `649` — `opcode()` / `size()`
 - `src/middle/core/bytecode.rs:943-2350` — `impl From<BytecodeFile> for BytecodeModule`（1408 行）
-- `src/middle/core/bytecode.rs:2312` / `2315` / `2341` — 三处硬编码丢弃（对照 `2344` / `2347`）
+- `src/middle/core/bytecode.rs:2312` / `2315` / `2341` — 三处硬编码丢弃（对照 `2344` / `2347`）；旧审计记录，复核结论见本文 §「硬编码丢弃的跟踪」（两处真丢失 + 一处误报）
 - `src/middle/core/bytecode.rs:2353` — `impl From<MonoType> for IrType`（[03](03-type-unification.md) 待拆的桥接）
 - `src/middle/passes/codegen/translator.rs:533` / `631` / `632` / `655-657` / `658-660` — 9 条 NOP 降级
 - `src/middle/passes/codegen/operand.rs:36-45` / `72-77` — `OperandResolver`，`u8` 上限 255

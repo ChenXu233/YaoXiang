@@ -357,7 +357,7 @@ $ git grep -rn 'cfg!(target_arch' b5e68b3c9 -- '*.rs' | wc -l
 | **有真实断言的孤儿测试** | **复活，不是删除** | 合计 **1005 行 / 78 个测试**：lexer 629 行 / 55 个 + 藏在活目录里的 311 行 / 16 个（`precedence_inline` / `overload_inline` / `json`）+ `package/template/tests/` 65 行 / 7 个。**复活成本是一行 `mod` 声明，价值是让 CI 重新获得这些覆盖**。删除它们是净损失 |
 | **零调用但语义重要的 `pub` 项** | **降可见性而非删除** | B2（`TypeSystem`）、B4（`check_type_equivalence`）——移到 `pub(crate)` 让编译器指认，或补实现。**B4 的 `is_subtype` 必须保留** |
 | **产不出值的 opcode / 指令** | **补构造点或删 opcode** | B8（`TailCall`）、B9（`Switch`，opcode 往返测试已以 `WHITELIST=["SWITCH"]` 显式登记）。B10 已按 D33 修复完成（2026-11-14：`opcode()` 区分 `op` 字段 + 专用码 `I64_NOT`，见任务 3.20.29 的提交信息），移出本待办。剩余项三选一，不能维持现状；D32/D33/D34 已裁决，随 `.42` 升版一并处理 |
-| **数据丢失缺陷** | ~~独立 issue~~ **P7 批 e（D52）** | E 节三条硬编码丢弃——不是死代码 |
+| **数据丢失缺陷** | ~~独立 issue~~ **P7 批 e（D52）** | E 节两处真丢失 + 一处误报（`exception_handlers` 为死字段，删除归 P10 S6） |
 | **无模块身份但有效** | **改造不删除** | F1（`semantic_tokens.rs`）改 `include!` → 真 `mod`（见 `02`） |
 | **需要决策的** | **列为开放问题** | F2 的 wasm32 清理已登记为 [09](09-execution-wbs.md) §P10 **S7**（wasm32 门控 project-mode 子树，2026-10-18 用户裁决 B；含三条未核实原样保留）；层序修正会暴露新诊断 |
 
