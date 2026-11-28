@@ -61,7 +61,7 @@ YaoXiang 是一门编程语言及其编译器（Rust 实现）。`src/` 约 16 �
 5. **成员路由与上下文**：审核 / 验证 / 复审必须与实现者不同模型家族或档次——同一个模型审自己的产出等于共享盲区；具体 provider / 模型 / 额度属各人环境设定，不写进本文件。建成员时设 `context_max_tokens`，让插件空闲时自动压缩；到阈值的成员先 `/compact` 再接任务，压缩后仍紧的不再派工。
 6. **契约的 `inScope` 必须覆盖机械必需面**：改一个形状会连带触到的一切都要圈进来——生成物（诊断码表、`locales/`、生成器再生的文档）、被改形状的直驱测试、与门禁对账的文档表、被裁决点名的载体（含代码与文档注释）、受影响变体或指令的定义家与全仓穷尽 `match` 的补臂点、`tests/baselines/` 与 `src/middle/ir/tests/snapshots/`、新测试的家目录与 `mod.rs`。**写法**：只写可被路径匹配器解析的前缀（`src/util/diagnostic/codes/`），散文限定会被 `changedPaths` 拒收。**判据**：动契约前 grep「谁断言这个形状 / 谁与它交叉对账」，命中即进 `inScope`。
 7. **验证证据**：量测只在 `scripts/dev/scratch.py` 的批次树上做——冻结 revision、仓库内 `target/yx-scratch/<batch>/tree`、一个批次一棵树、禁止自建树或自创构建命令，收口 `gc`；变异写成补丁走 `trial`（机械还原，手工改回去不算），`trial` 之后必须 `build` 再量测。探针要覆盖同类路径的**未修分支**——只证「新功能对」不足以放行。复核别人报的发现，要在**被复核的那个 revision** 上核（`git show <rev>:<file>`），不读正在动的工作树。流程见 HOWTO「验证量测」。
-8. **推送归属可核**：成员不跑 `git push` / `fetch` / `pull`；同步与推送由队长统一做，同步一律 `pull --rebase origin dev`，出现 merge 提交即流程偏差。归属用 `git reflog --date=iso` 与 `git reflog show origin/dev` 核——**不凭报告措辞推断**；发现远端或工作树被第三方改动须当场报告。可核项写进任务验收，派工消息里的口头约定不算。
+8. **推送归属可核**：成员不跑 `git push` / `fetch` / `pull`；同步与推送由队长统一做：成员分支同步一律 `pull --rebase origin dev`；长生命周期集成分支允许 `git merge origin/dev` 同步，但须在批次纪要登记该 merge 提交，且最终 PR 按仓库的集成策略执行；不得把未评审的特性提交直接推 dev。归属用 `git reflog --date=iso` 与 `git reflog show origin/dev` 核——**不凭报告措辞推断**；发现远端或工作树被第三方改动须当场报告。可核项写进任务验收，派工消息里的口头约定不算。
 
 ## 发现值得记录的规则时
 
