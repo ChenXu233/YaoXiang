@@ -2582,15 +2582,18 @@ impl StatementChecker {
                 return_type,
             } = type_ann
             {
-                let fn_param_types: Vec<MonoType> = param_types
+                // RFC-027 §6.1：形参上的精化标注同样是**透明**的——`b` 的值就是
+                // 它的基类型。此前这里用裸 `MonoType::from`，精化形参停在名义形态
+                // `NonNegative(b)`，于是 1) 体内 `b` 当值用报 E1012/E1002，
+                // 2) 任何调用方传入基类型都报 E1002（**连 `f(5)` 都被拒**，
+                // 不是谓词校验，是个坏类型）。故与返回位同规剥除。
+                let funnel_params: Vec<MonoType> = param_types
                     .iter()
-                    .filter_map(|p| p.ty.clone())
-                    .map(MonoType::from)
-                    // RFC-027 §6.1：形参上的精化标注同样是**透明**的——`b` 的值就是
-                    // 它的基类型。此前这里用裸 `MonoType::from`，精化形参停在名义形态
-                    // `NonNegative(b)`，于是 1) 体内 `b` 当值用报 E1012/E1002，
-                    // 2) 任何调用方传入基类型都报 E1002（**连 `f(5)` 都被拒**，
-                    // 不是谓词校验，是个坏类型）。故与返回位同规剥除。
+                    .filter_map(|p| p.ty.as_ref())
+                    .map(|t| self.mono_from_annotation(t))
+                    .collect();
+                let fn_param_types: Vec<MonoType> = funnel_params
+                    .into_iter()
                     .map(|t| self.strip_refined_value_type(t))
                     .collect();
                 let fn_return_type = self.mono_from_annotation(&return_type.clone());

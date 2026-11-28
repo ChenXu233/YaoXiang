@@ -1882,8 +1882,8 @@ impl TypeChecker {
                     {
                         let pts: Vec<MonoType> = param_tys
                             .iter()
-                            .filter_map(|p| p.ty.clone())
-                            .map(MonoType::from)
+                            .filter_map(|p| p.ty.as_ref())
+                            .map(|t| self.mono_from_annotation(t))
                             .collect();
                         (pts, self.mono_from_annotation(&return_type.clone()))
                     } else {
@@ -1896,8 +1896,8 @@ impl TypeChecker {
                             {
                                 let pts: Vec<MonoType> = param_tys
                                     .iter()
-                                    .filter_map(|p| p.ty.clone())
-                                    .map(MonoType::from)
+                                    .filter_map(|p| p.ty.as_ref())
+                                    .map(|t| self.mono_from_annotation(t))
                                     .collect();
                                 (pts, self.mono_from_annotation(&return_type.clone()))
                             } else {
@@ -1931,8 +1931,8 @@ impl TypeChecker {
                     {
                         let pts: Vec<MonoType> = param_tys
                             .iter()
-                            .filter_map(|p| p.ty.clone())
-                            .map(MonoType::from)
+                            .filter_map(|p| p.ty.as_ref())
+                            .map(|t| self.mono_from_annotation(t))
                             .collect();
                         (pts, self.mono_from_annotation(&return_type.clone()))
                     } else {
