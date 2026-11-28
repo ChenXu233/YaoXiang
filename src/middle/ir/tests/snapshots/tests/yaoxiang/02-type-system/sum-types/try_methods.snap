@@ -48,20 +48,20 @@ module
     value v15: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block0
     value v16: Never @block0
     value v17: Bool @block0
-    value v18: TypeVar(TypeVar(59)) @block0
+    value v18: TypeRef("?") @block0
     value v19: Int(64) @block0
     value v20: Generic { name: "String", args: [] } @block0
     value v21: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block0
     value v22: Never @block0
     value v23: Bool @block0
-    value v24: TypeVar(TypeVar(62)) @block0
+    value v24: TypeRef("?") @block0
     value v25: Generic { name: "String", args: [] } @block0
     value v26: Generic { name: "String", args: [] } @block0
     value v27: Generic { name: "Result", args: [Int(64), Generic { name: "String", args: [] }] } @block0
     value v28: Generic { name: "String", args: [] } @block0
     value v29: Never @block0
     value v30: Bool @block0
-    value v31: Generic { name: "Result", args: [TypeVar(TypeVar(63)), Generic { name: "String", args: [] }] } @block0
+    value v31: TypeRef("?") @block0
     value v32: Generic { name: "String", args: [] } @block0
     Load v0 <- int(5)
     Call %0 <- string("check") [v0] (def=d0)

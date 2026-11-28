@@ -81,7 +81,7 @@ module
     value v14: Int(64) @block0
     value v15: Generic { name: "Vec", args: [Int(64)] } @block0
     value v16: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v17: TypeRef("?") @block0
+    value v17: Fn { params: [Int(64)], return_type: Int(64) } @block0
     value v18: Never @block0
     value v19: Bool @block0
     value v20: Int(64) @block0
@@ -124,7 +124,7 @@ module
     Drop %1
     Drop %0
     Ret v18
-  fn closure_0(Int(64)) -> Void
+  fn closure_0(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth2
     locals_total=4
     values_total=4

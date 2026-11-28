@@ -98,7 +98,7 @@ module
     value v60: Bool @block0
     value v61: Int(64) @block0
     value v62: Int(64) @block0
-    value v63: Generic { name: "Vec", args: [TypeVar(TypeVar(60))] } @block0
+    value v63: TypeRef("?") @block0
     value v64: Generic { name: "String", args: [] } @block0
     value v65: Generic { name: "String", args: [] } @block0
     value v66: Never @block0

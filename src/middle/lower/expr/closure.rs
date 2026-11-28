@@ -157,11 +157,13 @@ impl AstToIrGenerator {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn generate_lambda_expr_ir(
         &mut self,
         params: &[ast::Param],
         body: &ast::Block,
         mut env: SynthEnv,
+        plan_id: crate::util::plan_id::PlanId,
         result_reg: Operand,
         instructions: &mut Vec<Instruction>,
         constants: &mut Vec<ConstValue>,
@@ -173,9 +175,25 @@ impl AstToIrGenerator {
         let closure_name = format!("closure_{}", self.closure_counter);
         self.closure_counter += 1;
 
-        // 2. 获取闭包的返回类型（简化处理：使用 Void）
-        // TODO: 可以通过类型检查结果获取更精确的返回类型
-        let return_type = MonoType::Void;
+        // 2. 闭包签名：优先 typecheck 落的 lambda 结果类型（**同一 `PlanId`** 回查，
+        //    RFC-039 D20）。命中即整条签名（形参类型 + 返回位）都由 sema 的推断给出；
+        //    未命中（合成 lambda / 未收敛）退回既有口径：外层声明 → 作者注解 →
+        //    `Int(64)` 占位（帧布局与形参个数必须一致，WBS 2.1.2）。
+        let signature: Option<(Vec<MonoType>, MonoType)> = self
+            .type_result
+            .as_ref()
+            .and_then(|tr| tr.expr_result_types.get(&plan_id).cloned())
+            .and_then(|ty| match ty {
+                MonoType::Fn {
+                    params: ps,
+                    return_type,
+                } if ps.len() == params.len() => Some((ps, *return_type)),
+                _ => None,
+            });
+        let return_type = signature
+            .as_ref()
+            .map(|(_, ret)| ret.clone())
+            .unwrap_or(MonoType::Void);
 
         // 3. 为闭包参数分配寄存器索引
         let _param_regs: Vec<usize> = (0..params.len()).collect();
@@ -214,6 +232,11 @@ impl AstToIrGenerator {
             .iter()
             .enumerate()
             .map(|(i, p)| {
+                if let Some((ps, _)) = &signature {
+                    if let Some(ty) = ps.get(i) {
+                        return ty.clone();
+                    }
+                }
                 if declared.len() == params.len() {
                     return declared[i].1.clone();
                 }

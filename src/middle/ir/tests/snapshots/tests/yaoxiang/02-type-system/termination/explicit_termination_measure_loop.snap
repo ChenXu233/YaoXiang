@@ -10,7 +10,7 @@ module
     value v2: Int(64) @block0
     value v3: Int(64) @block0
     value v4: Int(64) @block0
-    value v5: TypeVar(TypeVar(45)) @block0
+    value v5: TypeRef("?") @block0
     Load %0 <- arg%0
     Load %1 <- int(0)
     Load %2 <- void
@@ -40,7 +40,7 @@ module
     value v4: Int(64) @block0
     value v5: Int(64) @block0
     value v6: Int(64) @block0
-    value v7: TypeVar(TypeVar(45)) @block0
+    value v7: TypeRef("?") @block0
     Load %0 <- arg%0
     Load %1 <- int(0)
     Load %2 <- void

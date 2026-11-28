@@ -43,7 +43,7 @@ module
     Mul v1 <- v2, v3
     Ret v1
     Ret
-  fn closure_0(Int(64)) -> Void
+  fn closure_0(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth1
     locals_total=4
     values_total=4
@@ -55,7 +55,7 @@ module
     Load v3 <- int(1)
     Add v1 <- v2, v3
     Ret v1
-  fn closure_1(Int(64)) -> Void
+  fn closure_1(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth1
     locals_total=4
     values_total=4

@@ -152,6 +152,12 @@ pub enum Expr {
         params: Vec<Param>,
         body: Box<Block>,
         span: Span,
+        /// 闭包节点身份（RFC-039 D20）：解析期由 `ParserState::alloc_plan_id`
+        /// 分配、随节点走。typecheck 按它把 lambda 的 `Fn` 类型登记进调用点
+        /// 结果类型表，IR 生成按**同一个值**回查（闭包签名 / `MakeClosure`
+        /// 的 dst 类型）。解析器之外的合成 lambda（sema 精化、IR 合成、格式化
+        /// 器、LSP、测试夹具）记 [`PlanId::UNPLANNED`]——不进表、不构成义务。
+        plan_id: PlanId,
     },
     /// RFC-012: F-string template literal
     /// `f"Hello {name}"` → FString { segments: [Text("Hello "), Interpolation { expr, format_spec }] }

@@ -190,7 +190,7 @@ pub struct StatementChecker {
     pub match_scrutinee_types: HashMap<crate::util::span::Span, MonoType>,
     /// 调用点结果类型（**调用点 `PlanId` 键控**，RFC-039 D20）：ExpressionInferrer
     /// 在 `infer_call_expr` 返回处落表，随委托回流此处，由 checker 交给 IR 生成。
-    pub call_result_types: HashMap<crate::util::plan_id::PlanId, MonoType>,
+    pub expr_result_types: HashMap<crate::util::plan_id::PlanId, MonoType>,
     /// 流敏感假设集 Γ（可选 — None 在测试或未启用证明管道时使用）
     gamma: Option<crate::frontend::core::sema::proof::assumptions::FlowSensitiveGamma>,
     /// 依赖类型环境（类型族注册与查找）
@@ -380,7 +380,7 @@ impl StatementChecker {
             try_expr_impls: Vec::new(),
             operator_dispatches: Vec::new(),
             match_scrutinee_types: HashMap::new(),
-            call_result_types: HashMap::new(),
+            expr_result_types: HashMap::new(),
             gamma,
             dep_env,
             trait_table,
@@ -3705,8 +3705,8 @@ impl StatementChecker {
     /// 的 `Dict(K, V)` 要等后续使用点（`dict.set(d, "a", 1)`）才收敛，故 zonk
     /// 只能等模块检查走完、在导出点做一次。仍未收敛（含推断变量 `TypeVar`）的
     /// 条目不导出：IR 的显式未知是 `TypeRef("?")`，`TypeVar` 不是。
-    pub fn finalize_call_result_types(&self) -> HashMap<crate::util::plan_id::PlanId, MonoType> {
-        self.call_result_types
+    pub fn finalize_expr_result_types(&self) -> HashMap<crate::util::plan_id::PlanId, MonoType> {
+        self.expr_result_types
             .iter()
             .map(|(call, ty)| (*call, self.solver.resolve_type(ty)))
             .filter(|(_, ty)| !crate::frontend::core::types::substitute::contains_type_vars(ty))
@@ -3962,7 +3962,7 @@ impl StatementChecker {
                         self.match_scrutinee_types
                             .extend(inferrer.match_scrutinee_types);
                         // 调用点结果类型表随委托回流（D20 同一身份键）
-                        self.call_result_types.extend(inferrer.call_result_types);
+                        self.expr_result_types.extend(inferrer.expr_result_types);
                         result
                     }
                 }
@@ -4047,7 +4047,7 @@ impl StatementChecker {
                 self.match_scrutinee_types
                     .extend(inferrer.match_scrutinee_types);
                 // 调用点结果类型表随委托回流（D20 同一身份键）
-                self.call_result_types.extend(inferrer.call_result_types);
+                self.expr_result_types.extend(inferrer.expr_result_types);
                 result
             }
         }

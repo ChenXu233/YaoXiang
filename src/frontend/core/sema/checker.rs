@@ -1432,8 +1432,8 @@ impl TypeChecker {
         };
         // 调用点结果类型（RFC-039 D20：调用点 `PlanId` 键控；ir_gen 按同一身份回查）。
         // 收敛在导出点做一次：记录点存原样推断结果（`dict.new()` 一类要等使用点才收敛）。
-        let call_result_types = match self.body_checker.as_ref() {
-            Some(bc) => bc.finalize_call_result_types(),
+        let expr_result_types = match self.body_checker.as_ref() {
+            Some(bc) => bc.finalize_expr_result_types(),
             None => HashMap::new(),
         };
 
@@ -1482,7 +1482,7 @@ impl TypeChecker {
             existential_coercions,
             try_expr_impls,
             match_scrutinee_types,
-            call_result_types,
+            expr_result_types,
             overload_resolutions:
                 crate::frontend::core::sema::types::OverloadResolutions::from_entries(
                     self.body_checker

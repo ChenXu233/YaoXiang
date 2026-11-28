@@ -374,6 +374,7 @@ fn build_author_lambda_value(
         params: impl_head_params,
         body: body.clone(),
         span,
+        plan_id: state.alloc_plan_id(),
     };
     state.skip(&TokenKind::Semicolon);
     assign_stmt(target, annotation.cloned(), value, is_mut, span)
@@ -477,6 +478,7 @@ fn try_wrap_paren_return_lambda(
         params: lambda_params.to_vec(),
         body: Box::new(body.clone()),
         span,
+        plan_id: state.alloc_plan_id(),
     };
     // 合成体语句：不经过 parse_statement，就地发放身份
     let plan_id = state.alloc_plan_id();
@@ -491,6 +493,7 @@ fn try_wrap_paren_return_lambda(
             span,
         }),
         span,
+        plan_id: state.alloc_plan_id(),
     };
     state.skip(&TokenKind::Semicolon);
     Some(assign_stmt(
@@ -571,6 +574,7 @@ fn build_synthesized_lambda_value(
         params: value_params,
         body: Box::new(body_block),
         span,
+        plan_id: state.alloc_plan_id(),
     };
     assign_stmt(target, annotation.cloned(), value, is_mut, span)
 }

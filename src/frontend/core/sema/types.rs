@@ -94,7 +94,7 @@ pub struct TypeCheckResult {
     /// 手里，IR 侧按被调名反查原生签名取不到，值表遂落显式未知 `TypeRef("?")`。
     /// 落表前先 zonk；仍含推断变量（`TypeVar`）或身份未分配
     /// （[`PlanId::UNPLANNED`]）的条目不落——IR 宁可显式未知，也不写未收敛变量。
-    pub call_result_types: HashMap<PlanId, MonoType>,
+    pub expr_result_types: HashMap<PlanId, MonoType>,
 }
 
 /// 一次方法调用重载决议的**载荷**（WBS 4.9.10 D-3）。

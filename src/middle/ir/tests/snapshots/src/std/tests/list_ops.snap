@@ -100,7 +100,7 @@ module
     value v66: Int(64) @block0
     value v67: Generic { name: "Vec", args: [Int(64)] } @block0
     value v68: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v69: TypeRef("?") @block0
+    value v69: Fn { params: [Int(64)], return_type: Int(64) } @block0
     value v70: Int(64) @block0
     value v71: Generic { name: "String", args: [] } @block0
     value v72: Never @block0
@@ -109,14 +109,14 @@ module
     value v75: Int(64) @block0
     value v76: Generic { name: "Vec", args: [Int(64)] } @block0
     value v77: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v78: TypeRef("?") @block0
+    value v78: Fn { params: [Int(64)], return_type: Bool } @block0
     value v79: Generic { name: "String", args: [] } @block0
     value v80: Never @block0
     value v81: Bool @block0
     value v82: Int(64) @block0
     value v83: Int(64) @block0
     value v84: Generic { name: "Vec", args: [Int(64)] } @block0
-    value v85: TypeRef("?") @block0
+    value v85: Fn { params: [Int(64), Int(64)], return_type: Int(64) } @block0
     value v86: Int(64) @block0
     value v87: Generic { name: "String", args: [] } @block0
     value v88: Never @block0
@@ -346,7 +346,7 @@ module
     Load v156 <- string("pop empty stays empty")
     Call v151 <- string("std.assert.assert") [v152, v156] (def=d2)
     Ret v151
-  fn closure_0(Int(64)) -> Void
+  fn closure_0(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth2
     locals_total=4
     values_total=4
@@ -358,7 +358,7 @@ module
     Load v3 <- int(2)
     Mul v1 <- v2, v3
     Ret v1
-  fn closure_1(Int(64)) -> Void
+  fn closure_1(Int(64)) -> Bool
     slot[0] x : Int(64) @depth2
     locals_total=4
     values_total=6
@@ -374,7 +374,7 @@ module
     Load v3 <- int(0)
     Eq v1 <- v2, v3
     Ret v1
-  fn closure_2(Int(64), Int(64)) -> Void
+  fn closure_2(Int(64), Int(64)) -> Int(64)
     slot[0] acc : Int(64) @depth2
     slot[1] x : Int(64) @depth2
     locals_total=5

@@ -503,8 +503,8 @@ module
     locals_total=5
     values_total=4
     value v0: TypeRef("?") @block0
-    value v1: TypeVar(TypeVar(125)) @block0
-    value v2: TypeVar(TypeVar(125)) @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
     value v3: Int(64) @block0
     Load v2 <- %0
     Load v3 <- %1

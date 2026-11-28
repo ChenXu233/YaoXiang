@@ -137,7 +137,7 @@ pub enum Obligation {
     ModuleNamespaces,
     /// `record_models`：typecheck（声明期一遍）→ IR 生成（量词传播）
     RecordModels,
-    /// `call_result_types`：typecheck → IR 生成（**`PlanId` 键控**——调用点身份）
+    /// `expr_result_types`：typecheck → IR 生成（**`PlanId` 键控**——调用点身份）
     CallResultTypes,
 }
 
@@ -316,7 +316,7 @@ const INVENTORY: &[ObligationSpec] = &[
     },
     ObligationSpec {
         obligation: Obligation::CallResultTypes,
-        field: "call_result_types",
+        field: "expr_result_types",
         consumer: Stage::IrGeneration,
         red_list: None,
     },
@@ -365,7 +365,7 @@ pub enum ConsumptionState {
 
 impl Obligation {
     /// 全部 15 个义务（顺序 = 02 §义务字段表；3.4.4/3.4.5/3.4.9 清账后由 16 降为 13，
-    /// 6.9.5-B.2 新增 `record_models`，`call_result_types` 新增）。
+    /// 6.9.5-B.2 新增 `record_models`，`expr_result_types` 新增）。
     pub const ALL: &'static [Obligation] = &[
         Obligation::ProofCalls,
         Obligation::ReleasePlan,
@@ -430,7 +430,7 @@ impl Obligation {
             Obligation::MatchScrutineeTypes => !type_result.match_scrutinee_types.is_empty(),
             Obligation::ModuleNamespaces => !type_result.module_namespaces.is_empty(),
             Obligation::RecordModels => !type_result.record_models.is_empty(),
-            Obligation::CallResultTypes => !type_result.call_result_types.is_empty(),
+            Obligation::CallResultTypes => !type_result.expr_result_types.is_empty(),
         }
     }
 

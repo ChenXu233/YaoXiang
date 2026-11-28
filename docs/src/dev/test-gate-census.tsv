@@ -1701,8 +1701,8 @@ test_partition_blocks_out_of_range_jump_adds_no_edge	src/middle/ir/tests/blocks.
 test_partition_blocks_empty_body_keeps_single_empty_block	src/middle/ir/tests/blocks.rs	assert_eqx2 assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_lowered_while_body_has_real_block_successors	src/middle/ir/tests/blocks.rs	assert_eqx1 assertx4 expectx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_ssa_phi_on_lowered_blocks_reports_real_predecessor_count	src/middle/ir/tests/blocks.rs	assertx2 expectx2 match_panicx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
-test_call_result_types_land_in_value_table_for_source_call_sites	src/middle/ir/tests/call_result_types.rs	assert_eqx2 matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 assign_defs_gives_every_function_def_and_resolves_static_calls	src/middle/ir/tests/def_assign.rs	assert_eqx1 assertx1 is_somex1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_call_result_types_land_in_value_table_for_source_call_sites	src/middle/ir/tests/expr_result_types.rs	assert_eqx2 matchesx1 assertx1	待判	两门皆不过；含强断言，证明门需人工复核	待判
 test_generic_params_includes_const_param_referenced_only_in_return_type	src/middle/ir/tests/generic_params.rs	assert_eqx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_generic_params_excludes_const_param_never_referenced_in_types	src/middle/ir/tests/generic_params.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_generic_params_excludes_predicate_application_arguments	src/middle/ir/tests/generic_params.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核

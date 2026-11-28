@@ -245,7 +245,7 @@ RFC-027 的三个单测（`src/frontend/core/sema/tests/rfc027_phase25_proof_fn.
 | `match_scrutinee_types` | `69` | typecheck → IR 生成（span 键控） |
 | `module_namespaces` | `72` | typecheck → IR 生成 |
 | `record_models` | `79` | typecheck（声明期一遍）→ IR 生成（量词传播；B.2 起 witness 字段的 `TypeDeclField.quantity` 与构造参数/默认值填充都从这张表读） |
-| `call_result_types` | `97` | typecheck → IR 生成（**`PlanId` 键控**——调用点身份：产出 `inference/expressions/expr.rs` 的 Call 臂，消费 `lower/query.rs::expr_value_type`；导出点收敛，未收敛条目不导出） |
+| `expr_result_types` | `97` | typecheck → IR 生成（**`PlanId` 键控**——调用点身份：产出 `inference/expressions/expr.rs` 的 Call 臂，消费 `lower/query.rs::expr_value_type`；导出点收敛，未收敛条目不导出） |
 
 **改判记录（3.4.9，2026-10-13 用户裁决甲）**：原第 14 行 `interface_impl_registry`（types.rs:49）已**改判为树内事实**——它按设计由 typecheck 在相位消费、跨阶段零读取，不是义务：
 

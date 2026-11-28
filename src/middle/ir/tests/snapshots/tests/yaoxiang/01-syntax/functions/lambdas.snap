@@ -62,8 +62,8 @@ module
     locals_total=4
     values_total=4
     value v0: TypeRef("?") @block0
-    value v1: TypeVar(TypeVar(46)) @block0
-    value v2: TypeVar(TypeVar(46)) @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
     value v3: Int(64) @block0
     Load %0 <- arg%0
     Load v2 <- %0
@@ -77,9 +77,9 @@ module
     locals_total=5
     values_total=4
     value v0: TypeRef("?") @block0
-    value v1: TypeVar(TypeVar(62)) @block0
-    value v2: TypeVar(TypeVar(62)) @block0
-    value v3: TypeVar(TypeVar(63)) @block0
+    value v1: TypeRef("?") @block0
+    value v2: TypeRef("?") @block0
+    value v3: TypeRef("?") @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
     Load v2 <- %0
@@ -92,12 +92,12 @@ module
     slot[1] b : Int(64) @depth2
     locals_total=5
     values_total=6
-    value v0: TypeVar(TypeVar(62)) @block0
+    value v0: TypeRef("?") @block0
     value v1: Bool @block0
-    value v2: TypeVar(TypeVar(62)) @block0
-    value v3: TypeVar(TypeVar(63)) @block0
-    value v4: TypeVar(TypeVar(62)) @block0
-    value v5: TypeVar(TypeVar(63)) @block0
+    value v2: TypeRef("?") @block0
+    value v3: TypeRef("?") @block0
+    value v4: TypeRef("?") @block0
+    value v5: TypeRef("?") @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
     Load v2 <- %0

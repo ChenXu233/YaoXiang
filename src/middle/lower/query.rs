@@ -429,6 +429,13 @@ impl AstToIrGenerator {
                 }
                 self.lookup_var_type(name).map(|poly| poly.body.clone())
             }
+            // 闭包结果类型：同一张表、同一身份形态（typecheck 在 lambda 推断处落表）。
+            // 命中即 `MakeClosure` 的 dst 类型 = 该 `Fn` 类型；未命中落显式未知。
+            ast::Expr::Lambda { plan_id, .. } => self
+                .type_result
+                .as_ref()
+                .and_then(|tr| tr.expr_result_types.get(plan_id))
+                .cloned(),
             ast::Expr::Call { func, plan_id, .. } => {
                 // 调用点结果类型：sema 在 `infer_call_expr` 返回处落的表（同一节点的
                 // 同一 `PlanId`，RFC-039 D20）。限定名 / native / 方法 / 泛型调用的
@@ -436,7 +443,7 @@ impl AstToIrGenerator {
                 if let Some(ty) = self
                     .type_result
                     .as_ref()
-                    .and_then(|tr| tr.call_result_types.get(plan_id))
+                    .and_then(|tr| tr.expr_result_types.get(plan_id))
                 {
                     return Some(ty.clone());
                 }

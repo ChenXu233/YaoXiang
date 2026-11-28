@@ -122,13 +122,13 @@ module
     value v44: Bool @block0
     value v45: Int(64) @block0
     value v46: Int(64) @block0
-    value v47: Generic { name: "Vec", args: [TypeVar(TypeVar(48))] } @block0
+    value v47: TypeRef("?") @block0
     value v48: Generic { name: "String", args: [] } @block0
     value v49: Never @block0
     value v50: Bool @block0
     value v51: Int(64) @block0
     value v52: Int(64) @block0
-    value v53: Generic { name: "Vec", args: [TypeVar(TypeVar(48))] } @block0
+    value v53: TypeRef("?") @block0
     value v54: Int(64) @block0
     value v55: Generic { name: "String", args: [] } @block0
     value v56: Generic { name: "String", args: [] } @block0

@@ -78,7 +78,7 @@ module
     slot[1] item : Int(64) @depth3
     locals_total=3
     values_total=1
-    value v0: TypeVar(TypeVar(44)) @block0
+    value v0: TypeRef("?") @block0
     Load v0 <- %0
     Ret v0
   init (locals=0)

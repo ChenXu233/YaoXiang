@@ -219,7 +219,7 @@ module
     value v72: Generic { name: "Vec", args: [Generic { name: "String", args: [] }] } @block0
     value v73: Generic { name: "String", args: [] } @block0
     value v74: Generic { name: "Vec", args: [Generic { name: "String", args: [] }] } @block0
-    value v75: TypeRef("?") @block0
+    value v75: Fn { params: [Generic { name: "String", args: [] }], return_type: Generic { name: "String", args: [] } } @block0
     value v76: Never @block0
     value v77: Bool @block0
     value v78: Generic { name: "Vec", args: [Generic { name: "String", args: [] }] } @block0
@@ -805,7 +805,7 @@ module
     Call v5 <- string("temp") [] (def=d36)
     Call v6 <- string("pathops") [] (def=d37)
     Ret v6
-  fn closure_0(Generic { name: "String", args: [] }) -> Void
+  fn closure_0(Generic { name: "String", args: [] }) -> Generic { name: "String", args: [] }
     slot[0] p : Int(64) @depth2
     locals_total=3
     values_total=3

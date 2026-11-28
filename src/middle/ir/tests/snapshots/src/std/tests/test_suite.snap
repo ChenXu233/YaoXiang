@@ -96,15 +96,15 @@ module
     value v1: TypeRef("?") @block0
     value v2: TypeRef("?") @block0
     value v3: Generic { name: "String", args: [] } @block0
-    value v4: TypeRef("?") @block0
+    value v4: Fn { params: [], return_type: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } } @block0
     value v5: Int(64) @block0
     value v6: TypeRef("?") @block0
     value v7: Generic { name: "String", args: [] } @block0
-    value v8: TypeRef("?") @block0
+    value v8: Fn { params: [], return_type: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } } @block0
     value v9: Int(64) @block0
     value v10: TypeRef("?") @block0
     value v11: Generic { name: "String", args: [] } @block0
-    value v12: TypeRef("?") @block0
+    value v12: Fn { params: [], return_type: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } } @block0
     value v13: Int(64) @block0
     AllocArray v1 size=int(3), elem=int(1)
     Load v3 <- string("push_grows_len")
@@ -124,21 +124,21 @@ module
     StoreIndex v1[v13] <- v10
     Call v0 <- string("std.test.suite") [v1] (def=d9)
     Ret v0
-  fn closure_0() -> Void
+  fn closure_0() -> Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] }
     locals_total=2
     values_total=2
     value v0: TypeRef("?") @block0
     value v1: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } @block0
     Call v1 <- string("push_grows_len") [] (def=d10)
     Ret v1
-  fn closure_1() -> Void
+  fn closure_1() -> Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] }
     locals_total=2
     values_total=2
     value v0: TypeRef("?") @block0
     value v1: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } @block0
     Call v1 <- string("pop_shrinks_len") [] (def=d11)
     Ret v1
-  fn closure_2() -> Void
+  fn closure_2() -> Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] }
     locals_total=2
     values_total=2
     value v0: TypeRef("?") @block0

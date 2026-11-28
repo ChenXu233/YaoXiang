@@ -196,6 +196,7 @@ fn test_expr_lambda() {
             span: Span::dummy(),
         }),
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     };
     if let Expr::Lambda { params, .. } = &expr {
         assert_eq!(params.len(), 1);
@@ -375,6 +376,7 @@ fn test_stmtkind_binding() {
                     span: Span::dummy(),
                 }),
                 span: Span::dummy(),
+                plan_id: PlanId::UNPLANNED,
             })),
             is_mut: false,
             span: Span::dummy(),
@@ -874,6 +876,7 @@ fn test_expr_callable_parts_lambda_returns_params_and_body() {
             span: Span::dummy(),
         }),
         span: Span::dummy(),
+        plan_id: PlanId::UNPLANNED,
     };
 
     // Act

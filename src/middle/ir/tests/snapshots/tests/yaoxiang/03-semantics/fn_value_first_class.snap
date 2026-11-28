@@ -72,7 +72,7 @@ module
     value v27: Bool @block0
     value v28: Int(64) @block0
     value v29: Int(64) @block0
-    value v30: TypeRef("?") @block0
+    value v30: Fn { params: [Int(64)], return_type: Int(64) } @block0
     value v31: Int(64) @block0
     value v32: Generic { name: "String", args: [] } @block0
     value v33: Void @block0
@@ -113,7 +113,7 @@ module
     Load v34 <- string("fn value first class ok")
     Call v33 <- string("std.io.println") [v34] (def=d5)
     Ret v33
-  fn closure_0(Int(64)) -> Void
+  fn closure_0(Int(64)) -> Int(64)
     slot[0] x : Int(64) @depth2
     locals_total=4
     values_total=4

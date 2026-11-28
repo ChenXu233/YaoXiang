@@ -467,6 +467,7 @@ impl<'a> ParserState<'a> {
                     span: self.span(),
                 }),
                 span,
+                plan_id: self.alloc_plan_id(),
             });
         }
 

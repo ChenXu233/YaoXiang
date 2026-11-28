@@ -6,9 +6,9 @@
 pub mod alias_fn_value;
 pub mod batch_method_bind;
 pub mod blocks;
-pub mod call_result_types;
 pub mod corpus;
 pub mod def_assign;
+pub mod expr_result_types;
 pub mod fn_param_slots;
 pub mod generic_params;
 pub mod ir;

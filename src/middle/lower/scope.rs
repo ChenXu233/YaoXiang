@@ -294,6 +294,11 @@ impl AstToIrGenerator {
             return;
         };
         if is_unknown_value_type(&info.ty) {
+            // 推断变量不得进 IR（#590）：未收敛的类型保持显式未知 `TypeRef("?")`。
+            // 值表的「不知道」只有一个形态，`TypeVar` 不是它。
+            if crate::frontend::core::types::substitute::contains_type_vars(&ty) {
+                return;
+            }
             info.ty = ty;
         }
     }
@@ -485,6 +490,9 @@ fn infer_value_types(
             continue;
         };
         if is_unknown_value_type(&info.ty) {
+            if crate::frontend::core::types::substitute::contains_type_vars(&ty) {
+                continue;
+            }
             info.ty = ty;
         }
     }

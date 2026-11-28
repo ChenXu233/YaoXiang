@@ -55,7 +55,7 @@ module
     slot[0] T : Int(64) @depth1
     locals_total=2
     values_total=1
-    value v0: TypeRef("?") @block0
+    value v0: Fn { params: [TypeRef("T"), TypeRef("T"), TypeRef("T")], return_type: TypeRef("T") } @block0
     Load %0 <- arg%0
     MakeClosure v0 <- closure_0 env=[] (def=d1)
     Ret v0
@@ -227,7 +227,7 @@ module
     Drop %3
     Drop %4
     Ret v60
-  fn closure_0(TypeRef("T"), TypeRef("T"), TypeRef("T")) -> Void
+  fn closure_0(TypeRef("T"), TypeRef("T"), TypeRef("T")) -> TypeRef("T")
     slot[0] a : Int(64) @depth2
     slot[1] b : Int(64) @depth2
     slot[2] c : Int(64) @depth2
