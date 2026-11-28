@@ -10,7 +10,7 @@ module
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0
-    value v4: TypeRef("?") @block0
+    value v4: Generic { name: "Tuple", args: [Void, Void] } @block0
     value v5: Int(64) @block0
     value v6: Int(64) @block0
     value v7: Never @block0

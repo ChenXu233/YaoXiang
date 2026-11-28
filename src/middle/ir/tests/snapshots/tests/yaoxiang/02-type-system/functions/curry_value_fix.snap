@@ -26,7 +26,7 @@ module
     value v5: Int(64) @block0
     value v6: Fn { params: [Int(64)], return_type: Int(64) } @block0
     value v7: Generic { name: "String", args: [] } @block0
-    value v8: TypeRef("?") @block0
+    value v8: Generic { name: "Vec", args: [Int(64)] } @block0
     value v9: Int(64) @block0
     value v10: Int(64) @block0
     value v11: Int(64) @block0

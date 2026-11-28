@@ -4,7 +4,7 @@ module
   fn Point.get_x(Ref { mutable: false, inner: TypeRef("Point") }) -> Generic { name: "Tuple", args: [Ref { mutable: false, inner: Float(64) }, Ref { mutable: false, inner: TypeRef("Point") }] }
     locals_total=4
     values_total=5
-    value v0: TypeRef("?") @block0
+    value v0: Generic { name: "Tuple", args: [Void, Void] } @block0
     value v1: TypeRef("?") @block0
     value v2: TypeRef("?") @block0
     value v3: Ref { mutable: true, inner: TypeRef("Point") } @block0

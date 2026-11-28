@@ -26,11 +26,19 @@ impl AstToIrGenerator {
             self.generate_expr_ir(item_expr, item_reg.clone(), instructions, constants)?;
             item_regs.push(item_reg.clone());
         }
+        // 元组类型：逐位取元素的已定类型；任一位拿不到就保持显式未知。
+        let item_tys: Option<Vec<MonoType>> = item_regs
+            .iter()
+            .map(|reg| self.operand_known_type(reg))
+            .collect();
         instructions.push(Instruction::NewTuple {
             dst: result_reg.clone(),
             items: item_regs,
             span: self.cur_span,
         });
+        if let Some(tys) = item_tys {
+            self.note_value_type(&result_reg, MonoType::make_tuple(tys));
+        }
         Ok(())
     }
 
@@ -136,9 +144,19 @@ impl AstToIrGenerator {
             span: self.cur_span,
         });
 
+        // 元素类型：全部元素一致时列表类型 = Vec(元素类型)；不一致或拿不到则不猜
+        // （显式未知）。这是「列表字面量的类型」唯一来源——`arr = [1,2,3]` 之后
+        // `for x in arr` 的元素类型靠它落进具名槽（note_value_type）。
+        let mut element_ty: Option<MonoType> = None;
+        let mut homogeneous = true;
         for (idx, element) in elements.iter().enumerate() {
             let element_reg = self.next_temp_reg();
             self.generate_expr_ir(element, element_reg.clone(), instructions, constants)?;
+            match (self.operand_known_type(&element_reg), &element_ty) {
+                (Some(ty), None) => element_ty = Some(ty),
+                (Some(ty), Some(prev)) if *prev == ty => {}
+                _ => homogeneous = false,
+            }
 
             let index_reg = self.next_temp_reg();
             instructions.push(Instruction::Load {
@@ -153,6 +171,11 @@ impl AstToIrGenerator {
                 src: element_reg.clone(),
                 span: *span,
             });
+        }
+        if homogeneous {
+            if let Some(ty) = element_ty {
+                self.note_value_type(&result_reg, MonoType::make_list(ty));
+            }
         }
         Ok(())
     }
@@ -275,17 +298,14 @@ impl AstToIrGenerator {
         let iterable_reg = self.next_temp_reg();
         self.generate_expr_ir(&gen.iterable, iterable_reg.clone(), instructions, constants)?;
 
-        // 创建迭代器
-        let iterator_reg = self.next_temp_reg();
-        instructions.push(Instruction::Call {
-            dst: Some(iterator_reg.clone()),
-            func: Operand::Const(ConstValue::String(
-                self.resolver().resolve_namespace("list", &["iter"]),
-            )),
-            args: vec![iterable_reg.clone()],
-            span: *span,
-            def: None,
-        });
+        // 创建迭代器（协议三调用的唯一实现：推导器同时给出结果类型）
+        let (iterator_reg, element_ty, has_next_fn, next_fn) = self.emit_iteration_protocol(
+            &gen.iterable,
+            iterable_reg.clone(),
+            false,
+            *span,
+            instructions,
+        );
 
         // 注册循环变量（具名变量：Local 槽，不产生 SSA 值）
         let var_reg = self.next_local_slot();
@@ -295,14 +315,7 @@ impl AstToIrGenerator {
         let loop_start_idx = instructions.len();
 
         // has_next?
-        let has_next_reg = self.next_temp_reg();
-        instructions.push(Instruction::Call {
-            dst: Some(has_next_reg.clone()),
-            func: Operand::Const(ConstValue::String("std.list.has_next".to_string())),
-            args: vec![iterator_reg.clone()],
-            span: *span,
-            def: None,
-        });
+        let has_next_reg = self.emit_has_next(&has_next_fn, &iterator_reg, *span, instructions);
 
         let jump_end_idx = instructions.len();
         instructions.push(Instruction::JmpIfNot {
@@ -312,14 +325,7 @@ impl AstToIrGenerator {
         });
 
         // next element
-        let element_reg = self.next_temp_reg();
-        instructions.push(Instruction::Call {
-            dst: Some(element_reg.clone()),
-            func: Operand::Const(ConstValue::String("std.list.next".to_string())),
-            args: vec![iterator_reg.clone()],
-            span: *span,
-            def: None,
-        });
+        let element_reg = self.emit_next(&next_fn, &iterator_reg, &element_ty, *span, instructions);
 
         // 存储到循环变量
         instructions.push(Instruction::Store {

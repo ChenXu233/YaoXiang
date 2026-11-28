@@ -44,12 +44,12 @@ module
     locals_total=4
     values_total=10
     value v0: Void @block0
-    value v1: TypeRef("?") @block0
-    value v2: TypeRef("?") @block0
+    value v1: Generic { name: "Vec", args: [Generic { name: "Tuple", args: [Void, Void] }] } @block0
+    value v2: Generic { name: "Tuple", args: [Void, Void] } @block0
     value v3: Generic { name: "String", args: [] } @block0
     value v4: Fn { params: [], return_type: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } } @block0
     value v5: Int(64) @block0
-    value v6: TypeRef("?") @block0
+    value v6: Generic { name: "Tuple", args: [Void, Void] } @block0
     value v7: Generic { name: "String", args: [] } @block0
     value v8: Fn { params: [], return_type: Generic { name: "Result", args: [Void, Generic { name: "String", args: [] }] } } @block0
     value v9: Int(64) @block0

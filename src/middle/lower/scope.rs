@@ -281,12 +281,20 @@ impl AstToIrGenerator {
         Some(slot)
     }
 
-    /// 给值表里的一条值补真实类型（只填仍为显式未知的项，先到先得）。
+    /// 给值表里的一条值 / 具名槽补真实类型（只填仍为显式未知的项，先到先得）。
+    ///
+    /// 具名槽（`Operand::Local`）是**局部变量的类型事实**：赋值/字面量降级直接写进
+    /// 该槽时由这里落库，`for x in arr` 一类（迭代对象是具名局部）据此拿到元素类型。
     pub(in crate::middle) fn note_value_type(
         &mut self,
         dst: &Operand,
         ty: MonoType,
     ) {
+        // 推断变量不得进 IR（#590）：未收敛的类型保持显式未知 `TypeRef("?")`。
+        // 值表与槽表的「不知道」只有一个形态。
+        if crate::frontend::core::types::substitute::contains_type_vars(&ty) {
+            return;
+        }
         let Operand::Value(id) = dst else {
             return;
         };
@@ -294,11 +302,6 @@ impl AstToIrGenerator {
             return;
         };
         if is_unknown_value_type(&info.ty) {
-            // 推断变量不得进 IR（#590）：未收敛的类型保持显式未知 `TypeRef("?")`。
-            // 值表的「不知道」只有一个形态，`TypeVar` 不是它。
-            if crate::frontend::core::types::substitute::contains_type_vars(&ty) {
-                return;
-            }
             info.ty = ty;
         }
     }

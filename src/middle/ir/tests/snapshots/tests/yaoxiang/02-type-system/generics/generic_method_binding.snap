@@ -72,7 +72,7 @@ module
     slot[0] l : Int(64) @depth1
     locals_total=4
     values_total=38
-    value v0: TypeRef("?") @block0
+    value v0: Generic { name: "Vec", args: [Int(64)] } @block0
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     value v3: Int(64) @block0

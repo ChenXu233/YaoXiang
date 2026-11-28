@@ -10,7 +10,7 @@ mod call;
 mod closure;
 mod container;
 mod control;
-mod lit;
+pub(crate) mod lit;
 mod op;
 mod reference;
 mod spawn;

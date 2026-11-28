@@ -70,7 +70,7 @@ module
     value v23: TypeRef("?") @block0
     value v24: Generic { name: "Entry", args: [Generic { name: "String", args: [] }, Bool] } @block0
     value v25: Generic { name: "String", args: [] } @block0
-    value v26: TypeRef("?") @block0
+    value v26: Generic { name: "Vec", args: [Int(64)] } @block0
     value v27: Int(64) @block0
     value v28: Int(64) @block0
     value v29: Int(64) @block0

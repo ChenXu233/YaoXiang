@@ -22,7 +22,7 @@ module
     value v15: Generic { name: "String", args: [] } @block0
     value v16: Bool @block0
     value v17: Generic { name: "String", args: [] } @block0
-    value v18: TypeRef("?") @block0
+    value v18: Generic { name: "Vec", args: [Int(64)] } @block0
     value v19: Int(64) @block0
     value v20: Int(64) @block0
     value v21: Int(64) @block0

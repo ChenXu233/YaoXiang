@@ -46,7 +46,7 @@ module
     value v30: Int(64) @block0
     value v31: Int(64) @block0
     value v32: Generic { name: "String", args: [] } @block0
-    value v33: TypeRef("?") @block0
+    value v33: Generic { name: "Vec", args: [Int(64)] } @block0
     value v34: Int(64) @block0
     value v35: Int(64) @block0
     value v36: Int(64) @block0
@@ -57,9 +57,9 @@ module
     value v41: Int(64) @block0
     value v42: Int(64) @block0
     value v43: Int(64) @block0
-    value v44: Generic { name: "Iter", args: [Void] } @block0
+    value v44: Generic { name: "Iter", args: [Int(64)] } @block0
     value v45: Bool @block0
-    value v46: Void @block0
+    value v46: Int(64) @block0
     value v47: Bool @block0
     value v48: Int(64) @block0
     value v49: Int(64) @block0
@@ -71,7 +71,7 @@ module
     value v55: Int(64) @block0
     value v56: Int(64) @block0
     value v57: Generic { name: "String", args: [] } @block0
-    value v58: TypeRef("?") @block0
+    value v58: Generic { name: "Vec", args: [Int(64)] } @block0
     value v59: Int(64) @block0
     value v60: Int(64) @block0
     value v61: Int(64) @block0
@@ -82,9 +82,9 @@ module
     value v66: Int(64) @block0
     value v67: Int(64) @block0
     value v68: Int(64) @block0
-    value v69: Generic { name: "Iter", args: [Void] } @block0
+    value v69: Generic { name: "Iter", args: [Int(64)] } @block0
     value v70: Bool @block0
-    value v71: Void @block0
+    value v71: Int(64) @block0
     value v72: Bool @block0
     value v73: Int(64) @block0
     value v74: Int(64) @block0

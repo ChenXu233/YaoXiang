@@ -8,8 +8,8 @@ module
     slot[5] city : Int(64) @depth1
     locals_total=11
     values_total=26
-    value v0: TypeRef("?") @block0
-    value v1: TypeRef("?") @block0
+    value v0: Generic { name: "Tuple", args: [Void, Void, Void] } @block0
+    value v1: Generic { name: "Tuple", args: [Void, Void, Void] } @block0
     value v2: Generic { name: "String", args: [] } @block0
     value v3: Int(64) @block0
     value v4: Generic { name: "String", args: [] } @block0
