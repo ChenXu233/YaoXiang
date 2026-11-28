@@ -1,5 +1,10 @@
 allowBuilds:
   esbuild: true
+# 本包由本仓 owner 自己发布（vpi 锚点重映射随 v1.3.0 首发入库），
+# pnpm 对发布未满 minimumReleaseAge 的包默认拒装——对自有账号的包排除
+# 该版本；版本陈化后此条目可删。
+minimumReleaseAgeExclude:
+  - '@chenxu233/vitepress-ai-i18n@1.3.0'
 overrides:
   # GHSA-r5fr-rjxr-66jc / GHSA-f23m-r3pf-42rh：lodash-es <=4.17.23 有原型污染等告警，
   # 4.18.0 起修复。消费链 mermaid@12.0.0 -> chevrotain@11.1.2 -> lodash-es（精确锁 4.17.23），
