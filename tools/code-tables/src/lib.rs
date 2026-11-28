@@ -8,6 +8,7 @@
 //! 与 std/result.rs 的 RUNTIME_ERROR_CODES 元组同形态，一个提取器通吃）。
 
 use serde_json::Value;
+use std::collections::HashMap;
 use std::path::Path;
 
 /// RFC-013 文档相对仓库根的路径
@@ -371,6 +372,275 @@ pub fn fix_rfc_tables(
     Ok((out, rewritten))
 }
 
+// ============================================================================
+// opcode 权威表门禁（P10 S6.2 / F7+F8）
+// ============================================================================
+//
+// 判据与 `src/middle/bytecode/opcode.rs` 的声明面同源：该文件既写
+// `pub const NAME: u8 = 0xNN;` 常量，又写 `OPCODE_INFO` 权威表
+// （`OpcodeInfo { code: NAME, name: "Display", size: N }`）。本门禁把两份事实逐项
+// 对账，任一不成立即 `Err`（build.rs 直接 panic 拒绝编译）：
+// - **解析面非空**：两个提取器都要有产出——判据不成立时不得降级成「通过」；
+// - **码值唯一**：两个常量同码 ⇒ 解码臂必有一支是死的、反查必有一支走错；
+// - **每个常量有表项**：漏登记的 opcode 查不到转储名/长度（`BytecodeInstr::size` 会 panic）；
+// - **表项指向已声明常量**：常量名写错 ⇒ 表项成死数据；
+// - **表项名非空且唯一**：转储名是产物里唯一的人读标识，重复即无法区分；
+// - **表项按 code 严格升序**：与常量声明同序，便于人工对账；乱序多为复制粘贴错。
+
+/// opcode 词表与权威表所在文件（相对仓库根）
+pub const OPCODE_REL: &str = "src/middle/bytecode/opcode.rs";
+
+/// `pub const NAME: u8 = 0xNN;` 形式的一条 opcode 声明
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpcodeConst {
+    pub name: String,
+    pub code: u8,
+    /// 声明所在行（1 起，供诊断定位）
+    pub line: usize,
+}
+
+/// `OpcodeInfo { code: NAME, name: "Display", size: N }` 形式的一条权威表项
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpcodeTableRow {
+    /// `code:` 后的常量名（与 [`OpcodeConst::name`] 对齐）
+    pub name: String,
+    /// `name:` 的转储名（人读标识）
+    pub display: String,
+    /// `size:` 的固定字节数（含 opcode 字节）
+    pub size: usize,
+    /// 表项所在行（1 起，供诊断定位）
+    pub line: usize,
+}
+
+/// 解析 `pub const NAME: u8 = 0xNN;` 声明面（逐行，行注释后的内容忽略）
+pub fn parse_opcode_consts(src: &str) -> Vec<OpcodeConst> {
+    let mut out = Vec::new();
+    for (idx, raw) in src.lines().enumerate() {
+        let code_part = raw.split("//").next().unwrap_or("");
+        let line = code_part.trim();
+        let Some(rest) = line.strip_prefix("pub const ") else {
+            continue;
+        };
+        let Some((name, tail)) = rest.split_once(':') else {
+            continue;
+        };
+        let Some(tail) = tail.trim_start().strip_prefix("u8") else {
+            continue;
+        };
+        let Some(tail) = tail.trim_start().strip_prefix('=') else {
+            continue;
+        };
+        let Some(hex) = tail.trim().strip_suffix(';') else {
+            continue;
+        };
+        let Some(hex) = hex.trim().strip_prefix("0x") else {
+            continue;
+        };
+        let Ok(code) = u8::from_str_radix(hex.trim(), 16) else {
+            continue;
+        };
+        out.push(OpcodeConst {
+            name: name.trim().to_string(),
+            code,
+            line: idx + 1,
+        });
+    }
+    out
+}
+
+/// 解析 `OpcodeInfo { code: NAME, name: "Display", size: N }` 表项面。
+///
+/// 容忍 rustfmt 的换行：先找 `OpcodeInfo`，要求其后（跳过空白）紧跟 `{`，
+/// 再用花括号配对取出条目体；`pub struct OpcodeInfo {` 的定义体以字段文档开头，
+/// 因而不满足 `code:` 起始的判据而被跳过。
+pub fn parse_opcode_table(src: &str) -> Vec<OpcodeTableRow> {
+    let mut out = Vec::new();
+    let mut search_from = 0usize;
+    while let Some(rel) = src[search_from..].find("OpcodeInfo") {
+        let token_start = search_from + rel;
+        search_from = token_start + "OpcodeInfo".len();
+        let after = &src[search_from..];
+        let trimmed = after.trim_start();
+        if !trimmed.starts_with('{') {
+            continue;
+        }
+        let body_start = search_from + (after.len() - trimmed.len()) + 1;
+        let Some(body) = take_balanced_body(src, body_start) else {
+            continue;
+        };
+        if !body.trim_start().starts_with("code:") {
+            continue;
+        }
+        let mut name = None;
+        let mut display = None;
+        let mut size = None;
+        for part in body.split(',') {
+            let Some((key, value)) = part.split_once(':') else {
+                continue;
+            };
+            let value = value.trim();
+            match key.trim() {
+                "code" => name = Some(value.to_string()),
+                "name" => display = unquote(value),
+                "size" => size = value.parse::<usize>().ok(),
+                _ => {}
+            }
+        }
+        let (Some(name), Some(display), Some(size)) = (name, display, size) else {
+            continue;
+        };
+        out.push(OpcodeTableRow {
+            name,
+            display,
+            size,
+            line: src[..token_start].matches('\n').count() + 1,
+        });
+    }
+    out
+}
+
+/// 从 `body_start`（`{` 之后）取花括号配对的条目体；未闭合返回 `None`
+fn take_balanced_body(
+    src: &str,
+    body_start: usize,
+) -> Option<&str> {
+    let mut depth = 1usize;
+    for (off, ch) in src[body_start..].char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(&src[body_start..body_start + off]);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// 去双引号；非字符串字面量返回 `None`（该表项随后被「缺表项」判据抓到）
+fn unquote(value: &str) -> Option<String> {
+    let inner = value.strip_prefix('"')?.strip_suffix('"')?;
+    Some(inner.to_string())
+}
+
+/// 表 ↔ 声明面的一致性判据；返回空 = 通过
+pub fn check_opcode_table(
+    consts: &[OpcodeConst],
+    rows: &[OpcodeTableRow],
+) -> Vec<String> {
+    let mut errors = Vec::new();
+    if consts.is_empty() {
+        errors.push(
+            "解析面为空：opcode.rs 里没有解析到任何 `pub const NAME: u8 = 0xNN;` 声明".to_string(),
+        );
+    }
+    if rows.is_empty() {
+        errors.push(
+            "解析面为空：opcode.rs 里没有解析到任何 `OpcodeInfo { code: … }` 表项".to_string(),
+        );
+    }
+
+    // 码值唯一：同码意味着解码臂必有一支是死的、反查必有一支走错
+    for i in 0..consts.len() {
+        for j in (i + 1)..consts.len() {
+            if consts[i].code == consts[j].code {
+                errors.push(format!(
+                    "码值重复：{}（第 {} 行）与 {}（第 {} 行）都是 0x{:02X}——一个字节只能有一个解码语义",
+                    consts[i].name, consts[i].line, consts[j].name, consts[j].line, consts[i].code
+                ));
+            }
+        }
+    }
+
+    let by_name: HashMap<&str, &OpcodeConst> =
+        consts.iter().map(|c| (c.name.as_str(), c)).collect();
+    let mut display_lines: HashMap<&str, usize> = HashMap::new();
+    let mut referenced: HashMap<&str, usize> = HashMap::new();
+    for row in rows {
+        if row.display.trim().is_empty() {
+            errors.push(format!(
+                "表项名称为空：{}（第 {} 行）的 `name` 必须非空——转储与诊断靠它识别",
+                row.name, row.line
+            ));
+        }
+        if let Some(prev) = display_lines.insert(row.display.as_str(), row.line) {
+            errors.push(format!(
+                "表项名称重复：\"{}\" 同时出现在第 {} 与 {} 行",
+                row.display, prev, row.line
+            ));
+        }
+        match by_name.get(row.name.as_str()) {
+            None => errors.push(format!(
+                "表项引用了未声明的常量：{}（第 {} 行）",
+                row.name, row.line
+            )),
+            Some(_) => {
+                if let Some(prev) = referenced.insert(row.name.as_str(), row.line) {
+                    errors.push(format!(
+                        "常量 {} 被登记了两次（第 {} 与 {} 行）",
+                        row.name, prev, row.line
+                    ));
+                }
+            }
+        }
+    }
+
+    // 每个常量有表项：漏登记 = 转储名/长度查不到
+    for c in consts {
+        if !referenced.contains_key(c.name.as_str()) {
+            errors.push(format!(
+                "常量 {}（0x{:02X}，第 {} 行）没有权威表项：新增 opcode 必须同提交在 OPCODE_INFO 登记转储名与固定长度",
+                c.name, c.code, c.line
+            ));
+        }
+    }
+
+    // 表项按 code 严格升序
+    let mut prev: Option<(u8, &str, usize)> = None;
+    for row in rows {
+        let Some(c) = by_name.get(row.name.as_str()) else {
+            continue;
+        };
+        if let Some((prev_code, prev_name, _)) = prev {
+            if c.code <= prev_code {
+                errors.push(format!(
+                    "表项未按 code 升序：{}（0x{:02X}，第 {} 行）排在 {}（0x{:02X}）之后",
+                    row.name, c.code, row.line, prev_name, prev_code
+                ));
+            }
+        }
+        prev = Some((c.code, row.name.as_str(), row.line));
+    }
+
+    errors
+}
+
+/// `build.rs` 入口：读 `OPCODE_REL` 并跑判据。
+///
+/// - `Ok(摘要)`：通过——`build.rs` 打印为一行 `cargo:warning` 信息；
+/// - `Err(明细)`：违规——`build.rs` 必须 `panic!` 使构建失败，明细逐条含数量与行号。
+///
+/// 读取失败也算 `Err`：解析面不完整时判定不成立，不得降级成「通过」（防静默降级）。
+pub fn opcode_gate(root: &Path) -> Result<String, String> {
+    let path = root.join(OPCODE_REL);
+    let src = std::fs::read_to_string(&path)
+        .map_err(|e| format!("读取 {} 失败: {}", path.display(), e))?;
+    let consts = parse_opcode_consts(&src);
+    let rows = parse_opcode_table(&src);
+    let errors = check_opcode_table(&consts, &rows);
+    if errors.is_empty() {
+        Ok(format!(
+            "opcode 表门禁 F8 通过：{} 个常量 / {} 个表项（码值唯一、每常量有表项、表项名非空且唯一、按 code 升序）",
+            consts.len(),
+            rows.len()
+        ))
+    } else {
+        Err(errors.join("\n  "))
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -469,5 +739,108 @@ mod tests {
         // --fix 治愈
         let (fixed, _) = fix_rfc_tables(&doc, &entries, &zh).unwrap();
         assert!(check_rfc_tables(&fixed, &entries, &zh).is_empty());
+    }
+    #[test]
+    fn test_parse_opcode_consts_reads_u8_hex_only() {
+        let src = "\
+pub const NOP: u8 = 0x00;
+pub const LABEL: u8 = 0x0B;
+// pub const RECYCLED: u8 = 0x06;
+pub const NOT_OPCODE: u32 = 0x10;
+pub const NO_INIT: u8;
+";
+        let consts = parse_opcode_consts(src);
+        assert_eq!(
+            consts.len(),
+            2,
+            "只收 `pub const NAME: u8 = 0xNN;` 形态（注释/非 u8/无初值都不算），实际: {consts:?}"
+        );
+        assert_eq!(consts[0].name, "NOP", "声明名解析错");
+        assert_eq!(consts[0].code, 0x00, "码值解析错");
+        assert_eq!(consts[0].line, 1, "行号应为 1（1 起）");
+        assert_eq!(consts[1].name, "LABEL", "第二项声明名解析错");
+    }
+
+    #[test]
+    fn test_parse_opcode_table_skips_struct_definition() {
+        let src = "\
+pub struct OpcodeInfo {
+    /// 码值
+    pub code: u8,
+    pub name: &'static str,
+}
+
+pub static OPCODE_INFO: &[OpcodeInfo] = &[
+    OpcodeInfo {
+        code: NOP,
+        name: \"Nop\",
+        size: 1,
+    },
+];
+";
+        let rows = parse_opcode_table(src);
+        assert_eq!(
+            rows.len(),
+            1,
+            "结构体定义与类型引用都不得被当成表项，实际: {rows:?}"
+        );
+        assert_eq!(rows[0].name, "NOP", "表项常量名解析错");
+        assert_eq!(rows[0].display, "Nop", "转储名解析错");
+        assert_eq!(rows[0].size, 1, "固定长度解析错");
+    }
+
+    #[test]
+    fn test_check_opcode_table_accepts_consistent_pair() {
+        let consts =
+            parse_opcode_consts("pub const NOP: u8 = 0x00;\npub const RETURN: u8 = 0x01;\n");
+        let rows = parse_opcode_table(
+            "pub static OPCODE_INFO: &[OpcodeInfo] = &[\n    OpcodeInfo { code: NOP, name: \"Nop\", size: 1 },\n    OpcodeInfo { code: RETURN, name: \"Return\", size: 1 },\n];\n",
+        );
+        let errors = check_opcode_table(&consts, &rows);
+        assert!(errors.is_empty(), "一致的表不应报错，实际: {errors:?}");
+    }
+
+    #[test]
+    fn test_check_opcode_table_detects_duplicate_code() {
+        let consts = parse_opcode_consts("pub const NOP: u8 = 0x00;\npub const DUP: u8 = 0x00;\n");
+        let rows = parse_opcode_table(
+            "pub static OPCODE_INFO: &[OpcodeInfo] = &[\n    OpcodeInfo { code: NOP, name: \"Nop\", size: 1 },\n    OpcodeInfo { code: DUP, name: \"Dup\", size: 1 },\n];\n",
+        );
+        let errors = check_opcode_table(&consts, &rows);
+        assert!(
+            errors.iter().any(|e| e.contains("码值重复")),
+            "两个常量同码必须报「码值重复」，实际: {errors:?}"
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("NOP") && e.contains("DUP")),
+            "重复诊断必须同时指名两个常量，实际: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn test_check_opcode_table_detects_missing_entry() {
+        let consts =
+            parse_opcode_consts("pub const NOP: u8 = 0x00;\npub const RETURN: u8 = 0x01;\n");
+        let rows = parse_opcode_table(
+            "pub static OPCODE_INFO: &[OpcodeInfo] = &[\n    OpcodeInfo { code: NOP, name: \"Nop\", size: 1 },\n];\n",
+        );
+        let errors = check_opcode_table(&consts, &rows);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("没有权威表项") && e.contains("RETURN")),
+            "漏登记的常量必须被点名（含诊断定位），实际: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn test_check_opcode_table_rejects_empty_parse_surface() {
+        let errors = check_opcode_table(&[], &[]);
+        assert!(
+            errors.iter().filter(|e| e.contains("解析面为空")).count() == 2,
+            "两侧解析面为空都必须报错（不得降级成通过），实际: {errors:?}"
+        );
     }
 }

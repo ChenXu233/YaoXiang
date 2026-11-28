@@ -99,6 +99,16 @@ fn main() {
         );
     }
 
+    // P10 S6.2 opcode 表门禁（F7+F8）：`opcode.rs` 的 `pub const` 声明与 `OPCODE_INFO`
+    // 权威表逐项对账——码值唯一、每常量有表项、表项名非空且唯一、按 code 升序。
+    // 判定逻辑单一实现于 `code_tables::opcode_gate`（与 type_tables 门禁同形），
+    // **构建硬失败**：任一漂移即 panic 拒绝编译，通过时只打一行摘要。
+    println!("cargo:rerun-if-changed={}", code_tables::OPCODE_REL);
+    match code_tables::opcode_gate(root) {
+        Ok(summary) => println!("cargo:warning={summary}"),
+        Err(detail) => panic!("opcode 表门禁 F8 失败（构建已拒绝）：\n  {detail}"),
+    }
+
     // P6 6.6.2 类型表门禁 T1（`ast::Type` 构造点三类分列 + 零构造清单 + 勘察基线对账）——
     // **构建硬失败**（用户裁决 2A，2026-10-30）：任一违规即 panic 拒绝编译，通过时只打一行摘要。
     match type_tables::build_gate(root) {

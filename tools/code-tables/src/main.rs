@@ -80,6 +80,15 @@ fn main() {
         );
     }
 
+    // opcode 权威表门禁（P10 S6.2 F8）：与 build.rs 调用同一函数，供本地干跑
+    match code_tables::opcode_gate(root) {
+        Ok(summary) => println!("{summary}"),
+        Err(detail) => {
+            eprintln!("error: opcode 表门禁 F8 失败：\n  {detail}");
+            std::process::exit(1);
+        }
+    }
+
     if !report.is_ok() {
         std::process::exit(1);
     }

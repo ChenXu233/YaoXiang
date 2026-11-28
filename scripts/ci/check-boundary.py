@@ -18,7 +18,7 @@ check-boundary.py —— 禁令二判据 C（边界侵蚀）门禁
   B4 L3 不得反向依赖 L4          现状 0 处（D1 6.7.1b：opcode 词表从
                                  backends/common/ 迁入 middle/bytecode/，3 处反向依赖随迁移消除；
                                  此后 middle/ 再出现 crate::backends:: 即违规）
-  B5 opcode 词表唯一归属          唯一归属 middle/bytecode/opcode.rs（83 个常量）；
+  B5 opcode 词表唯一归属          唯一归属 middle/bytecode/opcode.rs（80 个常量，与 KNOWN_OPCODE_DEF_FILES 同源）；
                                  src/ 其余任何位置（含 backends/）出现 opcode 常量定义即违规。
                                  D1 6.7.1b 前扫描面只有 backends/，词表迁走后必须扩到全域，
                                  否则「别处再定义一份」无人抓
@@ -73,7 +73,11 @@ KNOWN_MIDDLE_TO_BACKENDS = {}
 # opcode 词表唯一归属（D1 6.7.1b 起）：唯一合法定义文件 + 常量数。
 # 扫描面由「只扫 backends/」扩到「扫 src/ 全域（排除 tests）」——词表迁出 L4 后，
 # backends/ 侧再无定义可抓，若仍只扫 backends/ 则「别处新写一份 opcode」不会被任何规则发现。
-KNOWN_OPCODE_DEF_FILES = {'middle/bytecode/opcode.rs': 83}
+#
+# 上面的常量数是词表的**真实规模**（opcode.rs 里 `pub const NAME: u8 = 0xNN;` 的行数）：
+# 新增/回收 opcode 必须**同提交**更新本值——B5 的比较语义是「命中数 > 库存即违规」，
+# 数不更新时新增 opcode 会被判成违规、回收则悄悄失去对账基线（两种都是漂移）。
+KNOWN_OPCODE_DEF_FILES = {'middle/bytecode/opcode.rs': 80}
 # WBS 6.4 的 2 处：`"Terminates"`（parser/probe.rs 的 PREDICATE_NAMES）与
 # CONST_PARAM_TYPES（当时的 parser/ast.rs，现 ast/mod.rs）。
 # WBS 6.6.9 清零：两张封闭集随 `BuiltinProbe` 删除（约束名/谓词名的判定归 L3 的

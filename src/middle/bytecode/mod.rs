@@ -650,157 +650,90 @@ impl BytecodeInstr {
         }
     }
 
-    /// Get the instruction size in bytes
+    /// 指令的字节数：权威表的固定长度 + 变长尾部。
+    ///
+    /// 「码 → 固定长度」的唯一事实在 `opcode.rs` 的 `OPCODE_INFO`——本函数只做
+    /// [`opcode::opcode_size`] 的一次查表，再加按元素个数伸缩的尾部；**不再**按变体
+    /// 各写一份长度常数（那曾是一张与编码器不符、又被误当解码依据的表）。
+    ///
+    /// 注意：这不是 `.42` 落盘时每条指令的字节数（那个由
+    /// `BytecodeInstruction::encoded_size` 决定：opcode 1 + 操作数长度前缀 2 + 操作数）。
     pub fn size(&self) -> usize {
-        1 + match self {
-            BytecodeInstr::Nop => 0,
-            BytecodeInstr::Return => 0,
-            BytecodeInstr::ReturnValue { .. } => 2,
-            BytecodeInstr::Yield => 0,
+        let code = self.opcode();
+        let fixed = opcode::opcode_size(code).unwrap_or_else(|| {
+            panic!(
+                "BytecodeInstr::opcode() 返回了未登记的码 0x{code:02X}：每个 opcode 必须在 \
+                 opcode.rs 的 OPCODE_INFO 里有一项（构建期 opcode_gate 同判）"
+            )
+        });
+        fixed + self.variable_tail_size()
+    }
+
+    /// 变长尾部的字节数：只有「按元素个数伸缩」的形态非零。
+    ///
+    /// 固定部分（含 opcode 字节）已在权威表里；本函数只表达每元素的宽度
+    ///（实参/字段 2 字节、任务依赖 4 字节、资源名 4 字节长度前缀 + 字节），
+    /// 因此全仓「码 → 长度」的常数只剩 `OPCODE_INFO` 一处。
+    fn variable_tail_size(&self) -> usize {
+        match self {
             BytecodeInstr::Spawn {
                 closures,
                 task_deps,
                 task_resources,
                 ..
             } => {
-                // dst(2) + closures.len(4) + closures(2*len)
-                // + task_deps.len(4) + for each task: deps.len(4) + deps(4*each)
-                // + task_resources.len(4) + for each task: res.len(4) + for each res: str.len(4) + str_bytes
-                let mut s = 4 + closures.len() * 2;
-                s += 4; // task_deps.len
+                let mut tail = closures.len() * 2;
+                tail += 4; // task_deps 条数前缀
                 for deps in task_deps {
-                    s += 4 + deps.len() * 4;
+                    tail += 4 + deps.len() * 4;
                 }
-                s += 4; // task_resources.len
+                tail += 4; // task_resources 条数前缀
                 for res in task_resources {
-                    s += 4; // res.len
+                    tail += 4; // 该任务的资源条数前缀
                     for r in res {
-                        s += 4 + r.len();
+                        tail += 4 + r.len();
                     }
                 }
-                s
+                tail
             }
             BytecodeInstr::SpawnFromList {
                 task_deps,
                 task_resources,
                 ..
             } => {
-                // dst(2) + closures_list(2)
-                // + task_deps.len(4) + for each task: deps.len(4) + deps(4*each)
-                // + task_resources.len(4) + for each task: res.len(4) + for each res: str.len(4) + str_bytes
-                let mut s = 2 + 2;
-                s += 4; // task_deps.len
+                // dst(2) + closures_list(2) 已计入固定部分，这里只剩两张任务描述表
+                let mut tail = 4; // task_deps 条数前缀
                 for deps in task_deps {
-                    s += 4 + deps.len() * 4;
+                    tail += 4 + deps.len() * 4;
                 }
-                s += 4; // task_resources.len
+                tail += 4; // task_resources 条数前缀
                 for res in task_resources {
-                    s += 4; // res.len
+                    tail += 4; // 该任务的资源条数前缀
                     for r in res {
-                        s += 4 + r.len();
+                        tail += 4 + r.len();
                     }
                 }
-                s
+                tail
             }
-            BytecodeInstr::Jmp { .. } => 4,
-            BytecodeInstr::JmpIf { .. } => 4,
-            BytecodeInstr::JmpIfNot { .. } => 4,
-            BytecodeInstr::Mov { .. } => 4,
-            BytecodeInstr::LoadConst { .. } => 4,
-            BytecodeInstr::LoadLocal { .. } => 3,
-            BytecodeInstr::StoreLocal { .. } => 3,
-            BytecodeInstr::LoadArg { .. } => 3,
-            // dst(1) + global_idx(2, 小端)
-            BytecodeInstr::LoadGlobal { .. } => 4,
-            // global_idx(2, 小端) + src(1)
-            BytecodeInstr::StoreGlobal { .. } => 4,
-            BytecodeInstr::BinaryOp { .. } => 6,
-            BytecodeInstr::UnaryOp { .. } => 4,
-            BytecodeInstr::Compare { .. } => 6,
-            BytecodeInstr::StackAlloc { .. } => 1, // dst(1)（编码器未编码 size）
-            BytecodeInstr::HeapAlloc { .. } => 3,  // dst(1) + type_id(2)
-            BytecodeInstr::Drop { .. } => 1,       // value(1)
-            BytecodeInstr::GetField { .. } => 4,
-            BytecodeInstr::SetField { .. } => 4,
-            BytecodeInstr::LoadElement { .. } => 4,
-            BytecodeInstr::StoreElement { .. } => 4,
-            BytecodeInstr::NewListWithCap { .. } => 4,
             BytecodeInstr::CreateStruct {
                 fields, type_name, ..
-            } => 6 + type_name.len() + fields.len() * 2,
-            BytecodeInstr::NewDict { keys, .. } => {
-                // dst(2) + pair_count(4) + keys(2*count) + values(2*count)
-                6 + keys.len() * 4
-            }
-            BytecodeInstr::NewTuple { items, .. } => {
-                // dst(2) + item_count(4) + items(2*count)
-                6 + items.len() * 2
-            }
-            BytecodeInstr::NewRange { .. } => {
-                // dst(2) + start(2) + end(2) + step(2)
-                8
-            }
-            BytecodeInstr::CreateVariant { .. } => {
-                // dst(2) + group_idx(2) + variant(4) + payload(2)
-                10
-            }
-            BytecodeInstr::VariantTag { .. } => {
-                // dst(2) + obj(2) + group_idx(2)
-                6
-            }
-            BytecodeInstr::VariantPayload { .. } => 6,
-            BytecodeInstr::NewArray { .. } => {
-                // dst(1) + count(4) = 5
-                5
-            }
-            BytecodeInstr::Contains { .. } => {
-                // dst(1) + elem(1) + container(1) = 3
-                3
-            }
-            // 注：以下引用计数与内存类的寄存器为 **1 字节**——
-            // 编码器经 `to_reg` 产出（上限 255，见 operand.rs 的
-            // register_overflow）。而容器/聚合类（NewTuple/NewDict 等）用
-            // `(reg as u16).to_le_bytes()`，那类才是 2 字节。
-            // **判据只能是 translator.rs 对应的 translate_*，不能只看表内注释**。
-            BytecodeInstr::ArcNew { .. } => 2,   // dst(1) + src(1)
-            BytecodeInstr::RcNew { .. } => 2,    // dst(1) + src(1)
-            BytecodeInstr::ArcClone { .. } => 2, // dst(1) + src(1)
-            BytecodeInstr::ArcDrop { .. } => 1,  // src(1)
-            BytecodeInstr::WeakNew { .. } => 4,
-            BytecodeInstr::WeakUpgrade { .. } => 4,
-            BytecodeInstr::Borrow { .. } => 5, // dst(2) + src(2) + mutable(1)
-            BytecodeInstr::Release { .. } => 2, // src(2)
-            BytecodeInstr::CallStatic { args, .. } => 4 + args.len() * 2,
+            } => type_name.len() + fields.len() * 2,
+            BytecodeInstr::NewDict { keys, .. } => keys.len() * 4,
+            BytecodeInstr::NewTuple { items, .. } => items.len() * 2,
+            BytecodeInstr::CallStatic { args, .. }
+            | BytecodeInstr::CallVirt { args, .. }
+            | BytecodeInstr::CallDyn { args, .. } => args.len() * 2,
             BytecodeInstr::CallNative {
                 args,
                 func_name,
                 mechanism,
                 ..
             } => {
-                let base = 4 + func_name.len() + args.len() * 2;
-                if mechanism.is_empty() {
-                    base
-                } else {
-                    base + 12
-                }
+                let ffi = if mechanism.is_empty() { 0 } else { 12 };
+                func_name.len() + args.len() * 2 + ffi
             }
-            BytecodeInstr::CallVirt { args, .. } => 4 + args.len() * 2,
-            BytecodeInstr::CallDyn { args, .. } => 4 + args.len() * 2,
-            BytecodeInstr::MakeClosure { env, .. } => 4 + env.len() * 2,
-            BytecodeInstr::LoadUpvalue { .. } => 3,
-            BytecodeInstr::StoreUpvalue { .. } => 3,
-            BytecodeInstr::CloseUpvalue { .. } => 2,
-            BytecodeInstr::StringLength { .. } => 4,
-            BytecodeInstr::StringConcat { .. } => 4,
-            BytecodeInstr::StringEqual { .. } => 4,
-            BytecodeInstr::StringGetChar { .. } => 4,
-            BytecodeInstr::StringFromInt { .. } => 4,
-            BytecodeInstr::StringFromFloat { .. } => 4,
-            BytecodeInstr::Throw { .. } => 2,
-            BytecodeInstr::BoundsCheck { .. } => 4,
-            BytecodeInstr::TypeCheck { .. } => 4,
-            BytecodeInstr::Cast { .. } => 4,
-            BytecodeInstr::TypeOf { .. } => 4,
+            BytecodeInstr::MakeClosure { env, .. } => env.len() * 2,
+            _ => 0,
         }
     }
 }
@@ -2163,8 +2096,10 @@ impl From<crate::middle::bytecode::file::BytecodeFile> for BytecodeModule {
                     // **字节布局依据编码器**（`translator.rs` 的 `translate_*`）：
                     // 编码器经 `to_reg` 产出寄存器号，上限 255（`operand.rs`
                     // 的 register_overflow 检查），故寄存器**恒为 1 字节**。
-                    // 注：本文件 `size()` 表的注释（如 "dst(2)"）与实际编码不符，
-                    // **不可**作为解码依据——曾据此实现导致字段错位。
+                    // 注：`opcode.rs` 的 `OPCODE_INFO.size`（即 `BytecodeInstr::size()`
+                    // 的固定部分）**不是**编解码字节布局的依据——它与落盘字节数不是
+                    // 同一事实（见 `BytecodeInstr::size` 的文档）。判据只能是本文件
+                    // 各 `translate_*` 实际写入的操作数字节；曾据旧 size 表实现导致字段错位。
                     // 此前这 6 个 opcode 无解码分支，落到 `_ =>` 静默变 Nop——
                     // `ref 42`（弱引用创建）即触发，功能静默失效。
                     opcode::ARC_NEW => {

@@ -1665,6 +1665,9 @@ test_decode_preserves_struct_in_type_table	src/middle/bytecode/tests/bytecode.rs
 test_decode_preserves_ref_struct_generic_signature_types	src/middle/bytecode/tests/bytecode.rs	assert_eqx3	证明	现状锚（名字含 unchanged/anchor/guard/preserve/baseline）	留
 test_decode_places_fields_in_correct_positions	src/middle/bytecode/tests/bytecode.rs	helperx9	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_all_opcodes_have_decode_branch	src/middle/bytecode/tests/bytecode.rs	assertx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_opcode_table_covers_every_constant_with_expected_size	src/middle/bytecode/tests/bytecode.rs	assert_eqx3 assertx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_instruction_size_equals_table_plus_variable_tail	src/middle/bytecode/tests/bytecode.rs	assert_eqx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_opcode_name_and_size_read_from_authoritative_table	src/middle/bytecode/tests/bytecode.rs	assert_eqx4	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_untested_decode_layouts_roundtrip	src/middle/bytecode/tests/bytecode.rs	helperx4	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_remaining_untested_layouts_roundtrip	src/middle/bytecode/tests/bytecode.rs	helperx3	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_call_static_layout_roundtrip	src/middle/bytecode/tests/bytecode.rs	assert_eqx5 match_panicx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
@@ -2658,6 +2661,12 @@ test_extract_code_from_entry_line	tools/code-tables/src/lib.rs	assert_eqx6	待�
 test_render_segment_two_columns_sorted	tools/code-tables/src/lib.rs	assert_eqx2 unwrapx2	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_check_and_fix_roundtrip	tools/code-tables/src/lib.rs	assert_eqx1 assertx2 unwrapx1 helperx2	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_check_detects_drift	tools/code-tables/src/lib.rs	assertx2 unwrapx2 helperx2	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_parse_opcode_consts_reads_u8_hex_only	tools/code-tables/src/lib.rs	assert_eqx5	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_parse_opcode_table_skips_struct_definition	tools/code-tables/src/lib.rs	assert_eqx4	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_check_opcode_table_accepts_consistent_pair	tools/code-tables/src/lib.rs	assertx1 helperx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_check_opcode_table_detects_duplicate_code	tools/code-tables/src/lib.rs	assertx2 helperx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_check_opcode_table_detects_missing_entry	tools/code-tables/src/lib.rs	assertx1 helperx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_check_opcode_table_rejects_empty_parse_surface	tools/code-tables/src/lib.rs	assertx1 helperx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_mismatch_render_carries_site_file_line	tools/type-tables/src/baseline.rs	assertx3 expectx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_mismatch_render_carries_definition_line_for_new_variant	tools/type-tables/src/baseline.rs	assertx2 expectx1	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_caliber_drift_flags_class_change	tools/type-tables/src/baseline.rs	assert_eqx1 assertx2	待判	两门皆不过；含强断言，证明门需人工复核	待判
