@@ -5,6 +5,8 @@
 use crate::ast;
 use crate::ast::Expr;
 use crate::frontend::core::lexer::tokens::Literal;
+use crate::frontend::core::sema::MonoType;
+use crate::frontend::core::types::identity::Nominal;
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::middle::lower::AstToIrGenerator;
 use crate::util::diagnostic::Diagnostic;
@@ -124,6 +126,15 @@ impl AstToIrGenerator {
             span: *span,
             def: None,
         });
+        // f-string 是合成调用（AST 里没有调用节点），结果类型按声明签名恒为
+        // String（src/std/string.rs 的 `format -> String`）。
+        self.note_value_type(
+            &result_reg,
+            MonoType::Generic {
+                name: Nominal::flat("String").expect("String 是裸类型名"),
+                args: Vec::new(),
+            },
+        );
         Ok(())
     }
 }

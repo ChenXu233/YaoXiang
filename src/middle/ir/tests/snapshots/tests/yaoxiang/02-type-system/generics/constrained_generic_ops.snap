@@ -60,7 +60,7 @@ module
     values_total=21
     value v0: Int(64) @block0
     value v1: Int(64) @block0
-    value v2: TypeRef("?") @block0
+    value v2: Never @block0
     value v3: Bool @block0
     value v4: Int(64) @block0
     value v5: Int(64) @block0
@@ -73,7 +73,7 @@ module
     value v12: Float(64) @block0
     value v13: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Add"] }) @block0
     value v14: Struct(StructType { name: "Vec3", fields: [("x", Float(64)), ("y", Float(64)), ("z", Float(64))], methods: {}, interfaces: ["Add"] }) @block0
-    value v15: TypeRef("?") @block0
+    value v15: Never @block0
     value v16: Bool @block0
     value v17: TypeRef("?") @block0
     value v18: Float(64) @block0

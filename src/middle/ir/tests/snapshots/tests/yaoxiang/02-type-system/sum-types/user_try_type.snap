@@ -122,10 +122,10 @@ module
     slot[1] v : Int(64) @depth1
     locals_total=5
     values_total=8
-    value v0: TypeRef("?") @block0
+    value v0: Bool @block0
     value v1: TypeRef("?") @block0
     value v2: TypeRef("?") @block0
-    value v3: TypeRef("?") @block0
+    value v3: Ref { mutable: false, inner: TypeRef("Maybe") } @block0
     value v4: Generic { name: "Maybe", args: [] } @block0
     value v5: Int(64) @block0
     value v6: Int(64) @block0

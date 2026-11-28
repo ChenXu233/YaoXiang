@@ -6,7 +6,7 @@
 
 use crate::ast::Expr;
 use crate::frontend::core::sema::MonoType;
-use crate::frontend::core::types::identity::DefPath;
+use crate::frontend::core::types::identity::{DefPath, Nominal};
 use crate::middle::ir::ir::{ConstValue, Instruction, Operand};
 use crate::middle::lower::AstToIrGenerator;
 use crate::middle::lower::BindingInfo;
@@ -1118,6 +1118,14 @@ impl AstToIrGenerator {
                                 span: *span,
                                 def: None,
                             });
+                            // 合成调用：声明签名 `format_fallback -> String`
+                            self.note_value_type(
+                                &fallback_reg,
+                                MonoType::Generic {
+                                    name: Nominal::flat("String").expect("String 是裸类型名"),
+                                    args: Vec::new(),
+                                },
+                            );
 
                             // 然后调用 std.io.print 输出
                             let print_func_name = if let Expr::Var(name, _) = func {

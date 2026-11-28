@@ -5,7 +5,7 @@ module
     locals_total=5
     values_total=9
     value v0: Ref { mutable: false, inner: Generic { name: "String", args: [] } } @block0
-    value v1: TypeRef("?") @block0
+    value v1: Bool @block0
     value v2: TypeRef("?") @block0
     value v3: TypeRef("?") @block0
     value v4: TypeRef("?") @block0
@@ -37,7 +37,7 @@ module
     locals_total=5
     values_total=9
     value v0: Ref { mutable: false, inner: Generic { name: "String", args: [] } } @block0
-    value v1: TypeRef("?") @block0
+    value v1: Bool @block0
     value v2: TypeRef("?") @block0
     value v3: TypeRef("?") @block0
     value v4: TypeRef("?") @block0

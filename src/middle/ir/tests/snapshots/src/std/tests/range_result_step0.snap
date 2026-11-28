@@ -9,7 +9,7 @@ module
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     value v3: Generic { name: "Range", args: [Int(64)] } @block0
-    value v4: TypeRef("?") @block0
+    value v4: Bool @block0
     value v5: TypeRef("?") @block0
     value v6: TypeRef("?") @block0
     value v7: TypeRef("?") @block0
@@ -51,10 +51,10 @@ module
     value v4: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block0
     value v5: Generic { name: "Range", args: [Int(64)] } @block0
     value v6: Int(64) @block0
-    value v7: TypeRef("?") @block0
-    value v8: TypeRef("?") @block0
-    value v9: TypeRef("?") @block0
-    value v10: TypeRef("?") @block0
+    value v7: Bool @block0
+    value v8: Bool @block0
+    value v9: TypeRef("Error") @block0
+    value v10: Generic { name: "Result", args: [Bool, TypeRef("Error")] } @block0
     Load %0 <- arg%0
     Load %1 <- arg%1
     Load v0 <- int(0)

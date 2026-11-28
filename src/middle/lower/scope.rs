@@ -298,6 +298,23 @@ impl AstToIrGenerator {
         }
     }
 
+    /// 已定型操作数的类型（值表里非显式未知的项；Local/Global 不在此列——
+    /// lower 不写 LocalSlot.ty，Global 是无注解占位）。
+    pub(in crate::middle) fn operand_known_type(
+        &self,
+        op: &Operand,
+    ) -> Option<MonoType> {
+        match op {
+            Operand::Value(id) => self
+                .cur_values
+                .get(id.0 as usize)
+                .filter(|v| !is_unknown_value_type(&v.ty))
+                .map(|v| v.ty.clone()),
+            Operand::Const(c) => c.mono_type(),
+            _ => None,
+        }
+    }
+
     /// 取走当前函数体的值表与「值 → 槽」映射，并在取走前做一次**前向类型推导**
     /// （提交信息）：只补确定类型的指令形态，其余保持显式
     /// 未知 `TypeRef("?")`。

@@ -29,7 +29,7 @@ module
     value v1: Int(64) @block0
     value v2: Int(64) @block0
     value v3: Generic { name: "Result", args: [Generic { name: "Iterator", args: [TypeRef("Any")] }, TypeRef("Error")] } @block0
-    value v4: TypeRef("?") @block0
+    value v4: Bool @block0
     value v5: TypeRef("?") @block0
     value v6: TypeRef("?") @block0
     value v7: TypeRef("?") @block0

@@ -26,12 +26,12 @@ module
     value v0: Float(64) @block0
     value v1: Struct(StructType { name: "Temp", fields: [("value", Float(64))], methods: {}, interfaces: [] }) @block0
     value v2: Struct(StructType { name: "Temp", fields: [("value", Float(64))], methods: {}, interfaces: [] }) @block0
-    value v3: TypeRef("?") @block0
+    value v3: Never @block0
     value v4: Bool @block0
     value v5: Float(64) @block0
     value v6: Float(64) @block0
     value v7: Generic { name: "String", args: [] } @block0
-    value v8: TypeRef("?") @block0
+    value v8: Never @block0
     value v9: Bool @block0
     value v10: Generic { name: "String", args: [] } @block0
     value v11: Generic { name: "String", args: [] } @block0

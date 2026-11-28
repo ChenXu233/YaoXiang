@@ -1497,7 +1497,16 @@ impl<'a> ExpressionInferrer<'a> {
                                 .at(span)
                                 .build());
                             }
-                            return Ok(func_ty.clone());
+                            // 命名空间被调用（`use std.assert` 后裸名 `assert(...)`）：
+                            // IR 侧按 short→qualified 解析成原生导出（`std.assert.assert`）；
+                            // sema 的判据同源——`native_signatures` 同时登记短名
+                            // （environment.rs 的 add_native_signature），命中即按该签名
+                            // 的返回位给结果类型。未命中（导出面 Struct 的其它形态）
+                            // 保持旧的命名空间类型。
+                            return Ok(match self.native_signatures.get(fn_name) {
+                                Some(MonoType::Fn { return_type, .. }) => (**return_type).clone(),
+                                _ => func_ty.clone(),
+                            });
                         }
                         // 普通 struct 构造器：Point(1.0, 2.0)。构造参数 = **数据字段**
                         // （witness 字段不占槽位，B.2）；位置/命名/争槽/未知名/重复名/
