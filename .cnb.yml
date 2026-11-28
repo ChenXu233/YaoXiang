@@ -4,6 +4,9 @@
 #  1) CNB 上 open 的合并请求（多数由 NPC 发起）-> GitHub 的 cnb/pr-<编号> 分支与 PR。
 #     pull_request.target 属可信事件，直接镜像。GitHub 侧合并/关闭由
 #     .github/workflows/cnb-sync.yml 按需戳 api_trigger 回关。
+#     PR 事件的配置取自**目标分支**的 .cnb.yml（CNB 文档「代码版本选择」），所以
+#     目标 dev 与目标 main 的 PR 要各挂一份 pull_request.target：NPC 默认以默认分支
+#     main 为 base，只写 dev 会漏掉这一半，这些 PR 只能等每日兜底（最长晚 24 小时）。
 #  2) CNB 上 open 的 Issue -> GitHub 同名 Issue。
 #     issue.open 事件直接镜像（与 PR 的 pull_request.target 同构）。
 #     GitHub 上对应 Issue 关闭后由 .github/workflows/cnb-sync.yml 戳 api_trigger 回关 CNB。
@@ -99,3 +102,17 @@ dev:
               issues|all) bash .cnb/scripts/mirror-issues.sh ;;
               *)          echo "本轮跳过 Issue 镜像（scope=${MIRROR_SCOPE}）" ;;
             esac
+
+# 目标 main 的合并请求：同样即时镜像。
+# CNB 按**目标分支**取 PR 事件的配置，main 上没有这一段时，打向 main 的 PR 不产生
+# 任何构建——只能等每日兜底，最长晚 24 小时。与 dev 段的差别只在触发条件，阶段相同。
+main:
+  pull_request.target:
+    - name: mirror-pr-on-event-main
+      runner:
+        cpus: 1
+      imports:
+        - https://cnb.cool/ChenXu233/secrets/-/blob/main/yaoxiang-pr-sync.yml
+      stages:
+        - name: mirror-prs
+          script: bash .cnb/scripts/mirror-prs.sh
