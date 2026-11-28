@@ -1517,7 +1517,10 @@ mod enabled {
                 locals: vec![],
                 values: vec![
                     yaoxiang::middle::ir::ir::ValueInfo {
-                        ty: yaoxiang::frontend::core::sema::MonoType::TypeRef("?".to_string()),
+                        ty: yaoxiang::frontend::core::sema::MonoType::TypeRef(
+                            yaoxiang::frontend::core::types::identity::Nominal::flat("?")
+                                .expect("'?' is a valid bare type name"),
+                        ),
                         debug_name: None,
                         defining_block: 0,
                     },
@@ -1579,7 +1582,10 @@ mod enabled {
     fn test_native_explicit_unknown_value_is_rejected() {
         // Arrange
         let module = simple_value_module(
-            yaoxiang::frontend::core::sema::MonoType::TypeRef("?".to_string()),
+            yaoxiang::frontend::core::sema::MonoType::TypeRef(
+                yaoxiang::frontend::core::types::identity::Nominal::flat("?")
+                    .expect("'?' is a valid bare type name"),
+            ),
             false,
         );
 
