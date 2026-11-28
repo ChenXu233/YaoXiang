@@ -59,6 +59,12 @@ VM 的同类系统上运行它，既能算对结果，也能在出错时指出�
       `>>` 降 `Sar`（发 `ashr`）、`Shr` 归位逻辑右移（发 `lshr`，前端不产出，判据
       `test_native_shr_instruction_uses_logical_shift`）。容器、闭包、资源、FFI 与并作未开始。
 
+  **批次 4 前置（阻塞，2026-11-28 登记）**：
+
+  - [ ] 调用点结果类型未进入 L3（issue [#593](https://github.com/ChenXu233/YaoXiang/issues/593)）——阻塞 std/`println`、字符串比较参与比较；下游 S3/S4/S5。
+  - [ ] 闭包实例化类型未收敛（issue [#590](https://github.com/ChenXu233/YaoXiang/issues/590)）——阻塞闭包/Fn 值；下游 S6。
+  - [ ] SSA 临时值释放事实缺失（issue [#591](https://github.com/ChenXu233/YaoXiang/issues/591)）——阻塞所有权/`Drop`/RC、字符串所有权与容器；下游 S3/S7。
+
 ### 平台验收
 
 - [ ] **Linux ELF（`x86_64-unknown-linux-gnu`）**——原型能产出 ELF（`src/backends/llvm/mod.rs` 的
