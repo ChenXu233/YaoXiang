@@ -231,8 +231,9 @@ pub fn add_native_function_types(
         }
     }
     ambiguous.retain(|_, units| units.len() >= 2);
-    // E1116 文案把单元列表插值进错误消息——native_names 的 HashMap 迭代序是
-    // 随机的，不排序则同一调用点的错误文案逐字不稳定（#577 的病根就是序）。
+    // E1116 文案把单元列表插值进错误消息——registry.modules 的 HashMap 迭代序
+    // （std_code_exports 的枚举序）是随机的，不排序则同一调用点的错误文案逐字
+    // 不稳定（#577 的病根就是序）。
     for units in ambiguous.values_mut() {
         units.sort();
     }

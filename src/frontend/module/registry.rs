@@ -349,14 +349,6 @@ impl ModuleRegistry {
             .collect()
     }
 
-    /// 获取所有 native 函数名列表（用于 IR 生成的快速查找）
-    pub fn native_names(&self) -> Vec<String> {
-        self.std_code_exports()
-            .into_iter()
-            .map(|(_, _, full_path)| full_path.to_string())
-            .collect()
-    }
-
     /// 限定名指向什么——registry 侧单一查询接口（issue #494 / WBS 3.6.6）。
     ///
     /// 收敛前三份判据（原生名 / lower 侧 `qualified_export_is_code`（#479/#493）/

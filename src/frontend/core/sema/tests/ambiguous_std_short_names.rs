@@ -219,6 +219,29 @@ fn test_single_export_short_name_resolves_without_e1116() {
 }
 
 #[test]
+fn test_dotted_ffi_export_resolves_bare_without_e1116() {
+    // Arrange：裸名 to_string——std.convert 的点式 FFI 导出（int.to_string 等）
+    // 是**整名**，export.name = to_string 只由 std.convert 一个单元导出：按
+    // export.name × 模块路径分组不构成裸名歧义（E1116 假阳性回归防线——分组
+    // 键若退回 full_path 末段反推，本测即红）。
+    let source = "main: () -> String = () => {\n    to_string(42)\n}\nmain()";
+
+    // Act
+    let codes = diagnostics_via_pipeline(source);
+
+    // Assert：裸 to_string 确定解析（无 E1116、无未知变量），回归背景 = 对抗
+    // 复审对 724106981 的 F-r1：分组键回退在无此钉时全套测试仍绿
+    assert!(
+        !codes.iter().any(|c| c == "E1116"),
+        "裸名 to_string 单单元导出不得报 E1116，实际诊断: {codes:?}"
+    );
+    assert!(
+        !codes.iter().any(|c| c == "E1001"),
+        "裸名 to_string 应解析到 std.convert 导出，实际诊断: {codes:?}"
+    );
+}
+
+#[test]
 fn test_qualified_call_to_ambiguous_export_resolves() {
     // Arrange：限定名 string.concat(...) 调用（FieldAccess 形态不经裸名臂）
     let source = "use std.string\nmain: () -> String = () => {\n    string.concat(\"foo\", \"bar\")\n}\nmain()";

@@ -840,6 +840,7 @@ test_lazily_constructed_body_checker_reports_e1116_for_ambiguous_bare_name	src/f
 test_use_item_import_disambiguates_bare_reference	src/frontend/core/sema/tests/ambiguous_std_short_names.rs	assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_local_definition_shadows_ambiguous_short_name	src/frontend/core/sema/tests/ambiguous_std_short_names.rs	assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_single_export_short_name_resolves_without_e1116	src/frontend/core/sema/tests/ambiguous_std_short_names.rs	assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
+test_dotted_ffi_export_resolves_bare_without_e1116	src/frontend/core/sema/tests/ambiguous_std_short_names.rs	assertx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_qualified_call_to_ambiguous_export_resolves	src/frontend/core/sema/tests/ambiguous_std_short_names.rs	assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_type_checker_new_creates_with_module_name	src/frontend/core/sema/tests/checker.rs	assert_eqx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_type_checker_has_no_errors_initially	src/frontend/core/sema/tests/checker.rs	assertx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
