@@ -1,93 +1,91 @@
 # Implementer's Handbook (HOWTO)
 
-> **This page is the single entry point for all changes; it is not the canonical rules.** The sole
-> authority for the rules is:
+> **This page is the single entry point for all changes; it is not the canonical rule set.** The
+> sole authority for the rules is:
 >
-> - Changing code → [coding-rules.md](coding-rules.md) (three prohibitions + D0–D4, the exact rules)
->   and [RFC-039 Decision Register](../rfc/accepted/039-compiler-architecture.md) (D1–D52)
-> - Changing documentation → [docs-rules.md](docs-rules.md) (Diátaxis classification rules +
->   wiki-style language style)
+> - Change code → [coding-rules.md](coding-rules.md) (three prohibitions + D0–D4, the precise rule
+>   set) and [RFC-039 decision registry](../rfc/accepted/039-compiler-architecture.md) (D1–D52)
+> - Change documentation → [docs-rules.md](docs-rules.md) (Diátaxis classification rules +
+>   Wikipedia-style language style)
 >
-> This page does only two things: **mandatory pre-work self-check** and **determining whether a
-> change is a “patch-style fix.”** If this page conflicts with the canonical rules, the canonical
-> rules take precedence.
+> This page does only two things: **mandatory self-check before starting work** and **determining
+> whether a change is a "patch-style fix."** If this page conflicts with the canonical rules, the
+> canonical rules take precedence.
 
-## Step 0: Determine What You Are Changing
+## Step 0: Determine What You Need to Change
 
-| Your change                      | Section to read | Canonical rules                    | Validation before committing |
-| -------------------------------- | --------------- | ---------------------------------- | ---------------------------- |
-| Changing code (`src/`, `tests/`) | Section I       | [coding-rules.md](coding-rules.md) | See the end of Section I     |
-| Changing documentation (`docs/`) | Section II      | [docs-rules.md](docs-rules.md)     | See the end of Section II    |
-| Changing both                    | Read both       | Follow both sets of rules          | Run both sets of commands    |
+| Your change                    | Section to read    | Canonical rules                    | Validation before commit  |
+| ------------------------------ | ------------------ | ---------------------------------- | ------------------------- |
+| Change code (`src/`, `tests/`) | Section 1          | [coding-rules.md](coding-rules.md) | See the end of Section 1  |
+| Change documentation (`docs/`) | Section 2          | [docs-rules.md](docs-rules.md)     | See the end of Section 2  |
+| Change both                    | Read both sections | Follow both rule sets              | Run both sets of commands |
 
-Note: Code changes often require corresponding documentation changes—error-code tables, CLI flags,
-and user-visible behavior are all asserted in the documentation. Passing validation in Section I
-does not mean you are finished. First answer: “Where is this behavior documented, and does it need
-to be updated accordingly?”
+Note: Code changes often require synchronized documentation changes—error code tables, CLI
+arguments, and user-visible behavior are all asserted in the documentation. Passing Section 1's
+acceptance criteria does not mean you are done. First answer: "Where is this behavior documented,
+and does it need to be updated?"
 
-## I. Changing Code
+## 1. Changing Code
 
-### Which Phase Are You In?
+### Which stage are you in?
 
-The execution work breakdown is [09-execution-wbs.md](architecture/09-execution-wbs.md). **First
-locate your level-3 task item** (such as 4.2.7) and confirm:
+The implementation master table is [09-execution-wbs.md](architecture/09-execution-wbs.md). **First
+find your Level 3 task entry** (such as 4.2.7), and confirm: whether its prerequisites are complete,
+which acceptance-criterion level it uses (C1–C6; the definitions are in
+[07](architecture/07-equivalence-oracle.md)), and whether it is marked as an "exclusive commit."
 
-- Whether its prerequisites are complete
-- Which acceptance-criterion level it uses (C1–C6; definitions are in
-  [07](architecture/07-equivalence-oracle.md))
-- Whether it is marked as an “exclusive commit”
+### Pre-work self-check (complete every item before writing code)
 
-### Pre-Work Self-Check (Complete Every Item Before Writing Code)
-
-- [ ] I read the full text of this task's level-3 item in [09](architecture/09-execution-wbs.md),
-      not just its title
-- [ ] I read the **actual context** of the code being changed by opening the file, rather than
-      imagining it from the task description
-- [ ] I know this task's acceptance-criterion level (C1 zero-diff / C2 diagnostic set / C3
-      diagnostic codes / C4 behavioral equivalence / C5 AST + diagnostics + behavior / C6 deletion
-      only)
-- [ ] I identified the **error category (A–F, per RFC-039 D59)**: A/B/C categories (legacy behavior
-      **did not succeed**—crash/stack overflow, silent failure, silent mismatch, or silently
-      returning the wrong answer) may be fixed incidentally during refactoring, but they must be
-      **red before green** and must not change the externally observable behavior of programs that
-      previously succeeded; D/E/F categories (user-visible semantics/external contract
-      table/RFC-level design) require a user decision first (see the criteria in
+- [ ] I read the original text of this task's Level 3 entry in
+      [09](architecture/09-execution-wbs.md), not merely the task title
+- [ ] I read the **actual context** of the code being changed (I opened the file rather than
+      imagining it from the task description)
+- [ ] I know the acceptance-criterion level for this task (C1 zero-diff / C2 diagnostic set / C3
+      diagnostic code / C4 behavioral equivalence / C5 AST+diagnostics+behavior / C6 deletion-only)
+- [ ] I classified the **error class (A–F, per RFC-039 D59)**: A/B/C classes (the old behavior was
+      **not successful**—a crash/stack overflow, silent failure, silent mismatch, or silently
+      incorrect answer) may be fixed along the way during a refactor, but must go **red first, then
+      green**, without changing the externally visible behavior of programs that previously
+      succeeded; D/E/F classes (user-visible semantics/external contract tables/RFC-level design)
+      require user approval first (see the
       [07 §Routing Criteria for Semantic Corrections](architecture/07-equivalence-oracle.md))
-- [ ] I ran **D0**: Does this change touch any table (error codes/opcodes/types/stages)? Which
+- [ ] I checked **D0**: Does this change touch any table (error codes/opcodes/types/stages)? Which
       module is the authoritative source? — If you cannot name the module, you have not investigated
-- [ ] I ran **D1/D2**: Can the new type/enum/constant table be expressed using existing concepts +
-      parameters? Does it have the same semantics as an existing concept? (Do not paper over
-      semantically equivalent concepts with import aliases)
-- [ ] I ran **D4**: Does the new code belong to an **existing responsibility category** in the
+- [ ] I checked **D1/D2**: Can newly added types/enums/constant tables be expressed using existing
+      concepts + parameters? Are they semantically equivalent to existing concepts? (Do not paper
+      over equivalent semantics with an import alias)
+- [ ] I checked **D4**: Does the new code belong to an **existing responsibility category** in the
       target module? (See the directory responsibility table in
-      [01-routing.md](architecture/01-routing.md) for authoritative definitions)
-- [ ] I ran the **trade-off criterion**: Is my rejection rationale—or that of the proposal's
-      author—based solely on **correctness** and **readability**? Rejecting a proposal because it
-      has a “large change surface / introduces a new mechanism / is expensive” is an invalid
-      rejection, and review will send it back (Part 2 of coding-rules); for trade-offs requiring a
-      user decision, provide all four items specified by the repository-root `AGENTS.md`
-- [ ] Is my new mechanism of the “register-consume” type (one side registers data and the other
-      consumes it)? If so, were the producer-side and consumer-side **directly driven** end-to-end
-      tests delivered in the same batch? A consumer-side test that manually constructs registration
-      data is a silent path, and review will send it back (Part 6 of coding-rules; precedent:
-      RFC-039 Decision Register D55)
-- [ ] If this task involves writing or changing tests: I read
-      [test-specification.md](test-specification.md)—the `test_<what>_<scenario>` naming prefix, AAA
-      three-section comments for sequences longer than five lines, assertions with custom messages,
-      enum matching with `assert!(matches!(...))`, no `use super::*`, and no inline `mod tests {}`
-- [ ] If my change affects IR or corpus execution behavior (frontend/ir_gen/std/corpus `.yx`): I
-      plan to update the IR snapshot and corpus differential baseline **in the same commit** (see
-      the common-commands section of AGENTS.md), and manually review both diffs—the parallel stream
-      #385 once missed a snapshot update and was blocked by the gate (precedent: dabdfd96)
-- [ ] If the task says “red before green” (such as 2.4.1 or 8.8.1), I confirmed that the red
-      criterion already exists and is currently failing
-- [ ] I have not prepared to “delete failing tests” or “relax the criteria” to pass
-      acceptance—**inability to do so is an implementation defect; report it truthfully rather than
-      relaxing the criteria** (D24/no C5′)
-- [ ] I asked myself where this behavior is documented and whether the documentation must be updated
-      with this change (change → Section II)
+      [01-routing.md](architecture/01-routing.md) for the authoritative definitions)
+- [ ] I applied the **trade-off test**: Are my rejection reasons (or those of the proposal's author)
+      based solely on **correctness** and **readability**? Rejecting a proposal because it has a
+      "large change surface," "requires a new mechanism," or "is expensive" is an invalid rejection,
+      and review will send it back (part 2 of coding-rules); trade-offs requiring a user decision
+      must provide all four items specified in the repository-root `AGENTS.md`
+- [ ] Is my new mechanism of the "register-consume" type (one side registers data and the other
+      consumes it)? If so, did the end-to-end tests that directly drive the producer and consumer
+      ship in the same batch? A consumer test that manually constructs registered data is a silent
+      path, and review will send it back (part 6 of coding-rules; precedent: D55 in the RFC-039
+      decision registry)
+- [ ] If this task requires writing or changing tests: I have read
+      [test-specification.md](test-specification.md)—use the `test_<what>_<scenario>` prefix, add
+      three-part AAA comments for tests longer than five lines, include custom assertion messages,
+      match enum variants with `assert!(matches!(...))`, do not use `use super::*`, and do not use
+      an inline `mod tests {}`
+- [ ] If my change affects IR or corpus execution behavior (front end/ir_gen/std/corpus `.yx`): I
+      plan to update the IR snapshots and corpus differential baseline **in the same commit**
+      (commands in the common-commands section of AGENTS.md), and manually review both diffs—the
+      parallel stream #385 once omitted a synchronized snapshot update and was caught by the gate
+      (precedent: dabdfd96)
+- [ ] If the task says "red first, then green" (such as 2.4.1 and 8.8.1), I have confirmed that the
+      red criterion already exists and is currently failing
+- [ ] I have not prepared to "delete failing tests" or "relax the acceptance criteria" just to
+      pass—if that is impossible, the implementation is defective; report it truthfully rather than
+      relax the criteria (D24/no C5′ exists)
+- [ ] I asked myself: Where is this behavior documented, and does this change require a synchronized
+      documentation update (change → Section 2)
 
-### Is This a “Patch-Style Fix”? (D3—Stop at the First Match)
+### Is this a "patch-style fix"? (D3: stop as soon as one condition matches)
 
 ```
 1) 同一行为需要在 ≥2 处复制？        → 是 → ⛔ 必须提到共享层，禁止复制
@@ -96,61 +94,60 @@ locate your level-3 task item** (such as 4.2.7) and confirm:
 4) 以上皆否                          → 允许局部补丁，但必须附带回归测试
 ```
 
-**Rule 3 is the reason this handbook exists.**
+**The third condition is the reason this handbook exists.** "Changing ≥3 synonymous mappings" means
+you are maintaining a parallel source of truth—the correct action is to eliminate the parallel
+source, not add another one. Historical incidents: three sets of operator enums, five compiler entry
+points, and a hand-written type synonym table (see the incident table in
+[08](architecture/08-maintenance-mechanism.md)).
 
-Changing ≥3 synonymous mappings means maintaining a parallel source of truth—the correct action is
-to eliminate the parallelism, not add another instance. Historical incidents include three sets of
-operator enums, five compiler entry points, and a hand-written type-synonym table (see the incident
-table in [08](architecture/08-maintenance-mechanism.md)).
+### Several hard rules that are easy to violate
 
-### Several Hard Rules That Are Easy to Violate
-
-- **Do not change code you have not read**: You may not modify anything unless you have opened the
-  file and grepped its reference sites. Line numbers reflect the repository's current state;
-  documentation line numbers drift.
-- **Do not leave pending implementation artifacts**: Core functionality must not contain `todo!()` /
-  `Vec::new() // Not implemented yet` / “fix it in a separate issue later.” If you find one, fix it
-  or record it in the current phase's task—do not introduce new leftovers (D52 precedent: the two
-  genuine omissions in `.42` were all incorporated into P7; the third, `exception_handlers`, was
-  rechecked and found to be a false positive—a dead field whose deletion was assigned to P10 S6).
-- **Items requiring verification must be checked line by line**: When a task is marked “must be
-  verified line by line; equivalence must not be assumed” (such as 4.2.7 or 6.1.3), include your
-  verification conclusions in the PR description.
-- **Deleting tests to get a green build is a violation**: The DoD requires the test count at the end
+- **Do not change code you have not inspected**: if you have not opened the file or grepped for
+  references, you may not change it. Line numbers reflect the current repository; line numbers in
+  documentation drift.
+- **Do not leave unfinished work behind**: core functionality must not contain `todo!()` /
+  `Vec::new() // Not implemented yet` / "fix it later in a separate issue." If you find one, fix it
+  or record it under the current phase's tasks—do not introduce new unfinished work (D52 precedent:
+  the two genuine omissions in `.42` were all brought into P7; a recheck of the third,
+  `exception_handlers`, found it was a false positive—a dead field, **already removed with P10 S6.1
+  (6753bbe)**).
+- **Verify line by line when verification is required**: when a task says "must verify line by line;
+  equivalence cannot be assumed" (such as 4.2.7 and 6.1.3), include the verification result in the
+  PR description.
+- **Deleting tests to get a green build is a violation**: the DoD requires the test count at the end
   of each phase to be no lower than it was at the beginning.
-- **Do not manually check parts already covered by tooling**: fmt / clippy / `build.rs` gates /
-  `scripts/ci/check-*.py` from P0 onward. Reviews should focus only on what machines cannot check
-  (responsibility classification and D3).
+- **Do not manually check mechanical work already covered by tools**: `fmt` / `clippy` / the
+  `build.rs` gate / `scripts/ci/check-*.py` from P0 onward. Review should focus only on what
+  machines cannot check (responsibility classification and D3).
 
-### What If You Get Stuck?
+### What to do when you are blocked
 
-| Situation                          | Correct action                                                                                                                                                     | Incorrect action                                                 |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
-| The criterion does not pass        | Report truthfully and fix the implementation; if you believe the criterion is wrong, return to [07](architecture/07-equivalence-oracle.md) and propose changing it | Add a whitelist or exemption to the criterion                    |
-| A design premise proves invalid    | Return to the [RFC-039 Decision Register](../rfc/accepted/039-compiler-architecture.md), amend the decision, and explain why                                       | Quietly work around the decision                                 |
-| The task is larger than expected   | Split the level-3 task further in [09](architecture/09-execution-wbs.md)                                                                                           | Use one oversized commit that mixes multiple acceptance criteria |
-| Documentation contradicts the code | Trust the code first, then fix the documentation (precedent: the layer order in `layers/README.md` is reversed, D7)                                                | Write code according to the incorrect documentation              |
+| Situation                                               | Correct action                                                                                                                                                                   | Incorrect action                                                 |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Acceptance criteria do not pass                         | Report the problem truthfully and fix the implementation; if you suspect the criteria are wrong, return to [07](architecture/07-equivalence-oracle.md) and propose changing them | Add a whitelist or exemption to the criteria                     |
+| You find that a design premise does not hold            | Return to the [RFC-039 decision registry](../rfc/accepted/039-compiler-architecture.md), amend the decision, and explain why                                                     | Bypass the decision and proceed quietly                          |
+| The task is larger than expected                        | Break the Level 3 task into finer pieces in [09](architecture/09-execution-wbs.md)                                                                                               | Use one oversized commit that mixes multiple acceptance criteria |
+| You find a contradiction between documentation and code | Trust the code first, then fix the documentation (precedent: the layer order in `layers/README.md` was reversed, D7)                                                             | Write code according to incorrect documentation                  |
 
-### Validation Before Committing (Code Changes)
+### Pre-commit validation (code changes)
 
 ```bash
-cargo fmt                                              # Formatting (required)
+cargo fmt                                              # Format (required)
 cargo clippy --all --all-features --all-targets -- -D warnings
-python scripts/dev/testsuite.py run fast               # Required before commit: lib + integration side; see below
-python scripts/ci/check-test-channel.py                # Keep the wording consistent across four locations (this page / AGENTS.md / test-specification / pre-commit)
-python scripts/dev/test-gate-census.py --check         # The census table matches the current tree (pre-commit runs this automatically when .rs / census table files change)
+python scripts/dev/testsuite.py run fast               # Required before commit: lib + integration side, see below
+python scripts/ci/check-test-channel.py                # One source of truth across all four locations (this page / AGENTS.md / test-specification / pre-commit)
+python scripts/dev/test-gate-census.py --check         # The census table matches the current tree (pre-commit runs this automatically when .rs files / the census table change)
 ```
 
-The target set for `run fast` is explicit: `--lib` (unit tests under src/) plus four
+The target set for `run fast` is explicit: `--lib` (unit tests under `src/`) plus four
 integration-side targets: `integration` / `formatter_integration` / `yx_runner` /
-`yx_multifile_runner`. The first stage of `pre-commit` runs this exact command; the second stage
-runs `cargo test --all --quiet` to block the commit. Doctests (`cargo test --doc`) and corpus
-differentials are not covered by `run fast`; CI handles them. Exclusive waves that exceed the budget
-list each skipped test as “Skipping N tests” at the end and provide a fallback path; nothing is
-skipped silently.
+`yx_multifile_runner`. The first stage of `pre-commit` runs this command, and the second stage runs
+`cargo test --all --quiet` to block the commit. Doctests (`cargo test --doc`) and corpus
+differentials are not covered by `run fast`; CI handles them. An exclusive wave that does not fit
+the budget lists "Skipped N tests" at the end and provides a fallback path; it never skips silently.
 
-Before pushing, also run the CI-only gates. They are not in the local checklist, so they do not
-exist until you run them:
+Before pushing, also run the CI-only gates—if they are not in the local checklist, they do not
+exist:
 
 ```bash
 python scripts/ci/check-docs-truth.py
@@ -159,50 +156,48 @@ python scripts/ci/check-fanout.py
 python scripts/ci/check-docs-refs.py
 ```
 
-**The error-code reference page is a build-time artifact and is not committed**: When the
+**The error code reference page is a build-time artifact and is not checked in**: when the
 documentation site is built, `scripts/docs/gen-error-code-docs.py` regenerates it from the code
-registry and `locales/*.json` for both zh and en. Therefore, there is no longer a local “regenerate
-and commit” step. When changing a diagnostic code, change its authoritative sources—the
-`define_codes!` registry and its text. Every new code must also have entries in both
-`locales/zh.json` and `locales/en.json`; otherwise, the generated page displays “no entry in
-locales.” To preview the generated result, run `node docs/gen-error-docs.js`.
+registry and `locales/*.json` (on both the zh and en sides), so there is no longer a local
+"regenerate and check in" step. When changing a diagnostic code, modify its authoritative source—the
+`define_codes!` registry and message text: every new code must also have entries in
+`locales/zh.json` and `locales/en.json`; otherwise, the generated page displays "no entry in
+locales" for that code. To preview the generated output, run `node docs/gen-error-docs.js`.
 
-## II. Changing Documentation
+## 2. Changing Documentation
 
-### Classification: Which Directory Does This Document Belong To?
+### Classification: which directory this document belongs to
 
-Use the decision tree in §1 of [docs-rules.md](docs-rules.md). The answer must be unique (tutorial /
-guide / reference / explanation / dev / rfc). **If you cannot give a unique answer, this document
-serves two audiences—split it before making any changes.**
+Use the decision tree in §1 of [docs-rules.md](docs-rules.md) to answer; the answer must be unique
+(tutorial / guide / reference / explanation / dev / rfc). **If you cannot give a unique answer, this
+document serves two audiences—split it before making any changes.**
 
-### Pre-Work Self-Check (Complete Every Item Before Changing Documentation)
+### Pre-work self-check (complete every item before changing documentation)
 
 - [ ] I used the §1 decision tree in docs-rules to determine the directory, and the answer is unique
-- [ ] I grepped for similar content; the same content does not exist in ≥2 places (if it does,
-      consolidate it and do not add a third copy)
-- [ ] I checked `docs/glossary.json` and existing documentation, reused existing terminology, and
-      did not coin a new name
-- [ ] For a new document: the frontmatter `title` is set; the sidebar entry is present
-      (`config.js` + `i18n/en.json`; generateSidebar scans files in the directory, so no manual
-      entry is needed)
-- [ ] For a moved or renamed document: all six synchronization steps are complete (see “Six
-      Synchronization Steps for Moving Documents” below)
-- [ ] The language style passes §2 of docs-rules: active voice, declarative statements, present
-      tense, consistent terminology, and no marketing language
+- [ ] I grepped for similar content; the same content is not duplicated in two or more places (if it
+      is, merge the copies; do not add a third)
+- [ ] I checked `docs/glossary.json` and the existing documentation, reused existing terminology,
+      and did not invent a new name
+- [ ] New document: the frontmatter `title` is set; the sidebar entry has been added (`config.js` +
+      `i18n/en.json`; generateSidebar scans files in the directory, so no manual link is needed)
+- [ ] Moved or renamed document: all six synchronization steps are complete (see "Six
+      synchronization steps for moving a document" below)
+- [ ] The language style passes docs-rules §2: active voice, declarative statements, present tense,
+      consistent terminology, and no marketing language
 
-### Six Synchronization Steps for Moving Documents (Moving = Changing the URL; Every Step Is Required)
+### Six synchronization steps for moving a document (a move changes the URL; none may be omitted)
 
-1. Move the file with `git mv` (preserving file history)
-2. Update site-wide links: grep for the old path and update each occurrence (the build's dead-link
-   check provides a safety net, but does not do this for you)
-3. Update the sidebar and navigation: `docs/src/.vitepress/config.js` and
-   `docs/src/.vitepress/i18n/en.json`
-4. Update the en/ mirror: move the corresponding English file in sync
-5. Update scripts and configurations that reference the path: `scripts/`, `docs/scripts/`,
-   `.github/` workflows, `AGENTS.md`, and `README.md`
-6. Update the cache key in `docs/src/.i18n-cache.json` (the key includes the file path)
+1. Use `git mv` to move it (preserving file history)
+2. Site-wide links: grep for the old path and update each occurrence (the build's dead-link check
+   will catch omissions, but it will not update them for you)
+3. Sidebar and navigation: `docs/src/.vitepress/config.js` and `docs/src/.vitepress/i18n/en.json`
+4. `en/` mirror: move the corresponding English file in sync
+5. Scripts and configuration that reference the path: `scripts/`, `docs/scripts/`, `.github/`
+   workflows, `AGENTS.md`, and `README.md`
+6. The cache key in `docs/src/.i18n-cache.json` (the key contains the file path)
 
-### Is This a “Patch-Style Fix”? (Documentation D3—Stop at the First Match)
+### Is this a "patch-style fix"? (documentation version of D3: stop as soon as one condition matches)
 
 ```
 1) 同一内容要改到第 2 处副本？                    → 是 → ⛔ 合并副本，只留一处
@@ -211,74 +206,74 @@ serves two audiences—split it before making any changes.**
 4) 以上皆否                                        → 允许局部修改
 ```
 
-### Validation Before Committing (Documentation Changes)
+### Pre-commit validation (documentation changes)
 
 ```bash
 cd docs
-pnpm docs:build                                # Dead links are not tolerated; the build must pass
+pnpm docs:build                                # Zero tolerance for dead links; the build must pass
 pnpm lint:md                                   # markdownlint
 pnpm format:md:check                           # prettier
 python ../scripts/ci/check-docs-examples.py    # Execute documentation examples for real
 python ../scripts/ci/check-docs-orphan.py      # Orphan pages and duplicate H1s
 python ../scripts/ci/check-docs-truth.py       # Version injection and fact reconciliation
-python ../scripts/ci/check-docs-refs.py        # Referenced paths must resolve (only committed paths count)
+python ../scripts/ci/check-docs-refs.py        # Resolve reference paths (only committed paths count)
 ```
 
-markdownlint cannot catch VitePress Vue compilation errors (angle-bracket placeholders are treated
-as elements, resulting in `Element is missing end tag`), and in documentation-only commits it is
+markdownlint cannot catch VitePress Vue compilation errors (an angle-bracket placeholder is treated
+as an element, producing `Element is missing end tag`), and on a documentation-only commit it is
 skipped with `no files to check`—**an actual build is the only criterion**. Always put placeholders
 in backticks.
 
-If you changed anything under `rfc/`, add one more command:
+If you changed `rfc/`, add one more command:
 
 ```bash
 python ../scripts/rfc/check_tracking.py        # RFC status consistency
 ```
 
-## III. Measurement (Batch Trees)
+## 3. Measurement (batch tree)
 
-Measurements must be performed against a **frozen revision**. Cargo fingerprints include source
-paths—**switching trees = a full rebuild, while switching revisions within the same tree = an
-incremental build**—so use one tree per batch, always created inside the repository at
-`target/yx-scratch/<batch>/tree` (already covered by `.gitignore`). Do not run `git worktree add` /
-`git clone` or create a directory outside the repository.
+Measurements must be performed on a **frozen revision**. Cargo fingerprints include source
+paths—**switching trees = a full rebuild; switching revisions within the same tree = an incremental
+build**. Therefore, use one tree per batch, fixed at `target/yx-scratch/<batch>/tree` inside the
+repository (already covered by `.gitignore`). Never run `git worktree add` / `git clone` or create a
+directory outside the repository.
 
-Workflow: `init <batch>` creates the tree (the first full build takes about 5 minutes / uses about 3
-GB) → `use <batch> --rev <sha> --by <member> --task <id>` locks the tree and switches revisions →
-`build <batch>` performs a unified build (fixed `cargo build --bin yaoxiang-rs`; do not invent
-another command) → measure → `release <batch>` unlocks it → finish with `gc` and paste the `status`
-output into the task output. See `python scripts/dev/scratch.py --help` for the parameters.
+Workflow: `init <batch>` creates the tree (the first full build takes about 5 minutes / 3 GB) →
+`use <batch> --rev <sha> --by <member> --task <id>` locks it and switches the revision →
+`build <batch>` performs the standardized build (always use `cargo build --bin yaoxiang-rs`; do not
+invent another command) → take measurements → `release <batch>` unlocks it → finish with `gc` and
+paste the `status` output into the task output. See `python scripts/dev/scratch.py --help` for the
+parameters.
 
-- **Only one holder is allowed at a time**; implementers do not work in this tree (they write code
-  in the main repository working tree).
-- Only when two people genuinely need to measure different revisions in parallel should you create a
-  second tree, `<batch>-b`, and record the reason in the batch record (the cost is another full
-  build).
-- **`trial` command forms**: `trial <batch> --patch <p> -- <command...>` (recommended; tokens after
-  `--` are used verbatim as the command, which may contain `-`/`--` arguments) and
-  `trial <batch> <command...> --patch <p>` (usable when the command contains no arguments beginning
-  with `-`) are equivalent. `--patch` must appear before `--`; the command must not be empty; mixing
-  the two forms (commands on both sides of `--`) is rejected (exit 2).
-- **You must run `build` after `trial` before measuring**: trial's mechanical restoration covers
-  only source files, while the mutated-version test has already rebuilt the batch-tree
-  binary—without another build, all subsequent measurements come from the mutated artifact.
-- Probes (`.yx`) also belong in `target/yx-scratch/<batch>/` (`target/` is ignored and is not
-  included in corpus differentials); they are workspace artifacts, not documentation sources (see
-  AGENTS meta-rule ①).
+- **Only one holder is allowed at a time**; implementers do not enter this tree (they write code in
+  the main repository working tree).
+- **When two people genuinely need to measure different revisions in parallel**, create a second
+  tree, `<batch>-b`, and record the reason in the batch record (the cost is another full build).
+- **`trial` command form**: `trial <batch> --patch <p> -- <command...>` (recommended; tokens after
+  `--` are used verbatim as the command, and the command may contain `-`/`--` arguments) and
+  `trial <batch> <command...> --patch <p>` (usable when the command has no arguments beginning with
+  `-`) are equivalent. `--patch` must appear before `--`; the command must not be empty; mixing the
+  two forms (commands on both sides of `--`) is rejected (exit 2).
+- **You must run `build` after `trial` before measuring**: trial's mechanical restoration only
+  covers source files, while the mutation test has already recompiled the batch-tree binary—without
+  a rebuild, all subsequent measurements come from the mutated artifact.
+- Probes (`.yx`) also go in `target/yx-scratch/<batch>/` (`target/` is ignored and is not included
+  in corpus differentials); they are workspace artifacts, not documentation sources (see AGENTS
+  meta-rule ①).
 
 ## References
 
 - [coding-rules.md](coding-rules.md) — Three prohibitions, D0–D4, red lines, and the review
-  checklist (**the canonical code rules**)
-- [docs-rules.md](docs-rules.md) — Diátaxis classification rules and wiki-style language style
-  (**the canonical documentation rules**)
+  checklist (**canonical code rules**)
+- [docs-rules.md](docs-rules.md) — Diátaxis classification rules and Wikipedia-style language style
+  (**canonical documentation rules**)
 - [08-maintenance-mechanism.md](architecture/08-maintenance-mechanism.md) — Historical incident
-  table, external references, and rationale for rejected approaches (diagnostic records, not rule
-  sources)
-- [09-execution-wbs.md](architecture/09-execution-wbs.md) — Level-3 task table, dependencies, and
-  parallel groupings
-- [07-equivalence-oracle.md](architecture/07-equivalence-oracle.md) — C1–C6 criterion definitions
-- [01-routing.md](architecture/01-routing.md) — Authoritative responsibility-category definitions
-  and target directory structure
-- [RFC-039](../rfc/accepted/039-compiler-architecture.md) — Overall plan and Decision Register
+  table, external references, and rejected-option rationale (a diagnostic record, not a rule source)
+- [09-execution-wbs.md](architecture/09-execution-wbs.md) — Level 3 task table, dependencies, and
+  parallel groups
+- [07-equivalence-oracle.md](architecture/07-equivalence-oracle.md) — Definitions of the C1–C6
+  acceptance criteria
+- [01-routing.md](architecture/01-routing.md) — Authoritative definitions of responsibility
+  categories and the target directory structure
+- [RFC-039](../rfc/accepted/039-compiler-architecture.md) — Overall design and decision registry
   D1–D52
