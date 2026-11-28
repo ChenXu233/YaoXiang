@@ -127,7 +127,9 @@ impl<'a> ExpressionInferrer<'a> {
         &self,
         written: &str,
     ) -> Option<crate::frontend::core::types::identity::Nominal> {
-        self.import_face?.type_identity(written)
+        self.import_face?.type_identity(
+            crate::frontend::core::sema::import_face::WrittenTypeName::from_ast(written),
+        )
     }
 
     /// 把刚由**写出名**构造出的平路径类型升格为身份（构造器/变体/枚举路径）。
@@ -142,7 +144,9 @@ impl<'a> ExpressionInferrer<'a> {
         match self.import_face {
             Some(face) => {
                 crate::frontend::core::types::substitute::resolve_nominal_identities(&ty, &|w| {
-                    face.type_identity(w)
+                    face.type_identity(
+                        crate::frontend::core::sema::import_face::WrittenTypeName::from_ast(w),
+                    )
                 })
             }
             None => ty,
@@ -209,7 +213,10 @@ impl<'a> ExpressionInferrer<'a> {
         written_type: &str,
         method: &str,
     ) -> Option<DefPath> {
-        self.import_face?.method_key(written_type, method)
+        self.import_face?.method_key(
+            crate::frontend::core::sema::import_face::WrittenTypeName::from_ast(written_type),
+            method,
+        )
     }
 
     /// Nominal→方法键：委托导入面的唯一实现；仅由 receiver_method_key 使用。
@@ -241,9 +248,9 @@ impl<'a> ExpressionInferrer<'a> {
         // 身份优先：模块非空时直接用 (module, 定义名) 取路径；module 为空（flat/
         // 单文件/幻名）必须回落到字符串路径——那里还承担 `is_conflicted` 拒绝面。
         if !nominal.module().is_empty() {
-            if let Some(key) = self.method_key_for_nominal(nominal, method) {
-                return Some(key);
-            }
+            // 带模块的身份**不得**回落到裸名写名解析：裸名可能命中同名别名/
+            // 本单元同名类型，正是同名串味（D64）。查不到就是没有方法键。
+            return self.method_key_for_nominal(nominal, method);
         }
         self.method_key(nominal.bare(), method)
     }
@@ -891,22 +898,22 @@ impl<'a> ExpressionInferrer<'a> {
             .insert(match_span, resolved.clone());
 
         // 和类型判定（Generic 形态 / scope 镜像 Struct 形态）
-        let sum_name: Option<String> = match &resolved {
+        // 名义头保留**身份**（不是裸名）：后续变体表/穷尽性都按身份取；
+        // 裸名只用于显示与 import 用途记账（D64：同名和类型不串味）。
+        let sum_nominal: Option<crate::frontend::core::types::identity::Nominal> = match &resolved {
             MonoType::Generic { name, .. } if self.sum_variants(name).is_some() => {
-                Some(name.clone().bare().to_string())
+                Some(name.clone())
             }
-            MonoType::Struct(st) if self.sum_variants(&st.name).is_some() => {
-                Some(st.name.clone().bare().to_string())
-            }
+            MonoType::Struct(st) if self.sum_variants(&st.name).is_some() => Some(st.name.clone()),
             // 非泛型和类型的方法体（`self: &Maybe`）：Ref 剥离后是 TypeRef，
             // 名义命中 sum_types 即和类型（经类型镜像复核）
             MonoType::TypeRef(n) => {
                 if self.sum_variants(n).is_some() {
-                    Some(n.clone().bare().to_string())
+                    Some(n.clone())
                 } else {
                     match self.type_def(n).map(|p| &p.body) {
                         Some(MonoType::Struct(st)) if self.sum_variants(&st.name).is_some() => {
-                            Some(st.name.bare().to_string())
+                            Some(st.name.clone())
                         }
                         _ => None,
                     }
@@ -914,10 +921,10 @@ impl<'a> ExpressionInferrer<'a> {
             }
             _ => None,
         };
+        let sum_name = sum_nominal.as_ref().map(|n| n.bare().to_string());
         // RFC-010b：统一模式检查——非和类型 scrutinee 走同一条臂循环
         //（字面量/元组/结构体/或模式/守卫/标识符绑定全部可用），Union
         // 模式仅在和类型上有定义（check_pattern 内按类型自足解析）
-        let sum_nominal = sum_name.as_ref().map(|n| self.nominal_for(n));
         let variants = sum_nominal
             .as_ref()
             .and_then(|n| self.sum_variants(n))
@@ -1101,13 +1108,18 @@ impl<'a> ExpressionInferrer<'a> {
         // 非和类型：无兜底臂时，字面量臂必须覆盖全部可居留值——仅 Bool
         //（true+false）可枚举；Int/String/Char 等值域开放，必须有兜底臂。
         // Void 空类型无可居留值，vacuously 穷尽。
-        if let Some(sum_name) = &sum_name {
+        if let Some(sum_nominal) = &sum_nominal {
             if !fallback_seen {
-                let missing: Vec<String> = self.sum_types[sum_name]
-                    .iter()
-                    .filter(|v| !seen_variants.contains(&v.name))
-                    .map(|v| v.name.clone())
-                    .collect();
+                let missing: Vec<String> = self
+                    .sum_variants(sum_nominal)
+                    .map(|variants| {
+                        variants
+                            .iter()
+                            .filter(|v| !seen_variants.contains(&v.name))
+                            .map(|v| v.name.clone())
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 if !missing.is_empty() {
                     return Err(
                         ErrorCodeDefinition::pattern_non_exhaustive(&missing.join(", ")).build(),
@@ -1352,7 +1364,7 @@ impl<'a> ExpressionInferrer<'a> {
                             .unwrap_or_default();
                         (
                             name.clone(),
-                            self.sum_types[name.bare()].clone(),
+                            self.sum_variants(name).cloned().unwrap_or_default(),
                             param_names,
                             args.clone(),
                         )
@@ -1365,7 +1377,7 @@ impl<'a> ExpressionInferrer<'a> {
                     ),
                     MonoType::TypeRef(n) if self.sum_variants(n).is_some() => (
                         n.clone(),
-                        self.sum_types[n.bare()].clone(),
+                        self.sum_variants(n).cloned().unwrap_or_default(),
                         Vec::new(),
                         Vec::new(),
                     ),

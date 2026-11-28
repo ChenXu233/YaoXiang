@@ -162,6 +162,8 @@ test_multifile_import_cycle_warning_anchors_on_use_statement	src/driver/tests/im
 test_multifile_import_cycle_reports_violated_value_edge	src/driver/tests/import_cycle.rs	assert_eqx1 assertx2 expectx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_multifile_benign_import_cycle_message_predicts_no_runtime_failure	src/driver/tests/import_cycle.rs	assert_eqx1 assertx3 expectx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_multifile_acyclic_imports_emit_no_w1007	src/driver/tests/import_cycle.rs	assertx1 expectx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_multifile_same_named_struct_field_index_uses_definition	src/driver/tests/lower_type_identity.rs	assertx3 is_nonex1 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_multifile_same_named_sum_variants_use_definition	src/driver/tests/lower_type_identity.rs	assertx3 is_nonex1 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_lsp_semantic_db_kept_when_target_has_type_error	src/driver/tests/lsp_semantic_db.rs	assertx2 expectx3	待判	两门皆不过；断言只有 is_ok/is_some/unwrap 一类弱断言	退役候选
 test_check_with_versionless_manifest_reports_e3024_and_drops_w1002	src/driver/tests/manifest_error.rs	expectx1 helperx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_check_with_invalid_toml_manifest_reports_e3024_and_drops_w1002	src/driver/tests/manifest_error.rs	expectx1 helperx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
@@ -590,6 +592,7 @@ test_type_identity_index_first_registration_wins	src/frontend/core/sema/environm
 test_method_key_for_nominal_uses_module_and_definition_name	src/frontend/core/sema/import_face.rs	assert_eqx1 expectx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_method_key_for_nominal_flat_matches_string_path	src/frontend/core/sema/import_face.rs	assert_eqx2 expectx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_method_key_for_nominal_alias_uses_definition_identity	src/frontend/core/sema/import_face.rs	assert_eqx2 assert_nex1 expectx1	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
+test_written_type_name_rejects_disambiguated_projection	src/frontend/core/sema/import_face.rs	（无断言）	待判	文件头只引整篇 RFC/规范而无节号（收紧后不算条款门）——需人工核	待核
 test_missing_required_param_help_has_no_hardcoded_language	src/frontend/core/sema/inference/tests/arg_binding.rs	assert_eqx1 assertx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_bounds_checker_creation	src/frontend/core/sema/inference/tests/bounds.rs	assertx1 is_okx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_check_const_bounds_empty	src/frontend/core/sema/inference/tests/bounds.rs	matchesx1 assertx1 helperx1	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
@@ -1790,6 +1793,8 @@ test_list_comprehension_free_variable_collector_captures_outer_value	src/middle/
 test_nested_spawn_captures_through_outer_upvalue	src/middle/lower/expr/tests/closure.rs	assertx2	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_closure_capture_early_error_does_not_leak	src/middle/lower/expr/tests/closure.rs	matchesx2 assertx4 is_okx1 is_errx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_corpus_over_budget_forms_fit_after_allocation	src/middle/lower/tests/budget.rs	assertx3	待判	两门皆不过；含强断言，证明门需人工复核	待判
+test_lower_struct_identity_view_keeps_same_named_definitions_apart	src/middle/lower/tests/identity_keys.rs	assert_eqx3 assertx3 expectx4	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
+test_lower_sum_identity_view_resolves_by_identity_not_bare_name	src/middle/lower/tests/identity_keys.rs	assert_eqx2 assertx2 is_somex1 is_nonex1 unwrapx1 expectx5	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核
 test_range_pattern_compiles_to_closed_ge_le_chain	src/middle/lower/tests/pattern_range.rs	matchesx1 assertx2	病史	函数体/注释点名 issue/回归/缺陷/事故	留
 test_range_pattern_negative_bounds_compile_to_negative_constants	src/middle/lower/tests/pattern_range.rs	assertx1	病史	文件头（//! 回归背景）点名 issue/回归/缺陷/事故	留
 test_ir_view_type_args_normalize_list_to_vec	src/middle/lower/tests/query.rs	assert_eqx1 expectx2	条款	文件头有可核条目（§<数字>），引用未经人工确认（0.6-19 起抽样审计已废止）	待核

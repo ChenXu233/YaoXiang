@@ -713,6 +713,8 @@ main = () => {
 /// `u == u` 走 a 的 `true`——两臂拼调用名时用的是 typecheck 过来的短类型名。
 /// D64 起 a.Temp 与 b.Temp 是**不同名义类型**，`==` 只在同型两侧成立
 /// （旧夹具的 `u == t` 靠裸名混同取 b 的 equal，那是 L3 要消除的串味）。
+/// D59 分流：**B 类收紧**（原先被混同的静默错派改为类型错误；两臂仍各与
+/// 自身比较，判据覆盖不变）。
 #[test]
 fn test_multifile_cross_unit_same_named_type_operator_arms_dispatch_to_defining_unit() {
     // Arrange - 两单元同名类型各带 Index / Equal（a = v+1/true、b = v*10/false）

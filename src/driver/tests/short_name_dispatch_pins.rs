@@ -188,7 +188,8 @@ t = bump(&r)
 /// 历史：L3 之前别名导入时实现登记按定义侧名键控、typecheck 查不到 ⇒ E1082
 /// 硬错先挡；本测试当时钉 `E1082`。D64 让类型身份随别名解析到 (lib, Maybe)，
 /// 该拒绝面不再成立——本测试改为钉可达后的**派发名**（判据更强：短名回落会
-/// 在此翻红）。
+/// 在此翻红）。D59 分流：**B 类收紧**（旧 E1082 是身份缺口造成的假拒绝；
+/// 新判据比旧判据更强——除「可编译」外还钉终点名且禁止回落别名叶子名）。
 #[test]
 fn test_aliased_imported_user_try_type_dispatch_uses_definition_identity() {
     // Arrange：lib 定义 Maybe+Try，入口以别名 MaybeB 导入后在自己的函数里用 `?`

@@ -136,7 +136,14 @@ pub(super) fn operator_dispatch_name(
     };
     let key = identity
         .map(|type_path| DefPath::method(&type_path.module, &type_path.name, method))
-        .or_else(|| face.and_then(|face| face.method_key(impl_type, method)));
+        .or_else(|| {
+            face.and_then(|face| {
+                face.method_key(
+                    crate::frontend::core::sema::import_face::WrittenTypeName::from_ast(impl_type),
+                    method,
+                )
+            })
+        });
     match key {
         Some(key) => crate::frontend::core::sema::environment::method_ir_name(&key, 0),
         None => format!("{impl_type}.{method}"),
@@ -872,7 +879,11 @@ fn concrete_type_from_expr_arg(
         crate::ast::Expr::Var(name, _) => {
             // 写出名 → 名义类型（导入面唯一解析；未声明名保持平路径）。
             let nominal = import_face
-                .and_then(|face| face.type_identity(name))
+                .and_then(|face| {
+                    face.type_identity(
+                        crate::frontend::core::sema::import_face::WrittenTypeName::from_ast(name),
+                    )
+                })
                 .unwrap_or_else(|| {
                     Nominal::flat(AsRef::<str>::as_ref(&(name.clone())))
                         .expect("type name must be bare and non-empty")

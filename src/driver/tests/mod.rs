@@ -6,6 +6,7 @@ mod dce_wiring;
 mod driver;
 mod helpers;
 mod import_cycle;
+mod lower_type_identity;
 mod lsp_semantic_db;
 mod manifest_error;
 mod method_def_names;

@@ -526,9 +526,13 @@ impl StatementChecker {
         &self,
         written: &str,
     ) -> Nominal {
-        self.import_face.type_identity(written).unwrap_or_else(|| {
-            Nominal::flat(written).expect("type name must be bare and non-empty")
-        })
+        self.import_face
+            .type_identity(
+                crate::frontend::core::sema::import_face::WrittenTypeName::from_ast(written),
+            )
+            .unwrap_or_else(|| {
+                Nominal::flat(written).expect("type name must be bare and non-empty")
+            })
     }
 
     /// 名义类型 → `env.types` 本地表项（身份索引；平路径回落裸名）。
@@ -3310,10 +3314,11 @@ impl StatementChecker {
         let written = type_annotation
             .and_then(Self::written_type_name)
             .or_else(|| initializer.and_then(Self::constructor_type_name));
-        if let Some(path) = written
-            .as_deref()
-            .and_then(|written| self.import_face.type_path(written))
-        {
+        if let Some(path) = written.as_deref().and_then(|written| {
+            self.import_face.type_path(
+                crate::frontend::core::sema::import_face::WrittenTypeName::from_ast(written),
+            )
+        }) {
             self.scope.set_type_identity(name, path);
         }
         // 6.8.5-2a 值环境：非 mut 绑定 + 初始化式是字面量 ⇒ 值编译期已知。

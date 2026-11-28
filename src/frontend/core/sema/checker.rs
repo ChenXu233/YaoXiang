@@ -1435,6 +1435,7 @@ impl TypeChecker {
             operator_dispatches,
             implementation_proofs: self.env.implementation_proofs.clone(),
             interface_impl_registry: self.env.interface_impl_registry.clone(),
+            type_identity_index: self.env.type_identity_index().clone(),
             sum_types: self.env.sum_types.clone(),
             sum_type_param_names: self
                 .env
@@ -3072,7 +3073,11 @@ impl TypeChecker {
                 let iface_identity = self
                     .env
                     .import_face
-                    .type_identity(interface_name)
+                    .type_identity(
+                        crate::frontend::core::sema::import_face::WrittenTypeName::from_ast(
+                            interface_name,
+                        ),
+                    )
                     .unwrap_or_else(|| {
                         Nominal::flat(AsRef::<str>::as_ref(&(interface_name)))
                             .expect("type name must be bare and non-empty")

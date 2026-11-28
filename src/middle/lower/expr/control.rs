@@ -592,31 +592,23 @@ impl AstToIrGenerator {
                 pattern: payload,
                 ..
             } => {
-                // 和类型上下文从被匹配类型解析（载荷位可能是另一和类型）
+                // 和类型上下文从被匹配类型解析（载荷位可能是另一和类型）。
+                // 变体表按**类型身份**取（D64）：同名和类型（a.Color / b.Color）
+                // 各用自己声明的变体序；组名仍取裸名（IR/显示口径不变）。
                 let mut stripped = ty.cloned();
                 while let Some(MonoType::Ref { inner, .. }) = stripped {
                     stripped = Some(*inner);
                 }
-                let (sum_name, args): (String, Vec<MonoType>) = match &stripped {
-                    Some(MonoType::Generic { name, args })
-                        if self.sum_type_variants.contains_key(name.bare()) =>
-                    {
-                        (name.clone().bare().to_string(), args.clone())
-                    }
-                    Some(MonoType::Struct(s))
-                        if self.sum_type_variants.contains_key(s.name.bare()) =>
-                    {
-                        (s.name.clone().bare().to_string(), Vec::new())
-                    }
-                    Some(MonoType::TypeRef(n))
-                        if self.sum_type_variants.contains_key(n.as_str()) =>
-                    {
-                        (n.clone().bare().to_string(), Vec::new())
-                    }
-                    _ => return Err(unsupported(variant)),
-                };
-                let Some(variants) = self.sum_type_variants.get(&sum_name).cloned() else {
+                let Some(identity) = stripped.as_ref().and_then(Self::mono_nominal).cloned() else {
                     return Err(unsupported(variant));
+                };
+                let Some(variants) = self.sum_variants_for(&identity).cloned() else {
+                    return Err(unsupported(variant));
+                };
+                let sum_name = identity.bare().to_string();
+                let args: Vec<MonoType> = match &stripped {
+                    Some(MonoType::Generic { args, .. }) => args.clone(),
+                    _ => Vec::new(),
                 };
                 let Some((variant_index, params)) = variants
                     .iter()

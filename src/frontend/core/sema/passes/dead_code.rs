@@ -306,7 +306,7 @@ impl DeadCodeAnalyzer {
     /// `SymbolDef::name` 同形）。定义名是**本文件声明处**写出的两段式名字
     /// （`Point.render`），在此按段读出 owner/method——不是对任何限定名的反解。
     fn method_group(def_name: &str) -> Option<DefPath> {
-        let (owner, method) = def_name.rsplit_once('.')?;
+        let (owner, method) = Self::declared_method_segments(def_name)?;
         Some(DefPath::method("", owner, method))
     }
 
@@ -315,8 +315,23 @@ impl DeadCodeAnalyzer {
         &self,
         def_name: &str,
     ) -> Option<DefPath> {
-        let (owner, method) = def_name.rsplit_once('.')?;
+        let (owner, method) = Self::declared_method_segments(def_name)?;
         Some(DefPath::method(&self.unit_key, owner, method))
+    }
+
+    /// **声明域**两段名的唯一拆分点：`{Type}.{method}`。
+    ///
+    /// 入参是 AST 声明处写出的名字（`Point.render`），不是身份串；一旦归属段
+    /// 自己带点就说明身份投影回流进了声明域——debug 构建直接炸出调用点（D64
+    /// §2.5：身份不得从名字串反解）。声明名的类型名是标识符，故正常的两个
+    /// 字段各不含点。
+    fn declared_method_segments(def_name: &str) -> Option<(&str, &str)> {
+        let (owner, method) = def_name.rsplit_once('.')?;
+        debug_assert!(
+            !owner.contains('.') && !method.is_empty(),
+            "方法定义名必须是声明域两段名（Type.method），收到含点的归属段：{def_name}"
+        );
+        Some((owner, method))
     }
 
     /// 收集入口点和符号定义（合并处理以减少代码重复）

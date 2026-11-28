@@ -36,6 +36,47 @@ pub struct TypeOrigin {
     pub declared: bool,
 }
 
+/// 写出类型名（**域**）：只承载 AST/导入面/构造器**写出来的**名字。
+///
+/// 身份投影（[`DefPath::project`] 的产物）与「命名空间限定写名」文本同形
+/// （`a.T` vs `lib.T`），投影串没有可判来源的上下文——一旦进到写名解析，
+/// 按点切分只能猜模块（§2.5 执行口径：身份不得从名字串反解）。本类型
+/// 因此**只**在确知是写名的边界构造、不实现 `From<&str>`/`Deref`；
+/// debug 构建下构造器只拒绝**投影指纹**——`#N` 消歧后缀与空名；它不做
+/// 全字符校验（本域同时承载类型层的平坦名：幻名、内建、合成名，它们不是
+/// 标识符但确是写名/合成名）。
+#[derive(Clone, Copy, Debug)]
+pub struct WrittenTypeName<'a>(&'a str);
+
+impl<'a> WrittenTypeName<'a> {
+    /// 从**写名**构造（AST 类型位置 / 导入面表 / 构造器写出名）。
+    ///
+    /// 调用点审计：全仓调用只允许出现在这三类来源上；不得传
+    /// `Nominal::project()`/`DefPath::project()` 的结果。
+    pub fn from_ast(written: &'a str) -> Self {
+        debug_assert!(
+            is_written_type_name(written),
+            "写名域拒绝投影指纹（消歧后缀 #N / 空名）：{written}"
+        );
+        Self(written)
+    }
+
+    pub fn as_str(&self) -> &'a str {
+        self.0
+    }
+}
+
+/// 写名形态守卫：只拒绝**投影指纹**——`DefPath::project` 的重载消歧后缀
+/// `#N` 与空名。
+///
+/// 为什么不做全字符校验：本构造器同时服务类型层的平坦名（幻名、内建、合成名
+/// 如 `Tuple` / 形参名 / `$Group` 面）——这些不是标识符但确是写名/合成名域，
+/// 拒绝它们只会把合法解析打断（实测：加全字符校验后语料在本断言处炸出）。
+/// 身份投影的真正闸是构造点审计 + 域类型不提供从投影构造的入口。
+fn is_written_type_name(written: &str) -> bool {
+    !written.is_empty() && !written.contains('#')
+}
+
 /// 导入面：类型名 → 来源，加整体导入的命名空间前缀。
 #[derive(Debug, Clone, Default)]
 pub struct ImportFace {
@@ -164,9 +205,10 @@ impl ImportFace {
     /// 推断器都委托到这里，不存在第二份判定。
     pub fn method_key(
         &self,
-        written_type: &str,
+        written_type: WrittenTypeName<'_>,
         method: &str,
     ) -> Option<DefPath> {
+        let written_type = written_type.as_str();
         if written_type.is_empty() || method.is_empty() {
             return None;
         }
@@ -216,8 +258,9 @@ impl ImportFace {
     /// 歧义名 / 未知名 → None（宁可不记身份，也不用猜的来源）。
     pub fn type_path(
         &self,
-        written: &str,
+        written: WrittenTypeName<'_>,
     ) -> Option<DefPath> {
+        let written = written.as_str();
         if let Some((prefix, rest)) = written.split_once('.') {
             if rest.is_empty() || rest.contains('.') {
                 return None;
@@ -237,8 +280,9 @@ impl ImportFace {
     /// 类型参数一律返回 None——调用方保持平路径，它们不是类型身份。
     pub fn type_identity(
         &self,
-        written: &str,
+        written: WrittenTypeName<'_>,
     ) -> Option<Nominal> {
+        let written = written.as_str();
         // 注解里的类型名是标识符；带点形态不是本入口的域（AST 类型位置会把
         // 点号解析成 const 表达式，identity 无从谈起）。
         if written.contains('.') {
@@ -261,7 +305,7 @@ impl ImportFace {
     ) -> crate::frontend::core::types::MonoType {
         let mono = crate::frontend::core::types::MonoType::from(ty.clone());
         crate::frontend::core::types::substitute::resolve_nominal_identities(&mono, &|w| {
-            self.type_identity(w)
+            self.type_identity(WrittenTypeName::from_ast(w))
         })
     }
 
@@ -301,7 +345,7 @@ mod tests {
         let identity = Nominal::flat("T").expect("flat identity must be valid");
         // Act
         let nominal_key = face.method_key_for_nominal(&identity, "add");
-        let string_key = face.method_key("T", "add");
+        let string_key = face.method_key(WrittenTypeName::from_ast("T"), "add");
         // Assert：flat 的 Nominal 路径与既有裸名路径逐字相同
         assert_eq!(
             nominal_key, string_key,
@@ -329,7 +373,7 @@ mod tests {
         let identity = Nominal::item("b", "Temp").expect("identity must be valid");
         // Act
         let nominal_key = face.method_key_for_nominal(&identity, "add");
-        let alias_key = face.method_key("TempB", "add");
+        let alias_key = face.method_key(WrittenTypeName::from_ast("TempB"), "add");
         // Assert：Nominal 入口与别名导入解析同一身份；定义名裸查不是同一事实
         assert_eq!(
             nominal_key, alias_key,
@@ -342,8 +386,16 @@ mod tests {
         );
         assert_ne!(
             nominal_key,
-            face.method_key("Temp", "add"),
+            face.method_key(WrittenTypeName::from_ast("Temp"), "add"),
             "bare definition name in the consumer is flat, not the imported identity"
         );
+    }
+
+    /// 写名域的守卫：混编消歧形态（`DefPath::project` 的重载后缀 `#N`）不是
+    /// 写出名——debug 构建必须炸出调用点（D64 §2.5：身份投影不得进写名解析）。
+    #[test]
+    #[should_panic(expected = "写名域拒绝投影指纹")]
+    fn test_written_type_name_rejects_disambiguated_projection() {
+        let _ = WrittenTypeName::from_ast("Temp#1");
     }
 }

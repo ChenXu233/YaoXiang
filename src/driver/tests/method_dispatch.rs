@@ -152,6 +152,12 @@ fn test_cross_unit_distinct_type_names_keep_their_own_dispatch() {
 /// ⇒ `u[0]` 得 3.0（应 20.0）、`u == t` 得 true（应 false）——两臂拼调用名时用的是
 /// typecheck 过来的**短类型名**（不经接收者身份，WBS 4.9.10 后由
 /// `OperatorDispatch::dispatch_name` 一次定死）。
+///
+/// D64 起（类型表示层身份）：`a.Temp` 与 `b.Temp` 是**不同名义类型**，`==` 只在
+/// 同型两侧成立。故本夹具的两条比较各自与自身比较（`u == u` / `t == t`），
+/// 仍钉「别名引入实例的算子派发归定义单元」这条语义；跨型比较（`u == t`）的
+/// 旧行为是裸名混同下的静默错派，D64 后按 D59 **B 类收紧**改为类型错误——
+/// 这是判据收紧，不是放宽：旧断言依赖的「同名即同型」前提已被 D64 移除。
 #[test]
 fn test_cross_unit_same_named_type_operator_arms_dispatch_use_defining_unit() {
     // Arrange：两单元同名类型各带 Index / Equal 实现，实现可区分（a = v+1/true、b = v*10/false）

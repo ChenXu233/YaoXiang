@@ -30,7 +30,7 @@ use crate::util::span::Span;
 use super::helpers::{
     aggregate_instantiation_requests, allocate_global_slots, ast_has_main,
     collect_compilation_refs, collect_package_refs, declared_type_param_names,
-    expand_dispatch_groups, generic_instantiation_map, init_topological_order, is_bin_role,
+    expand_dispatch_entries, generic_instantiation_map, init_topological_order, is_bin_role,
     link_module_irs, merge_embedded_std_ir, resolved_method_marks, role_context, run_post_mono_dce,
     ImportCycle, InitOrder, RoleContext,
 };
@@ -530,12 +530,21 @@ impl Driver {
             if let Some(tr) = us.type_result.as_ref() {
                 let fn_type_params = declared_type_param_names(std::iter::once((ast, tr)));
                 let inst_map = generic_instantiation_map(std::iter::once(tr), &fn_type_params);
-                analyzer.set_operator_dispatched_groups(expand_dispatch_groups(
+                // 结构化派发点 → 声明域名字组（唯一投影 DefPath::project）：
+                // 不拼字符串再从首段切回类型名（D64 §2.5）。
+                let groups = expand_dispatch_entries(
                     tr.operator_dispatches
                         .iter()
-                        .map(|d| format!("{}.{}", d.type_name, d.method)),
+                        .map(|d| (d.type_name.clone(), d.method.clone())),
                     &inst_map,
-                ));
+                )
+                .into_iter()
+                .map(|(owner, method)| {
+                    crate::frontend::core::types::identity::DefPath::method("", &owner, &method)
+                        .project()
+                })
+                .collect();
+                analyzer.set_operator_dispatched_groups(groups);
             }
             let found = analyzer.analyze(ast);
             // 结构化警告诊断（severity 由 builder 按 W 前缀推导，#321 M2）
@@ -899,8 +908,14 @@ impl Driver {
         else {
             return; // 上游已失败（防御）
         };
-        // 跨文件上下文：所有文件的 AST 引用视图（与 orchestrated 同构）
-        let all_ast_refs: Vec<&Module> = asts.iter().filter_map(|a| a.as_ref()).collect();
+        // 跨文件上下文：所有文件的 (单元键, AST)——键与 typecheck 的模块键同一份，
+        // lower 的类型定义身份因此与 typecheck 逐字相同（D64）。
+        let all_cross: Vec<(&str, &Module)> = program
+            .units
+            .iter()
+            .zip(asts.iter())
+            .filter_map(|(unit, ast)| ast.as_ref().map(|a| (unit.key.as_str(), a)))
+            .collect();
         for (i, us) in units.iter_mut().enumerate() {
             let UnitState {
                 type_result,
@@ -925,7 +940,7 @@ impl Driver {
                 type_level.clone(),
             )
             .with_script_mode(rootless);
-            generator.seed_cross_file_types(&all_ast_refs);
+            generator.seed_cross_file_types(&all_cross);
             generator.seed_cross_file_globals(global_layout);
             generator.set_global_slot_base(slot_bases[i]);
             match generator.generate_module_ir(ast) {
@@ -1097,8 +1112,14 @@ impl Driver {
         };
         // 4.10.3：Script/Bin 语义开关（见臂注释）
         let rootless = orchestrator::find_project_root(&state.entry_path).is_none();
-        // 跨文件上下文：所有文件的 AST 引用视图（结构体布局/全局名解析用）
-        let all_ast_refs: Vec<&Module> = asts.iter().filter_map(|a| a.as_ref()).collect();
+        // 跨文件上下文：所有文件的 (单元键, AST)——(结构体布局/全局名解析用)
+        // 键与 typecheck 的模块键同一份，lower 的类型定义身份与 typecheck 逐字相同。
+        let all_cross: Vec<(&str, &Module)> = program
+            .units
+            .iter()
+            .zip(asts.iter())
+            .filter_map(|(unit, ast)| ast.as_ref().map(|a| (unit.key.as_str(), a)))
+            .collect();
         for (i, us) in units.iter_mut().enumerate() {
             let UnitState {
                 type_result,
@@ -1114,7 +1135,7 @@ impl Driver {
             let ir = match crate::middle::generate_ir_with_context(
                 ast,
                 type_result,
-                &all_ast_refs,
+                &all_cross,
                 global_layout,
                 slot_bases[i],
                 registry,

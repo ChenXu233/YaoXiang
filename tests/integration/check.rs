@@ -714,6 +714,7 @@ main()
 /// 层携带模块，不再从「泛型所属单元」猜前缀，本夹具因此从 E1106 转绿。
 ///
 /// 判据：跨模块约束派发命中定义单元（check 不报 E1106 / 无错误）。
+/// D59 分流：**B 类**（应过未过——旧 E1106 是类型身份缺口造成的假拒绝）。
 #[test]
 fn test_check_constraint_dispatch_cross_module_resolves_defining_unit() {
     // Arrange - lib.yx 定义 Vec3 与 Vec3.add（合并函数表键 lib.Vec3.add）；

@@ -1071,7 +1071,17 @@ impl AstToIrGenerator {
             // RFC-010: 处理命名参数构造 `Point(x=1, y=2)`
             if call.has_named() {
                 if let Expr::Var(name, _) = func {
-                    if let Some(fields) = self.struct_definitions.get(name).cloned() {
+                    // 构造实参按**该调用点的结果类型身份**取字段表：同名类型
+                    // （a.T / b.T）各用自己定义的字段序与默认值。只在写名确实是
+                    // 结构体构造器（裸名表有它）且身份定义名与写名一致时用身份
+                    // 视图——否则会把「返回结构体的普通函数」误当构造器补默认值。
+                    let by_identity = self
+                        .call_result_identity(call_plan_id)
+                        .filter(|identity| identity.bare() == name.as_str())
+                        .and_then(|identity| self.struct_fields_by_identity(&identity).cloned());
+                    if let Some(fields) =
+                        by_identity.or_else(|| self.struct_definitions.get(name).cloned())
+                    {
                         // 生成命名参数的 IR
                         let mut named_regs: Vec<(String, Operand)> = Vec::new();
                         for (arg_name, arg_expr) in call.named() {
@@ -1149,7 +1159,15 @@ impl AstToIrGenerator {
                 _ => None,
             };
             if let Some(name) = struct_ctor_name {
-                if let Some(fields) = self.struct_definitions.get(&name).cloned() {
+                // 同命名实参分支：只有裸名表认得这个写名（真是构造器）时才用
+                // 身份视图；「返回结构体的普通函数」不得被补默认值。
+                let by_identity = self
+                    .call_result_identity(call_plan_id)
+                    .filter(|identity| identity.bare() == name.as_str())
+                    .and_then(|identity| self.struct_fields_by_identity(&identity).cloned());
+                if let Some(fields) =
+                    by_identity.or_else(|| self.struct_definitions.get(&name).cloned())
+                {
                     // 这是一个结构体构造器调用
                     // 数据字段数才是构造参数上限；witness 字段不占槽位
                     let data_fields = Self::data_ctor_fields(&fields);

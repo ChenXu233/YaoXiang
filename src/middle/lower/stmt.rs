@@ -80,8 +80,10 @@ impl AstToIrGenerator {
                         fields,
                         ..
                     } => {
-                        self.struct_definitions
-                            .insert(struct_name.clone(), fields.clone());
+                        let identity =
+                            Nominal::item(self.module_key.as_deref().unwrap_or(""), struct_name)
+                                .expect("类型定义名不含点且非空");
+                        self.register_struct_definition(identity, fields.clone());
                     }
                     ast::Type::Struct { body } => {
                         let fields: Vec<ast::StructField> = body
@@ -105,7 +107,10 @@ impl AstToIrGenerator {
                             })
                             .collect();
                         let fields = self.classified_fields(name, &fields);
-                        self.struct_definitions.insert(name.clone(), fields);
+                        let identity =
+                            Nominal::item(self.module_key.as_deref().unwrap_or(""), name)
+                                .expect("类型定义名不含点且非空");
+                        self.register_struct_definition(identity, fields);
                         // 记录绑定信息（用于方法调用时的参数重排，RFC-004）
                         self.register_type_bindings(name, &bindings);
                         // RFC-004: 为匿名函数绑定生成独立的 FunctionIR

@@ -544,34 +544,92 @@ impl AstToIrGenerator {
             };
         }
 
-        // 1. 尝试从表达式类型推导结构体名，精确查找
+        // 1a. 身份已知：按**身份**取该定义自己的字段序（a.T / b.T 同名不串味）
+        if let Some(identity) = self.get_expr_struct_identity(expr) {
+            if let Some(fields) = self.struct_fields_by_identity(&identity) {
+                if let Some(index) = Self::field_index_in(fields, field_name) {
+                    return Some(index);
+                }
+            }
+        }
+
+        // 1b. 写名/裸名视图（构造器与 AST 写名只有裸名时的既有路径）
         if let Some(type_name) = self.get_expr_struct_type_name(expr) {
             if let Some(fields) = self.struct_definitions.get(&type_name) {
-                for (i, field) in fields.iter().enumerate() {
-                    if field.name == field_name {
-                        return crate::frontend::core::types::mono::runtime_field_index(
-                            fields.iter().map(|f| f.quantity),
-                            i,
-                        );
-                    }
+                if let Some(index) = Self::field_index_in(fields, field_name) {
+                    return Some(index);
                 }
             }
         }
 
         // 2. 兜底：遍历所有结构体定义查找字段名（当类型推导不可用时）
         for fields in self.struct_definitions.values() {
-            for (i, field) in fields.iter().enumerate() {
-                if field.name == field_name {
-                    return crate::frontend::core::types::mono::runtime_field_index(
-                        fields.iter().map(|f| f.quantity),
-                        i,
-                    );
-                }
+            if let Some(index) = Self::field_index_in(fields, field_name) {
+                return Some(index);
             }
         }
 
         // 3. 未找到，返回 None
         None
+    }
+
+    /// 在字段表里定位字段并换算运行期槽下标（唯一换算点 runtime_field_index）。
+    fn field_index_in(
+        fields: &[crate::ast::StructField],
+        field_name: &str,
+    ) -> Option<usize> {
+        let i = fields.iter().position(|field| field.name == field_name)?;
+        crate::frontend::core::types::mono::runtime_field_index(
+            fields.iter().map(|f| f.quantity),
+            i,
+        )
+    }
+
+    /// 表达式的结构体**身份**（身份已知时）——字段索引按身份取表，不按裸名。
+    ///
+    /// 来源与 [`Self::get_expr_struct_type_name`] 同一批事实（局部变量类型、
+    /// 绑定类型、调用点结果类型），区别只在保留名义头而不是压成裸名；写名兜底
+    /// 用 `Nominal::flat`（含点的限定名不冒充身份）。
+    pub(in crate::middle) fn get_expr_struct_identity(
+        &self,
+        expr: &ast::Expr,
+    ) -> Option<Nominal> {
+        match expr {
+            ast::Expr::Var(name, _) => {
+                if let Some(mono) = self
+                    .type_result
+                    .as_ref()
+                    .and_then(|tr| tr.local_var_types.get(name))
+                {
+                    if let Some(identity) = Self::mono_nominal(mono) {
+                        return Some(identity.clone());
+                    }
+                }
+                if let Some(poly) = self.lookup_var_type(name) {
+                    if let Some(identity) = Self::mono_nominal(&poly.body) {
+                        return Some(identity.clone());
+                    }
+                }
+                let type_name = self.local_var_types.get(name)?;
+                Nominal::flat(Self::strip_ref_prefix(type_name))
+            }
+            ast::Expr::Call { func, plan_id, .. } => {
+                if let Some(mono) = self
+                    .type_result
+                    .as_ref()
+                    .and_then(|tr| tr.call_result_types.get(plan_id))
+                {
+                    if let Some(identity) = Self::mono_nominal(mono) {
+                        return Some(identity.clone());
+                    }
+                }
+                match func.as_ref() {
+                    ast::Expr::Var(name, _) => Nominal::flat(name),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
     }
 
     /// 从表达式推导其结构体类型名称

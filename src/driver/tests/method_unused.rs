@@ -301,6 +301,10 @@ fn test_resolved_method_marks_read_leaves_consumption_ledger_untouched() {
 // 红态（修复前，实测）：① 的单文件 `check` 报 2 条 W1005（Temp.index :6 /
 // Temp.equal :9）；跨单元（issue 原文夹具）报 4 条（a.yx 与 b.yx 各 :6 / :9）；
 // `run` 值始终正确（20.0 / false）——方法确实被调用，警告为误报。
+//
+// D64 起（类型表示层身份）：`a.Temp` / `b.Temp` 是不同名义类型，`==` 只在同型
+// 两侧成立——夹具的两条比较改为 `u == u` / `t == t`，仍覆盖两单元 `Equal`
+// 各被派发一次；跨型比较按 D59 **B 类收紧**改为类型错误（旧判据依赖裸名混同）。
 
 /// issue #505 跨单元夹具的 a 侧（v+1.0 / true）：W1005 红态落在 :6 与 :9。
 const OP_DISPATCH_A: &str = "// a.yx —— Index/Equal 接口 + 两方法（被 main 的算子表达式派发调用）\nTemp: Type = {\n    v: Float,\n    Index(Temp, Int, Float),\n    Equal(Temp, Temp),\n}\nTemp.index: (self: &Temp, key: &Int) -> Float = (self, key) => {\n    self.v + 1.0\n}\nTemp.equal: (self: &Temp, other: &Temp) -> Bool = (self, other) => {\n    true\n}\n";

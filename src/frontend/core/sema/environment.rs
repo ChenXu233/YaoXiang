@@ -364,7 +364,10 @@ impl TypeEnvironment {
         written_type: &str,
         method: &str,
     ) -> Option<DefPath> {
-        self.import_face.method_key(written_type, method)
+        self.import_face.method_key(
+            super::import_face::WrittenTypeName::from_ast(written_type),
+            method,
+        )
     }
 
     /// 建导入面（D-5）：`check_module` 入口一次。
@@ -664,7 +667,8 @@ impl TypeEnvironment {
         &self,
         written: &str,
     ) -> Option<Nominal> {
-        self.import_face.type_identity(written)
+        self.import_face
+            .type_identity(super::import_face::WrittenTypeName::from_ast(written))
     }
 
     /// 语义解析 base：是类型还是值（issue #180 F 组）。

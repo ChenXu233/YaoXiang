@@ -55,6 +55,13 @@ pub struct TypeCheckResult {
     /// RFC-010 和类型的类型参数名（类型名 → [T, E]，声明序）——ir_gen
     /// 载荷类型替换用（变体 params 里的 TypeRef(名) 按位绑定 scrutinee 实参）
     pub sum_type_param_names: HashMap<String, Vec<String>>,
+    /// 类型身份 → 本地键（[`crate::frontend::core::sema::TypeEnvironment`]
+    /// 派生索引的只读快照；唯一写者是 `TypeEnvironment::add_type`）。
+    ///
+    /// 跨阶段消费者（lower）据它把「本地键表」投影成**身份可查**的视图：
+    /// 同一编译集里的同名类型（a.T / b.T）因此各按自己的身份取字段/变体，
+    /// 不从名字串反解模块（D64；§2.5 执行口径「身份不得从名字串反解」）。
+    pub type_identity_index: HashMap<crate::frontend::core::types::identity::Nominal, String>,
     /// RFC-011b 运算符派发点（span 键控；ir_gen 据此把原生指令换为方法调用）
     pub operator_dispatches: Vec<super::operator_interfaces::OperatorDispatch>,
     /// RFC-011a §3：重载决议表（**调用点 `PlanId` 键控**，RFC-039 D20/WBS 4.5.2；
